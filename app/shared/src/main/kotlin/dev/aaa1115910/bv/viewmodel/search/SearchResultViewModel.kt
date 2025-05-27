@@ -18,6 +18,7 @@ import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fInfo
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.annotation.KoinViewModel
@@ -43,16 +44,30 @@ class SearchResultViewModel(
     var selectedPartition: Partition? by mutableStateOf(null)
     var selectedChildPartition: Partition? by mutableStateOf(null)
 
-    private var updating = false
-    val hasMore = true
-    private var page = SearchTypePage()
+    private val updating = mutableMapOf<SearchType, Boolean>().apply {
+        SearchType.entries.forEach { put(it, false) }
+    }
+
+    private val hasMore = mutableMapOf<SearchType, Boolean>().apply {
+        SearchType.entries.forEach { put(it, true) }
+    }
+
+    private val pages = mutableMapOf<SearchType, SearchTypePage>().apply {
+        SearchType.entries.forEach { put(it, SearchTypePage()) }
+    }
+
+    private val initeds = mutableMapOf<SearchType, Boolean>().apply {
+        SearchType.entries.forEach { put(it, false) }
+    }
 
     var enableProxySearchResult = false
 
     fun update() {
         resetPages()
         clearResults()
-        SearchType.entries.forEach { loadMore(it, true) }
+        viewModelScope.launch {
+            loadMore(searchType, true)
+        }
     }
 
     private fun resetPages() {
@@ -69,21 +84,28 @@ class SearchResultViewModel(
         biliUserSearchResult.clearResult()
     }
 
+    fun init(searchType: SearchType) {
+        if (initeds[searchType] == false) {
+            loadMore(searchType)
+            initeds[searchType] = true
+        }
+    }
+
     fun loadMore(
         searchType: SearchType,
         ignoreUpdating: Boolean = false
     ) {
-        if (!hasMore) return
-        if (updating && !ignoreUpdating) return
+        if (hasMore[searchType] != true) return
+        if (updating[searchType] == true && !ignoreUpdating) return
 
-        updating = true
+        updating[searchType] = true
         viewModelScope.launch(Dispatchers.IO) {
-            logger.fInfo { "Load search result: [keyword=$keyword, type=$searchType, page=${page}]" }
+            logger.fInfo { "Load search result: [keyword=$keyword, type=$searchType, page=${pages[searchType]}]" }
             runCatching {
                 val searchResultResponse = searchRepository.searchType(
                     keyword = keyword,
                     type = searchType,
-                    page = page,
+                    page = pages[searchType] ?: SearchTypePage(),
                     tid = selectedChildPartition?.tid ?: selectedPartition?.tid,
                     order = selectedOrder,
                     duration = selectedDuration,
@@ -95,20 +117,32 @@ class SearchResultViewModel(
                         SearchType.Video -> videoSearchResult =
                             videoSearchResult.appendSearchResultData(searchResultResponse)
 
-                        SearchType.MediaBangumi -> mediaBangumiSearchResult =
-                            mediaBangumiSearchResult.appendSearchResultData(searchResultResponse)
+                         SearchType.MediaBangumi -> mediaBangumiSearchResult =
+                             mediaBangumiSearchResult.appendSearchResultData(searchResultResponse)
 
-                        SearchType.MediaFt -> mediaFtSearchResult =
-                            mediaFtSearchResult.appendSearchResultData(searchResultResponse)
+                         SearchType.MediaFt -> mediaFtSearchResult =
+                             mediaFtSearchResult.appendSearchResultData(searchResultResponse)
 
-                        SearchType.BiliUser -> biliUserSearchResult =
-                            biliUserSearchResult.appendSearchResultData(searchResultResponse)
+                         SearchType.BiliUser -> biliUserSearchResult =
+                             biliUserSearchResult.appendSearchResultData(searchResultResponse)
+                    }
+
+                    // 检查返回的数据数量，如果少于请求的分页数量则设置 hasMore 为 false
+                    val returnedCount = when (searchType) {
+                        SearchType.Video -> searchResultResponse.videos.size
+                        SearchType.MediaBangumi -> searchResultResponse.pgcs.size
+                        SearchType.MediaFt -> searchResultResponse.pgcs.size
+                        SearchType.BiliUser -> searchResultResponse.users.size
+                    }
+                    val requestedPageSize = 20
+                    if (returnedCount < requestedPageSize) {
+                        hasMore[searchType] = false
                     }
                 }
 
-                page = searchResultResponse.page
+                pages[searchType] = searchResultResponse.page
             }
-            updating = false
+            updating[searchType] = false
         }
     }
 

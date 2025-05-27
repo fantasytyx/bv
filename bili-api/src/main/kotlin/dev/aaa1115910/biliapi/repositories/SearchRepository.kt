@@ -243,7 +243,8 @@ data class SearchTypeResult(
     val videos: List<Video> = emptyList(),
     val pgcs: List<Pgc> = emptyList(),
     val users: List<User> = emptyList(),
-    val page: SearchTypePage
+    val page: SearchTypePage,
+    val pageSize: Int? = 20
 ) {
     companion object {
         fun fromSearchTypeResult(result: dev.aaa1115910.biliapi.http.entity.search.SearchResultData): SearchTypeResult {
@@ -251,26 +252,29 @@ data class SearchTypeResult(
                 is dev.aaa1115910.biliapi.http.entity.search.SearchVideoResult -> {
                     SearchTypeResult(
                         videos = result.searchTypeResults.map { Video.fromSearchVideoResult(it as dev.aaa1115910.biliapi.http.entity.search.SearchVideoResult) },
-                        page = SearchTypePage(nextPageForWeb = result.page + 1)
+                        page = SearchTypePage(nextPageForWeb = result.page + 1),
+                        pageSize = result.pageSize
                     )
                 }
 
                 is dev.aaa1115910.biliapi.http.entity.search.SearchMediaResult -> {
                     SearchTypeResult(
                         pgcs = result.searchTypeResults.map { Pgc.fromSearchPgcResult(it as dev.aaa1115910.biliapi.http.entity.search.SearchMediaResult) },
-                        page = SearchTypePage(nextPageForWeb = result.page + 1)
+                        page = SearchTypePage(nextPageForWeb = result.page + 1),
+                        pageSize = result.pageSize
                     )
                 }
 
                 is dev.aaa1115910.biliapi.http.entity.search.SearchBiliUserResult -> {
                     SearchTypeResult(
                         users = result.searchTypeResults.map { User.fromSearchUserResult(it as dev.aaa1115910.biliapi.http.entity.search.SearchBiliUserResult) },
-                        page = SearchTypePage(nextPageForWeb = result.page + 1)
+                        page = SearchTypePage(nextPageForWeb = result.page + 1),
+                        pageSize = result.pageSize
                     )
                 }
 
                 else -> {
-                    SearchTypeResult(page = SearchTypePage(nextPageForWeb = result.page + 1))
+                    SearchTypeResult(page = SearchTypePage(nextPageForWeb = result.page + 1), pageSize = result.pageSize)
                 }
             }
         }
@@ -315,7 +319,8 @@ data class SearchTypeResult(
         val author: String,
         val duration: Int,
         val play: Int,
-        val danmaku: Int
+        val danmaku: Int,
+        val pubTime: Int
     ) : SearchTypeResultItem {
         companion object {
             fun fromSearchVideoResult(video: dev.aaa1115910.biliapi.http.entity.search.SearchVideoResult) =
@@ -327,7 +332,8 @@ data class SearchTypeResult(
                     author = video.author,
                     duration = convertStringTimeToSeconds(video.duration),
                     play = video.play,
-                    danmaku = video.danmaku
+                    danmaku = video.danmaku,
+                    pubTime = video.pubDate
                 )
 
             fun fromSearchVideoCard(video: bilibili.polymer.app.search.v1.Item) =
@@ -339,7 +345,8 @@ data class SearchTypeResult(
                     author = video.av.author,
                     duration = convertStringTimeToSeconds(video.av.duration),
                     play = video.av.play,
-                    danmaku = video.av.danmaku
+                    danmaku = video.av.danmaku,
+                    pubTime = 0
                 )
         }
     }
