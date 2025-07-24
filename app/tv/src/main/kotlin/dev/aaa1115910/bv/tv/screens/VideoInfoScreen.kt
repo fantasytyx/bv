@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -174,6 +175,7 @@ fun VideoInfoScreen(
     coinRepository: CoinRepository = getKoin().get(),
 ) {
     val context = LocalContext.current
+    val lazyListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val intent = (context as Activity).intent
     val logger = KotlinLogging.logger { }
@@ -609,8 +611,11 @@ fun VideoInfoScreen(
                     alpha = 0.6f
                 )
                 LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = lazyListState,
                     contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    userScrollEnabled = true
                 ) {
                     item {
                         Column(
@@ -1398,7 +1403,10 @@ fun VideoPartRow(
     val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
     val titleFontSize by animateFloatAsState(
         targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
+        label = "title font size",
+        animationSpec = tween(
+            durationMillis = 250
+        )
     )
 
     Column(
@@ -1470,7 +1478,10 @@ fun VideoUgcSeasonRow(
     val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
     val titleFontSize by animateFloatAsState(
         targetValue = if (hasFocus) 30f else 14f,
-        label = "title font size"
+        label = "title font size",
+        animationSpec = tween(
+            durationMillis = 250
+        )
     )
     var focusingEpisode by remember { mutableStateOf<Episode?>(null) }
 

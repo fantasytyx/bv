@@ -173,7 +173,7 @@ fun DrawerContent(
                 else DrawerItem.User.displayName,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodySmall
             ) }
         )
         LazyColumn(
@@ -220,7 +220,7 @@ fun DrawerContent(
                             Text(
                                 modifier = Modifier.offset(y = (-4).dp),
                                 text = item.displayName,
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                     )
@@ -252,7 +252,7 @@ fun DrawerContent(
                 Text(
                     modifier = Modifier.offset(y = (-4).dp),
                     text = DrawerItem.Settings.displayName,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
         )
