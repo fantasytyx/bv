@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1018,12 +1019,12 @@ fun VideoInfoData(
 
     Row(
         modifier = modifier
-            .padding(horizontal = 32.dp, vertical = 16.dp),
+            .padding(start = 36.dp, end = 36.dp, top = 12.dp, bottom = 15.dp),
     ) {
         Surface(
             modifier = Modifier
                 .focusRequester(defaultFocusRequester)
-                .weight(3f)
+                .width(260.dp)
                 .aspectRatio(1.6f)
                 .onGloballyPositioned { coordinates ->
                     heightIs = with(localDensity) { coordinates.size.height.toDp() }
@@ -1044,7 +1045,7 @@ fun VideoInfoData(
             glow = ClickableSurfaceDefaults.glow(
                 focusedGlow = Glow(
                     elevationColor = MaterialTheme.colorScheme.inverseSurface,
-                    elevation = 16.dp
+                    elevation = 8.dp
                 )
             ),
             border = if (Build.VERSION.SDK_INT < 28) {
@@ -1154,7 +1155,7 @@ fun VideoInfoData(
                     color = Color.White
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
@@ -1236,13 +1237,14 @@ fun VideoInfoData(
             // 标签列表
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .offset(y = (-2).dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(items = tags) { tag ->
                         SuggestionChip(onClick = {
@@ -1480,7 +1482,6 @@ fun VideoPartRow(
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
     var showPartListDialog by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
     val titleFontSize by animateFloatAsState(
         targetValue = if (hasFocus) 30f else 14f,
         label = "title font size",
@@ -1501,14 +1502,13 @@ fun VideoPartRow(
             text = stringResource(R.string.video_info_part_row_title)
                     + (" - $subtitle".takeIf { subtitle.isNotBlank() } ?: ""),
             fontSize = titleFontSize.sp,
-            color = titleColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
         LazyRow(
             modifier = Modifier
-                .padding(top = 10.dp)
+                .padding(top = 4.dp)
                 .focusRestorer(focusRequester),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -1557,7 +1557,6 @@ fun VideoUgcSeasonRow(
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
     var showUgcListDialog by remember { mutableStateOf(false) }
-    val titleColor = if (hasFocus) Color.White else Color.White.copy(alpha = 0.6f)
     val titleFontSize by animateFloatAsState(
         targetValue = if (hasFocus) 30f else 14f,
         label = "title font size",
@@ -1577,13 +1576,12 @@ fun VideoUgcSeasonRow(
             modifier = Modifier
                 .padding(start = 12.dp),
             text = title,
-            fontSize = titleFontSize.sp,
-            color = titleColor
+            fontSize = titleFontSize.sp
         )
 
         LazyRow(
             modifier = Modifier
-                .padding(top = 10.dp)
+                .padding(top = 4.dp)
                 .focusRestorer(focusRequester),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
