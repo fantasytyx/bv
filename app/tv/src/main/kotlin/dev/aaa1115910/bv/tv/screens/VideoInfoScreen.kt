@@ -1021,7 +1021,7 @@ fun VideoInfoData(
 
     Row(
         modifier = modifier
-            .padding(start = 36.dp, end = 36.dp, top = 15.dp, bottom = 18.dp),
+            .padding(start = 36.dp, end = 36.dp, top = 12.dp, bottom = 18.dp),
     ) {
         Surface(
             modifier = Modifier
@@ -1287,7 +1287,7 @@ private fun UpButton(
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1498,7 +1498,7 @@ fun VideoPartRow(
         targetValue = if (hasFocus) 30f else 14f,
         label = "title font size",
         animationSpec = tween(
-            durationMillis = 250
+            durationMillis = 120
         )
     )
 
@@ -1573,7 +1573,7 @@ fun VideoUgcSeasonRow(
         targetValue = if (hasFocus) 30f else 14f,
         label = "title font size",
         animationSpec = tween(
-            durationMillis = 250
+            durationMillis = 120
         )
     )
     var focusingEpisode by remember { mutableStateOf<Episode?>(null) }
