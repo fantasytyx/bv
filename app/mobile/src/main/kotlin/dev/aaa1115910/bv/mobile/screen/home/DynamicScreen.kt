@@ -72,6 +72,7 @@ fun DynamicScreen(
                     context = context,
                     aid = dynamicItem.video!!.aid,
                     fromSeason = dynamicItem.video!!.seasonId != null
+                            && dynamicItem.video!!.seasonId != 0,
                 )
             }
 

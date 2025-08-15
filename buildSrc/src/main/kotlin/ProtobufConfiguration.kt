@@ -35,7 +35,7 @@ object ProtobufConfiguration {
     val excludeProtoFiles = getAllProtoFiles() - usedProtoFiles
 
     private fun getAllProtoFiles(): Set<String> {
-        val rootDir = File("bili-api-grpc/proto")
+        val rootDir = File("bili-api/grpc/proto")
         val protoFiles = mutableSetOf<String>()
         rootDir.walk().forEach {
             if (it.isFile && it.extension == "proto") {
