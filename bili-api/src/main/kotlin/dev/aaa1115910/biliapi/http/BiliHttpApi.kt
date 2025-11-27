@@ -3,6 +3,7 @@ package dev.aaa1115910.biliapi.http
 import com.tfowl.ktor.client.plugins.JsoupPlugin
 import dev.aaa1115910.biliapi.entity.pgc.PgcType
 import dev.aaa1115910.biliapi.http.BiliHttpApi.getRegionDynamic
+import dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_WEB
 import dev.aaa1115910.biliapi.http.entity.BiliResponse
 import dev.aaa1115910.biliapi.http.entity.BiliResponseWithoutData
 import dev.aaa1115910.biliapi.http.entity.danmaku.DanmakuData
@@ -51,6 +52,7 @@ import dev.aaa1115910.biliapi.http.entity.user.favorite.UserFavoriteFoldersData
 import dev.aaa1115910.biliapi.http.entity.user.garb.Equip
 import dev.aaa1115910.biliapi.http.entity.user.garb.EquipPart
 import dev.aaa1115910.biliapi.http.entity.video.AddCoin
+import dev.aaa1115910.biliapi.http.entity.video.ArchiveRelation
 import dev.aaa1115910.biliapi.http.entity.video.CheckSentCoin
 import dev.aaa1115910.biliapi.http.entity.video.CheckVideoFavoured
 import dev.aaa1115910.biliapi.http.entity.video.PlayUrlData
@@ -73,8 +75,8 @@ import dev.aaa1115910.biliapi.http.util.encApiSign
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.BrowserUserAgent
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
@@ -134,7 +136,9 @@ object BiliHttpApi {
 
     private fun createClient() {
         client = HttpClient(OkHttp) {
-            BrowserUserAgent()
+            install(UserAgent) {
+                agent = USER_AGENT_WEB
+            }
             install(ContentNegotiation) {
                 json(json)
             }
@@ -211,8 +215,9 @@ object BiliHttpApi {
         otype: String = "json",
         type: String = "",
         platform: String = "oc",
-        sessData: String? = null
-    ): BiliResponse<PlayUrlData> = client.get("/x/player/playurl") {
+        sessData: String? = null,
+        dedeUserID: Long? = null
+    ): BiliResponse<PlayUrlData> = client.get("/x/player/wbi/playurl") {
         require(av != null || bv != null) { "av and bv cannot be null at the same time" }
         parameter("avid", av)
         parameter("bvid", bv)
@@ -225,7 +230,7 @@ object BiliHttpApi {
         parameter("otype", otype)
         parameter("type", type)
         parameter("platform", platform)
-        sessData?.let { header("Cookie", "SESSDATA=$sessData;") }
+        sessData?.let { header("Cookie", "SESSDATA=$sessData;DedeUserID=$dedeUserID") }
     }.body()
 
     /**
@@ -699,6 +704,25 @@ object BiliHttpApi {
         return response
     }
 
+    /**
+     * 检查视频[avid]或[bvid]是否已点赞&收藏&投币
+     */
+    suspend fun getArchiveRelation(
+        avid: Long? = null,
+        bvid: String? = null,
+        accessKey: String? = null,
+        sessData: String? = null
+    ): BiliResponse<ArchiveRelation> {
+        checkToken(accessKey, sessData)
+        val response = client.get("/x/web-interface/archive/relation") {
+            require(avid != null || bvid != null) { "avid and bvid cannot be null at the same time" }
+            avid?.let { parameter("aid", it) }
+            bvid?.let { parameter("bvid", it) }
+            accessKey?.let { parameter("access_key", it) }
+            sessData?.let { header("Cookie", "SESSDATA=$it;") }
+        }
+        return response.body()
+    }
     /**
      * 为视频[avid]或[bvid]点赞或取消赞
      *
