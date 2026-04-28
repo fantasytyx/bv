@@ -5,7 +5,7 @@ import java.util.Locale
 
 internal object DanmakuLogStats {
     @Volatile
-    var logEnabled: Boolean = false
+    var logEnabled: Boolean = true
 
     private const val BYTES_PER_MB = 1024f * 1024f
 

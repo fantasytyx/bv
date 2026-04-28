@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.Message
+import android.os.Trace
 import android.util.Log
 import android.view.Choreographer
 import dev.aaa1115910.bv.player.danmaku.model.Danmaku
@@ -16,7 +17,7 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
 
     private val cacheManager = CacheManager(
         mainLooper = Looper.getMainLooper(),
-        onRenderSign = { view.postInvalidateOnAnimation() },
+        onRenderSign = { view.requestRender() },
     )
     private val engine = DanmakuEngine(view.resources.displayMetrics, cacheManager)
     private val timer = DanmakuTimer()
@@ -53,14 +54,14 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
         if (released || started) return
         started = true
         actionHandler.post { postFrameCallback() }
-        view.postInvalidateOnAnimation()
+        view.requestRender()
     }
 
     fun stop() {
         if (!started) return
         started = false
         releaseSemaphoreIfNeeded()
-        Choreographer.getInstance().removeFrameCallback(frameCallback)
+        removeFrameCallback()
     }
 
     fun release() {
@@ -111,7 +112,7 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
         }
         lastEnabled = true
         if (isPlaying) startIfNeeded()
-        else if (started) { started = false; releaseSemaphoreIfNeeded(); Choreographer.getInstance().removeFrameCallback(frameCallback) }
+        else if (started) stop()
 
         val frameId = uiFrameId.incrementAndGet()
         engine.drainReleasedBitmaps(frameId)
@@ -196,6 +197,15 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
         actionHandler.sendEmptyMessage(MSG_OP_CLEAR)
     }
 
+    private fun removeFrameCallback() {
+        if (released) return
+        try {
+            actionHandler.post {
+                try { Choreographer.getInstance().removeFrameCallback(frameCallback) } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun releaseSemaphoreIfNeeded() {
         if (drawSemaphore.availablePermits() == 0) drawSemaphore.release()
     }
@@ -209,8 +219,13 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
                     try {
                         drawSemaphore.acquire()
                         if (released || !started) return
-                        engine.act()
-                        view.postInvalidateOnAnimation()
+                        Trace.beginSection("DanmakuPlayer#frameUpdate")
+                        try {
+                            engine.act()
+                            view.requestRender()
+                        } finally {
+                            Trace.endSection()
+                        }
                     } catch (_: InterruptedException) {}
                 }
                 MSG_OP_SET -> {
@@ -277,8 +292,13 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
             if (released || started) return
             val pos = positionMs ?: engine.currentPositionMs()
             engine.stepTime(pos, uiFrameId.get())
-            try { engine.act() } catch (_: Exception) {}
-            view.postInvalidateOnAnimation()
+            try {
+                Trace.beginSection("DanmakuPlayer#renderOnceIfPaused")
+                try { engine.act() } catch (_: Exception) {}
+            } finally {
+                Trace.endSection()
+            }
+            view.requestRender()
         }
     }
 

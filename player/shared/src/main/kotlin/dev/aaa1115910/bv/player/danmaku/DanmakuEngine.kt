@@ -4,6 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.DisplayMetrics
+import android.os.Trace
 import android.util.Log
 import android.util.TypedValue
 import dev.aaa1115910.bv.player.danmaku.model.Danmaku
@@ -143,6 +144,7 @@ internal class DanmakuEngine(
     }
 
     fun act() {
+        Trace.beginSection("DanmakuEngine#act")
         try {
             synchronized(actionStateLock) {
                 if (DanmakuLogStats.logEnabled) {
@@ -166,35 +168,40 @@ internal class DanmakuEngine(
                 val nowMs = if (rawNowMs >= lastNowMs) rawNowMs else lastNowMs
                 lastNowMs = nowMs
 
-                // Recompute layout only when viewport or config changed
-                if (layoutDirty) {
-                    val areaFraction = cfg.area.coerceIn(0f, 1f)
-                    cachedTopInset = viewportTopInsetPx.coerceIn(0, height)
-                    val bottomInset = ((1f - areaFraction) * viewportBottomInsetPx).toInt().coerceIn(0, height - cachedTopInset)
-                    val availableHeight = (height - cachedTopInset - bottomInset).coerceAtLeast(0)
+                Trace.beginSection("DanmakuEngine#layout")
+                try {
+                    // Recompute layout only when viewport or config changed
+                    if (layoutDirty) {
+                        val areaFraction = cfg.area.coerceIn(0f, 1f)
+                        cachedTopInset = viewportTopInsetPx.coerceIn(0, height)
+                        val bottomInset = ((1f - areaFraction) * viewportBottomInsetPx).toInt().coerceIn(0, height - cachedTopInset)
+                        val availableHeight = (height - cachedTopInset - bottomInset).coerceAtLeast(0)
 
-                    val scaleFactor = cfg.textSizeScale.coerceIn(25, 200) / 100f
-                    val layoutTextSizePx = textSizePx * scaleFactor
-                    actionPaint.textSize = layoutTextSizePx
-                    actionPaint.getFontMetrics(actionFontMetrics)
-                    cachedTextBoxHeight = (actionFontMetrics.descent - actionFontMetrics.ascent) + outlinePad * 2f
-                    val baseLaneHeight = max(18f, cachedTextBoxHeight * 1.15f)
-                    cachedLaneHeight = max(cachedTextBoxHeight, baseLaneHeight * cfg.laneDensity.laneHeightFactor)
-                    cachedUsableHeight = (availableHeight * areaFraction).toInt().coerceAtLeast(0)
-                    cachedLaneCount = max(1, (cachedUsableHeight / cachedLaneHeight).toInt())
+                        val scaleFactor = cfg.textSizeScale.coerceIn(25, 200) / 100f
+                        val layoutTextSizePx = textSizePx * scaleFactor
+                        actionPaint.textSize = layoutTextSizePx
+                        actionPaint.getFontMetrics(actionFontMetrics)
+                        cachedTextBoxHeight = (actionFontMetrics.descent - actionFontMetrics.ascent) + outlinePad * 2f
+                        val baseLaneHeight = max(18f, cachedTextBoxHeight * 1.15f)
+                        cachedLaneHeight = max(cachedTextBoxHeight, baseLaneHeight * cfg.laneDensity.laneHeightFactor)
+                        cachedUsableHeight = (availableHeight * areaFraction).toInt().coerceAtLeast(0)
+                        cachedLaneCount = max(1, (cachedUsableHeight / cachedLaneHeight).toInt())
 
-                    // Top fixed: area capped at 0.8
-                    val topFixedAreaFraction = min(areaFraction, 0.8f)
-                    cachedTopFixedUsableHeight = (availableHeight * topFixedAreaFraction).toInt().coerceAtLeast(0)
-                    cachedTopFixedLaneCount = max(1, (cachedTopFixedUsableHeight / cachedLaneHeight).toInt())
+                        // Top fixed: area capped at 0.8
+                        val topFixedAreaFraction = min(areaFraction, 0.8f)
+                        cachedTopFixedUsableHeight = (availableHeight * topFixedAreaFraction).toInt().coerceAtLeast(0)
+                        cachedTopFixedLaneCount = max(1, (cachedTopFixedUsableHeight / cachedLaneHeight).toInt())
 
-                    // Bottom fixed: fixed 20% of screen height, always at bottom
-                    cachedBottomFixedUsableHeight = (height * 0.2f).toInt().coerceAtLeast(0)
-                    cachedBottomFixedLaneCount = max(1, (cachedBottomFixedUsableHeight / cachedLaneHeight).toInt())
+                        // Bottom fixed: fixed 20% of screen height, always at bottom
+                        cachedBottomFixedUsableHeight = (height * 0.2f).toInt().coerceAtLeast(0)
+                        cachedBottomFixedLaneCount = max(1, (cachedBottomFixedUsableHeight / cachedLaneHeight).toInt())
 
-                    cachedMarginPx = max(12f, (layoutTextSizePx + outlinePad * 2f) * 0.6f)
-                    layoutDirty = false
-                    snapshotDirty = true
+                        cachedMarginPx = max(12f, (layoutTextSizePx + outlinePad * 2f) * 0.6f)
+                        layoutDirty = false
+                        snapshotDirty = true
+                    }
+                } finally {
+                    Trace.endSection()
                 }
                 val topInset = cachedTopInset
                 val textBoxHeight = cachedTextBoxHeight
@@ -210,26 +217,36 @@ internal class DanmakuEngine(
                 val rollingDurationMs = (DEFAULT_ROLLING_DURATION_MS * durationMul).toInt().coerceIn(MIN_ROLLING_DURATION_MS, MAX_ROLLING_DURATION_MS)
                 val fixedDurationMs = (FIXED_DURATION_MS * durationMul).toInt().coerceIn(MIN_ROLLING_DURATION_MS, MAX_ROLLING_DURATION_MS)
 
-                pruneExpired(width, nowMs)
-                skipOld(nowMs, rollingDurationMs)
-                dropIfLagging(nowMs)
-                ensureLaneStateBuffers(laneCount, topFixedLaneCount, bottomFixedLaneCount)
-                for (lane in 0 until laneCount) cleanupScrollLaneQueue(scrollLaneQueues[lane], width, nowMs)
+                Trace.beginSection("DanmakuEngine#pruneAndCleanup")
+                try {
+                    pruneExpired(width, nowMs)
+                    skipOld(nowMs, rollingDurationMs)
+                    dropIfLagging(nowMs)
+                    ensureLaneStateBuffers(laneCount, topFixedLaneCount, bottomFixedLaneCount)
+                    for (lane in 0 until laneCount) cleanupScrollLaneQueue(scrollLaneQueues[lane], width, nowMs)
+                } finally {
+                    Trace.endSection()
+                }
 
                 val marginPx = cachedMarginPx
 
-                // Spawn new
-                var spawnAttempts = 0
-                while (index < items.size && items[index].timeMs() <= nowMs) {
-                    if (spawnAttempts >= MAX_SPAWN_PER_FRAME) break
-                    val item = items[index]; index++; spawnAttempts++
-                    if (item.data.text.isBlank()) continue
-                    val textWidth = measureTextWidth(item, outlinePad, cfg)
-                    when (item.data.mode) {
-                        Danmaku.MODE_TOP -> trySpawnFixed(DanmakuKind.TOP, item, textWidth, topFixedLaneCount, fixedDurationMs, nowMs)
-                        Danmaku.MODE_BOTTOM -> trySpawnFixed(DanmakuKind.BOTTOM, item, textWidth, bottomFixedLaneCount, fixedDurationMs, nowMs)
-                        else -> trySpawnScroll(item, textWidth, width, laneCount, rollingDurationMs, marginPx, nowMs)
+                Trace.beginSection("DanmakuEngine#spawn")
+                try {
+                    // Spawn new
+                    var spawnAttempts = 0
+                    while (index < items.size && items[index].timeMs() <= nowMs) {
+                        if (spawnAttempts >= MAX_SPAWN_PER_FRAME) break
+                        val item = items[index]; index++; spawnAttempts++
+                        if (item.data.text.isBlank()) continue
+                        val textWidth = measureTextWidth(item, outlinePad, cfg)
+                        when (item.data.mode) {
+                            Danmaku.MODE_TOP -> trySpawnFixed(DanmakuKind.TOP, item, textWidth, topFixedLaneCount, fixedDurationMs, nowMs)
+                            Danmaku.MODE_BOTTOM -> trySpawnFixed(DanmakuKind.BOTTOM, item, textWidth, bottomFixedLaneCount, fixedDurationMs, nowMs)
+                            else -> trySpawnScroll(item, textWidth, width, laneCount, rollingDurationMs, marginPx, nowMs)
+                        }
                     }
+                } finally {
+                    Trace.endSection()
                 }
 
                 var style = cachedCacheStyle
@@ -238,35 +255,49 @@ internal class DanmakuEngine(
                     cachedCacheStyle = style
                 }
                 val releaseAtFrameId = currentUiFrameId + 1
-                requestCacheBuilds(style, releaseAtFrameId)
-                publishSnapshotIfDirty(nowMs, height, topInset, usableHeight, textBoxHeight, laneHeight, topFixedUsableHeight, bottomFixedUsableHeight)
+                Trace.beginSection("DanmakuEngine#cacheBuild")
+                try {
+                    requestCacheBuilds(style, releaseAtFrameId)
+                } finally {
+                    Trace.endSection()
+                }
+                Trace.beginSection("DanmakuEngine#publishSnapshot")
+                try {
+                    publishSnapshotIfDirty(nowMs, height, topInset, usableHeight, textBoxHeight, laneHeight, topFixedUsableHeight, bottomFixedUsableHeight)
+                } finally {
+                    Trace.endSection()
+                }
             }
         } finally {
-            if (DanmakuLogStats.logEnabled) {
-                val durationNanos = (System.nanoTime() - actStartNanos).coerceAtLeast(0L)
-                recordActDuration(durationNanos)
+            try {
+                if (DanmakuLogStats.logEnabled) {
+                    val durationNanos = (System.nanoTime() - actStartNanos).coerceAtLeast(0L)
+                    recordActDuration(durationNanos)
 
-                val logNow = System.nanoTime()
-                if (logNow - actLastLogNanos >= 1_000_000_000L) {
-                    val elapsed = (logNow - actLastLogNanos) / 1_000_000_000.0
-                    val fps = actFrameCount / elapsed
-                    Log.d(
-                        TAG,
-                        "[Action] fps=%.1f  frames=%d  dropped=%d  %s  active=%d  cacheQ=%d  mem=%s".format(
-                            fps,
-                            actFrameCount,
-                            actDroppedFrames,
-                            actionDurationSummary(),
-                            active.size,
-                            cacheManager.queueDepth(),
-                            DanmakuLogStats.memoryUsageSummary(),
+                    val logNow = System.nanoTime()
+                    if (logNow - actLastLogNanos >= 1_000_000_000L) {
+                        val elapsed = (logNow - actLastLogNanos) / 1_000_000_000.0
+                        val fps = actFrameCount / elapsed
+                        Log.d(
+                            TAG,
+                            "[Action] fps=%.1f  frames=%d  dropped=%d  %s  active=%d  cacheQ=%d  mem=%s".format(
+                                fps,
+                                actFrameCount,
+                                actDroppedFrames,
+                                actionDurationSummary(),
+                                active.size,
+                                cacheManager.queueDepth(),
+                                DanmakuLogStats.memoryUsageSummary(),
+                            )
                         )
-                    )
-                    actFrameCount = 0
-                    actDroppedFrames = 0
-                    actLastLogNanos = logNow
-                    resetActionDurationStats()
+                        actFrameCount = 0
+                        actDroppedFrames = 0
+                        actLastLogNanos = logNow
+                        resetActionDurationStats()
+                    }
                 }
+            } finally {
+                Trace.endSection()
             }
         }
     }
