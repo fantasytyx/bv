@@ -50,7 +50,6 @@ import dev.aaa1115910.bv.player.danmaku.DanmakuView
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerDanmakuMasksData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerHistoryData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerLoadStateData
-import dev.aaa1115910.bv.player.entity.LocalVideoPlayerLogsData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerPaymentData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerSeekThumbData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerVideoInfoData
@@ -65,7 +64,6 @@ import dev.aaa1115910.bv.player.entity.VideoPlayerConfigData
 import dev.aaa1115910.bv.player.entity.VideoPlayerDanmakuMasksData
 import dev.aaa1115910.bv.player.entity.VideoPlayerHistoryData
 import dev.aaa1115910.bv.player.entity.VideoPlayerLoadStateData
-import dev.aaa1115910.bv.player.entity.VideoPlayerLogsData
 import dev.aaa1115910.bv.player.entity.VideoPlayerPaymentData
 import dev.aaa1115910.bv.player.entity.VideoPlayerSeekThumbData
 import dev.aaa1115910.bv.player.entity.VideoPlayerVideoInfoData
@@ -97,6 +95,7 @@ import dev.aaa1115910.bv.util.swapList
 import dev.aaa1115910.bv.viewmodel.VideoPlayerV3ViewModel
 import dev.aaa1115910.bv.tv.component.GeetestTvVerifyDialog
 import dev.aaa1115910.biliapi.http.BiliHttpApi
+import dev.aaa1115910.bv.player.entity.DefaultStartPosition
 import dev.aaa1115910.bv.player.entity.NextVideoStrategy
 import dev.aaa1115910.bv.tv.component.videocard.TabbedVideosPanel
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -104,6 +103,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
+
+private data class VideoPlayerScreenPrefsSnapshot(
+    val uid: Long,
+    val isLogin: Boolean,
+    val defaultPlaySpeed: Float,
+    val showOnlineViewerCount: Int,
+    val showLiveViewerCountTip: Int,
+    val incognitoMode: Boolean,
+    val playerNextVideoStrategyOrder: String,
+    val defaultStartPosition: DefaultStartPosition,
+    val skipPgcIntroOutro: Boolean,
+    val controllerButtonsOrder: String,
+    val seekForwardStep: Int,
+    val seekBackwardStep: Int,
+    val showBottomProgressBar: Boolean,
+    val portraitVideoFixMode: PortraitVideoFixMode,
+    val exitWhenAllPlayed: Boolean,
+    val longPressAction: Int,
+    val longPressSpeed: Float,
+)
 
 @Composable
 fun VideoPlayerV3Screen(
@@ -113,19 +132,53 @@ fun VideoPlayerV3Screen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger { }
+    val prefsSnapshot = remember {
+        VideoPlayerScreenPrefsSnapshot(
+            uid = Prefs.uid,
+            isLogin = Prefs.isLogin,
+            defaultPlaySpeed = Prefs.defaultPlaySpeed,
+            showOnlineViewerCount = Prefs.showOnlineViewerCount,
+            showLiveViewerCountTip = Prefs.showLiveViewerCountTip,
+            incognitoMode = Prefs.incognitoMode,
+            playerNextVideoStrategyOrder = Prefs.playerNextVideoStrategyOrder,
+            defaultStartPosition = Prefs.playerDefaultStartPosition.toPlayerType(),
+            skipPgcIntroOutro = Prefs.skipPgcIntroOutro,
+            controllerButtonsOrder = Prefs.playerControllerButtonsOrder,
+            seekForwardStep = Prefs.playerSeekForwardStep,
+            seekBackwardStep = Prefs.playerSeekBackwardStep,
+            showBottomProgressBar = Prefs.playerShowBottomProgressBar,
+            portraitVideoFixMode = Prefs.portraitVideoFixMode,
+            exitWhenAllPlayed = Prefs.playerExitWhenAllIsPlayed,
+            longPressAction = Prefs.playerLongPressAction,
+            longPressSpeed = Prefs.playerLongPressSpeed,
+        )
+    }
+    val customNextVideoStrategies = remember(prefsSnapshot.playerNextVideoStrategyOrder) {
+        val validOrdinals = NextVideoStrategy.entries.map { it.ordinalValue }.toSet()
+        prefsSnapshot.playerNextVideoStrategyOrder
+            .split(",")
+            .filter { !it.startsWith("-") }
+            .mapNotNull { idText ->
+                val id = idText.toIntOrNull() ?: return@mapNotNull null
+                if (id !in validOrdinals) return@mapNotNull null
+                NextVideoStrategy.fromOrdinal(id)
+            }
+    }
 
     // 外部创建 DanmakuView，与 videoPlayer 一致的模式
     val danmakuView = remember { DanmakuView(context).also { playerViewModel.danmakuView = it } }
 
     DisposableEffect(danmakuView) {
         onDispose {
-            danmakuView?.release()
+            danmakuView.release()
         }
     }
 
     // subscribe shared action state by aid
     val currentAid = playerViewModel.currentAid
-    val sharedActionFlow = remember(currentAid) { getStateFlow(currentAid, Prefs.uid) }
+    val sharedActionFlow = remember(currentAid, prefsSnapshot.uid) {
+        getStateFlow(currentAid, prefsSnapshot.uid)
+    }
     val sharedActionState by sharedActionFlow.collectAsState()
     val followStateMap by FollowStateManager.followStateMap.collectAsState()
 
@@ -174,7 +227,7 @@ fun VideoPlayerV3Screen(
 
     // 获取在线观看人数
     LaunchedEffect(playerViewModel.currentCid, playerViewModel.currentAid) {
-        if (playerViewModel.currentCid > 0 && playerViewModel.currentAid > 0 && Prefs.showOnlineViewerCount > 0) {
+        if (playerViewModel.currentCid > 0 && playerViewModel.currentAid > 0 && prefsSnapshot.showOnlineViewerCount > 0) {
             withContext(Dispatchers.IO) {
                 try {
                     val response = BiliHttpApi.getVideoOnlineTotal(
@@ -186,7 +239,7 @@ fun VideoPlayerV3Screen(
                         showOnlineViewerCountTip = true
 
                         // 如果设置为 30 秒后隐藏，则自动隐藏
-                        if (Prefs.showOnlineViewerCount == 1) {
+                        if (prefsSnapshot.showOnlineViewerCount == 1) {
                             delay(30_000)
                             showOnlineViewerCountTip = false
                         }
@@ -201,7 +254,7 @@ fun VideoPlayerV3Screen(
     }
 
     // 在线观看人数设置为30秒后隐藏或者始终显示，每 5 分钟刷新一次数据。虽然左下角隐藏，但播放器控制条中还要显示
-    LaunchedEffect(showOnlineViewerCountTip, Prefs.showOnlineViewerCount) {
+    LaunchedEffect(showOnlineViewerCountTip, prefsSnapshot.showOnlineViewerCount) {
         if (showOnlineViewerCountTip) {
             while (true) {
                 delay(300_000)  // 5 分钟
@@ -225,10 +278,10 @@ fun VideoPlayerV3Screen(
     }
 
     // 控制直播人气显示
-    LaunchedEffect(playerViewModel.isLive, Prefs.showLiveViewerCountTip, playerViewModel.livePopularityText) {
-        if (playerViewModel.isLive && Prefs.showLiveViewerCountTip > 0 && playerViewModel.livePopularityText.isNotEmpty()) {
+    LaunchedEffect(playerViewModel.isLive, prefsSnapshot.showLiveViewerCountTip, playerViewModel.livePopularityText) {
+        if (playerViewModel.isLive && prefsSnapshot.showLiveViewerCountTip > 0 && playerViewModel.livePopularityText.isNotEmpty()) {
             showLiveViewerCountTip = true
-            if (Prefs.showLiveViewerCountTip == 1) {
+            if (prefsSnapshot.showLiveViewerCountTip == 1) {
                 delay(30_000)
                 showLiveViewerCountTip = false
             }
@@ -238,15 +291,15 @@ fun VideoPlayerV3Screen(
     }
 
     // 更新 viewerCountText
-    LaunchedEffect(Prefs.showOnlineViewerCount, onlineViewerCount, Prefs.showOnlineViewerCount, playerViewModel.livePopularityText, playerViewModel.liveOnlineCount) {
-        if (playerViewModel.isLive && Prefs.showOnlineViewerCount > 0) {
+    LaunchedEffect(prefsSnapshot.showOnlineViewerCount, onlineViewerCount, playerViewModel.livePopularityText, playerViewModel.liveOnlineCount) {
+        if (playerViewModel.isLive && prefsSnapshot.showOnlineViewerCount > 0) {
             if (playerViewModel.livePopularityText.isNotEmpty()) {
                 viewerCountText = playerViewModel.livePopularityText
             }
             if (playerViewModel.liveOnlineCount.isNotEmpty()) {
                 viewerCountText = viewerCountText + "  ·  " + playerViewModel.liveOnlineCount
             }
-        } else if (Prefs.showOnlineViewerCount > 0 && onlineViewerCount.isNotEmpty()) {
+        } else if (prefsSnapshot.showOnlineViewerCount > 0 && onlineViewerCount.isNotEmpty()) {
             viewerCountText = "$onlineViewerCount 人在看"
         }
     }
@@ -258,7 +311,7 @@ fun VideoPlayerV3Screen(
 
     val exitPlayer = {
         playerViewModel.dismissInteractiveOptionDialog()
-        Prefs.currentPlaySpeed = Prefs.defaultPlaySpeed
+        Prefs.currentPlaySpeed = prefsSnapshot.defaultPlaySpeed
         PlayedAidsCache.clear()
         (context as Activity).finish()
     }
@@ -285,9 +338,6 @@ fun VideoPlayerV3Screen(
             isFollowingUp = playerViewModel.isFollowingUp,
             isVerticalVideo = playerViewModel.isVerticalVideo,
             isLive = playerViewModel.isLive
-        ),
-        LocalVideoPlayerLogsData provides VideoPlayerLogsData(
-            logs = playerViewModel.logs
         ),
         LocalVideoPlayerHistoryData provides VideoPlayerHistoryData(
             lastPlayed = playerViewModel.lastPlayed,
@@ -329,25 +379,25 @@ fun VideoPlayerV3Screen(
             currentSubtitleBackgroundOpacity = playerViewModel.currentSubtitleBackgroundOpacity,
             currentSubtitleBottomPadding = playerViewModel.currentSubtitleBottomPadding,
             currentPlayMode = playerViewModel.currentPlayMode,
-            incognitoMode = Prefs.incognitoMode,
+            incognitoMode = prefsSnapshot.incognitoMode,
             hasPreloadedVideoList = playerViewModel.preloadedVideoList.isNotEmpty(),
             hasRelatedVideos = playerViewModel.relatedVideos.isNotEmpty(),
             fromSeason = playerViewModel.fromSeason,
             showDanmaku = playerViewModel.showDanmaku,
             showRelatedVideos = playerViewModel.showRelatedVideos,
-            showNextVideoBtn = !(playerViewModel.currentPlayMode == PlayMode.SingleVideo || playerViewModel.currentPlayMode == PlayMode.SingleLoop || (playerViewModel.currentPlayMode == PlayMode.Custom && Prefs.playerNextVideoStrategyOrder.split(",").none { !it.startsWith("-") })),
-            defaultStartPosition = Prefs.playerDefaultStartPosition.toPlayerType(),
+            showNextVideoBtn = !(playerViewModel.currentPlayMode == PlayMode.SingleVideo || playerViewModel.currentPlayMode == PlayMode.SingleLoop || (playerViewModel.currentPlayMode == PlayMode.Custom && customNextVideoStrategies.isEmpty())),
+            defaultStartPosition = prefsSnapshot.defaultStartPosition,
             clipInfoList = playerViewModel.clipInfoList,
-            skipPgcIntroOutro = Prefs.skipPgcIntroOutro,
+            skipPgcIntroOutro = prefsSnapshot.skipPgcIntroOutro,
             isLive = playerViewModel.isLive,
             availableLiveQualities = playerViewModel.availableLiveQualities.toList(),
             currentLiveQn = playerViewModel.currentLiveQn,
             currentLiveQualityDescription = playerViewModel.currentLiveQualityDescription,
             currentLiveCodec = playerViewModel.currentLiveCodec,
-            controllerButtonsOrder = Prefs.playerControllerButtonsOrder,
+            controllerButtonsOrder = prefsSnapshot.controllerButtonsOrder,
             showDebugInfo = showDebugInfo,
-            longPressAction = Prefs.playerLongPressAction,
-            longPressSpeed = Prefs.playerLongPressSpeed
+            longPressAction = prefsSnapshot.longPressAction,
+            longPressSpeed = prefsSnapshot.longPressSpeed
         ),
         LocalVideoPlayerDanmakuMasksData provides VideoPlayerDanmakuMasksData(
             danmakuMasks = playerViewModel.danmakuMasks,
@@ -384,10 +434,10 @@ fun VideoPlayerV3Screen(
                 modifier = modifier
                     .fillMaxSize(),
                 videoPlayer = playerViewModel.videoPlayer!!,
-                playerSeekForwardStep = Prefs.playerSeekForwardStep,
-                playerSeekBackwardStep = Prefs.playerSeekBackwardStep,
-                showBottomProgressBar = Prefs.playerShowBottomProgressBar,
-                useTextureViewFixPortraitVideo = Prefs.portraitVideoFixMode == PortraitVideoFixMode.UseTextureView && playerViewModel.isVerticalVideo && playerViewModel.currentQuality >= Resolution.R4K,
+                playerSeekForwardStep = prefsSnapshot.seekForwardStep,
+                playerSeekBackwardStep = prefsSnapshot.seekBackwardStep,
+                showBottomProgressBar = prefsSnapshot.showBottomProgressBar,
+                useTextureViewFixPortraitVideo = prefsSnapshot.portraitVideoFixMode == PortraitVideoFixMode.UseTextureView && playerViewModel.isVerticalVideo && playerViewModel.currentQuality >= Resolution.R4K,
                 onViewerCountTipCanShowChanged = { canShow ->
                     if (canShowViewerCountTip != canShow) {
                         canShowViewerCountTip = canShow
@@ -466,9 +516,7 @@ fun VideoPlayerV3Screen(
                     when (playerViewModel.currentPlayMode) {
                         PlayMode.Custom -> {
                             // 使用设置中的策略顺序
-                            val validOrdinals = NextVideoStrategy.entries.map { it.ordinalValue }.toSet()
-                            val strategies = Prefs.playerNextVideoStrategyOrder.split(",").filter { !it.startsWith("-") }.mapNotNull { val id = it.toIntOrNull() ?: return@mapNotNull null; if (id !in validOrdinals) return@mapNotNull null; NextVideoStrategy.fromOrdinal(id) }
-                            for (strategy in strategies) {
+                            for (strategy in customNextVideoStrategies) {
                                 if (strategy == NextVideoStrategy.SingleVideo) {
                                     // 单视频模式：不自动播放下一个
                                     break
@@ -574,7 +622,7 @@ fun VideoPlayerV3Screen(
                                 autoActionCountdownJob = null
                             }
                         }
-                    } else if (Prefs.playerExitWhenAllIsPlayed) {
+                    } else if (prefsSnapshot.exitWhenAllPlayed) {
                         // 没有下一个：退出
                         autoActionCountdownJob = scope.launch {
                             try {
@@ -584,7 +632,7 @@ fun VideoPlayerV3Screen(
                                 autoActionTipVisible = false
                                 if (autoActionCountdownJob != null) {
                                     autoActionCountdownJob = null
-                                    Prefs.currentPlaySpeed = Prefs.defaultPlaySpeed
+                                    Prefs.currentPlaySpeed = prefsSnapshot.defaultPlaySpeed
                                     // 自动退出时也清空缓存
                                     PlayedAidsCache.clear()
                                     (context as Activity).finish()
@@ -771,7 +819,7 @@ fun VideoPlayerV3Screen(
                     focusMap, 
                     onFocus, 
                     onPauseAutoHide ->
-                    if (Prefs.isLogin && !playerViewModel.fromSeason) {
+                    if (prefsSnapshot.isLogin && !playerViewModel.fromSeason) {
                         // 增加操作：点赞、收藏、投币。通过 focusMap 获取 focusRequester 并在 onFocusChanged 回调时通知 controller
                         val likeFocus = focusMap[UserActionKey.Like]
                         val favFocus = focusMap[UserActionKey.Favorite]
@@ -815,15 +863,15 @@ fun VideoPlayerV3Screen(
                                 onToggleLike = {
                                     val aid = playerViewModel.currentAid
                                     scope.launch {
-                                        val flow = getStateFlow(aid, Prefs.uid)
+                                        val flow = getStateFlow(aid, prefsSnapshot.uid)
                                         val current = flow.value
                                         if (current.liked) {
-                                            val success = VideoUserActionManager.delLike(aid, Prefs.uid)
+                                            val success = VideoUserActionManager.delLike(aid, prefsSnapshot.uid)
                                             if (!success) {
                                                 "点赞失败".toast(context)
                                             }
                                         } else {
-                                            val success = VideoUserActionManager.addLike(aid, Prefs.uid)
+                                            val success = VideoUserActionManager.addLike(aid, prefsSnapshot.uid)
                                             if (!success) {
                                                 "取消点赞失败".toast(context)
                                             }
@@ -861,7 +909,7 @@ fun VideoPlayerV3Screen(
                                 favoriteFolderIds = sharedActionState.favoriteFolderIds,
                                 onAddToDefaultFavoriteFolder = {
                                     scope.launch {
-                                        val success = VideoUserActionManager.addToDefaultFavoriteFolder(playerViewModel.currentAid, Prefs.uid)
+                                        val success = VideoUserActionManager.addToDefaultFavoriteFolder(playerViewModel.currentAid, prefsSnapshot.uid)
                                         if (!success) {
                                             "收藏失败！默认收藏夹不存在？".toast(context)
                                         }
@@ -869,7 +917,7 @@ fun VideoPlayerV3Screen(
                                 },
                                 onUpdateFavoriteFolders = {
                                     scope.launch {
-                                        val success = VideoUserActionManager.updateVideoFavoriteFolders(playerViewModel.currentAid, it, Prefs.uid)
+                                        val success = VideoUserActionManager.updateVideoFavoriteFolders(playerViewModel.currentAid, it, prefsSnapshot.uid)
                                         if (!success) {
                                             "收藏失败！此收藏夹收藏数量已达上限（1000）".toast(context)
                                         }
@@ -905,7 +953,7 @@ fun VideoPlayerV3Screen(
                                 isCoin = sharedActionState.coin,
                                 onAddCoin = {
                                     scope.launch {
-                                        val success = VideoUserActionManager.addCoin(playerViewModel.currentAid, Prefs.uid)
+                                        val success = VideoUserActionManager.addCoin(playerViewModel.currentAid, prefsSnapshot.uid)
                                         withContext(Dispatchers.Main) {
                                             if (!success) {
                                                 "投币失败".toast(context)
@@ -941,7 +989,7 @@ fun VideoPlayerV3Screen(
                                 ),
                                 onAddToView = {
                                     scope.launch {
-                                        val success = VideoUserActionManager.addToView(playerViewModel.currentAid, Prefs.uid)
+                                        val success = VideoUserActionManager.addToView(playerViewModel.currentAid, prefsSnapshot.uid)
                                         if (success) {
                                             "已添加到稍后再看".toast(context)
                                         } else {

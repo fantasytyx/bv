@@ -409,6 +409,11 @@ internal class DanmakuEngine(
             }
             allItems = mutableListOf()
             items = mutableListOf()
+            // 清理轨道状态，释放 DanmakuItem 引用
+            for (queue in scrollLaneQueues) { queue.clear() }
+            scrollLaneQueues = emptyArray()
+            topLaneBusyUntilMs = DoubleArray(0)
+            bottomLaneBusyUntilMs = DoubleArray(0)
         }
     }
 

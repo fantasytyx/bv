@@ -6,7 +6,6 @@ import dev.aaa1115910.bv.player.tv.controller.EmptyUserActionContent
 import dev.aaa1115910.bv.player.tv.controller.UserActionContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,10 +34,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
-import androidx.tv.material3.Text
 import dev.aaa1115910.bv.player.danmaku.DanmakuConfig
 import dev.aaa1115910.bv.player.danmaku.DanmakuView
-import dev.aaa1115910.biliapi.entity.danmaku.DanmakuMaskFrame
 import dev.aaa1115910.biliapi.http.entity.video.ClipType
 import dev.aaa1115910.biliapi.entity.video.Subtitle
 import dev.aaa1115910.bv.player.AbstractVideoPlayer
@@ -52,7 +50,6 @@ import dev.aaa1115910.bv.player.entity.LocalVideoPlayerDanmakuMasksData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerDebugInfoData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerHistoryData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerLoadStateData
-import dev.aaa1115910.bv.player.entity.LocalVideoPlayerLogsData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerPaymentData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerSeekState
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerStateData
@@ -73,7 +70,6 @@ import dev.aaa1115910.bv.player.tv.controller.SkipEdTip
 import dev.aaa1115910.bv.player.tv.controller.SkipOpTip
 import dev.aaa1115910.bv.player.tv.controller.VideoPlayerController
 import dev.aaa1115910.bv.util.countDownTimer
-import dev.aaa1115910.bv.player.util.DanmakuMaskFinder
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.formatHourMinSec
 import dev.aaa1115910.bv.util.ifElse
@@ -153,13 +149,11 @@ fun BvPlayer(
     val videoPlayerDanmakuMaskData = LocalVideoPlayerDanmakuMasksData.current
     val videoPlayerHistoryData = LocalVideoPlayerHistoryData.current
     val videoPlayerLoadStateData = LocalVideoPlayerLoadStateData.current
-    val videoPlayerLogsData = LocalVideoPlayerLogsData.current
     val videoPlayerPaymentData = LocalVideoPlayerPaymentData.current
     val videoPlayerVideoInfoData = LocalVideoPlayerVideoInfoData.current
 
     val focusRequester = remember { FocusRequester() }
 
-    var showLogs by remember { mutableStateOf(false) }
     var showBackToHistory by remember { mutableStateOf(false) }
     var isPlaying by rememberSaveable { mutableStateOf(false) }
     var isError by remember { mutableStateOf(false) }
@@ -185,8 +179,6 @@ fun BvPlayer(
 
     var clockRefreshTimer: CountDownTimer? by remember { mutableStateOf(null) }
     var hideBackToHistoryTimer: CountDownTimer? by remember { mutableStateOf(null) }
-
-    var currentDanmakuMaskFrame: DanmakuMaskFrame? by remember { mutableStateOf(null) }
 
     // 跳过片头片尾相关状态
     var showSkipOpTip by remember { mutableStateOf(false) }
@@ -508,31 +500,13 @@ fun BvPlayer(
         }
     }
 
-    // 弹幕蒙版跟踪：独立轮询，蒙版活跃时自适应高频率，不影响进度更新和跳过检测
-    LaunchedEffect(isPlaying, videoPlayerConfigData.currentDanmakuMask, videoPlayerDanmakuMaskData.danmakuMasks.size) {
-        if (!videoPlayerConfigData.currentDanmakuMask || videoPlayerDanmakuMaskData.danmakuMasks.isEmpty()) {
-            if (currentDanmakuMaskFrame != null) currentDanmakuMaskFrame = null
-            return@LaunchedEffect
-        }
-        while (isPlaying) {
-            val pos = videoPlayer.currentPosition.coerceAtLeast(0L)
-            val newMask = DanmakuMaskFinder.findMaskFrame(
-                videoPlayerDanmakuMaskData.danmakuMasks,
-                pos
-            )
-            if (currentDanmakuMaskFrame != newMask) {
-                // logger.fInfo { "Danmaku mask changed: ${currentDanmakuMaskFrame?.range}, new: ${newMask?.range}, current pos ${pos}ms" }
-                currentDanmakuMaskFrame = newMask
-            }
-            // 有蒙版帧时精确对齐帧过期时刻；无匹配帧时低频轮询
-            val nextDelay = if (newMask != null) {
-                // logger.fInfo { "Danmaku mask active: ${newMask.range.start}, next change at ${newMask.range.last}ms, current pos ${pos}ms" }
-                (newMask.range.last - pos + 3).coerceIn(33, 200)
-            } else {
-                200L
-            }
-            delay(nextDelay)
-        }
+    LaunchedEffect(videoPlayerConfigData.currentDanmakuMask, danmakuView) {
+        danmakuView.setMaskEnabled(videoPlayerConfigData.currentDanmakuMask)
+    }
+
+    LaunchedEffect(videoPlayerDanmakuMaskData.danmakuMasks, danmakuView) {
+        snapshotFlow { videoPlayerDanmakuMaskData.danmakuMasks.toList() }
+            .collect { danmakuView.setMaskSegments(it) }
     }
 
     LaunchedEffect(Unit) {
@@ -571,17 +545,10 @@ fun BvPlayer(
         }
     }
 
-    // LaunchedEffect(videoPlayerLogsData.logs) {
-    //     showLogs = videoPlayerLogsData.logs.isNotEmpty()
-    //     if (showLogs) {
-    //         delay(3000)
-    //         showLogs = false
-    //     }
-    // }
-
     DisposableEffect(Unit) {
         onDispose {
             videoPlayer.release()
+            danmakuView.release()
         }
     }
 
@@ -890,11 +857,12 @@ fun BvPlayer(
                         setPositionProvider { if(currentConfigData.isLive) SystemClock.elapsedRealtime() else videoPlayer.currentPosition.coerceAtLeast(0L) }
                         setIsPlayingProvider { videoPlayer.isPlaying }
                         setPlaybackSpeedProvider { currentPlaySpeed }
+                        setMaskEnabled(videoPlayerConfigData.currentDanmakuMask)
+                        setMaskSegments(videoPlayerDanmakuMaskData.danmakuMasks.toList())
                         setConfig(danmakuConfig)
                     }
                 },
                 update = { view ->
-                    view.setMaskFrame(currentDanmakuMaskFrame.takeIf { videoPlayerConfigData.currentDanmakuMask })
                     view.setVideoAspectRatio(aspectRatioValue)
                     view.setVideoAspectRatioType(currentVideoAspectRatio)
                 }
@@ -914,14 +882,6 @@ fun BvPlayer(
                     show = true,
                     text = skipEdTipText
                 )
-            }
-
-            if (showLogs) {
-                Column(
-                    modifier = Modifier.align(Alignment.BottomStart)
-                ) {
-                    Text(text = videoPlayerLogsData.logs)
-                }
             }
         }
     }

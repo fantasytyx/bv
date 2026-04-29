@@ -49,7 +49,7 @@ data class FavoriteFolderMetadata(
     val title: String,
     val cover: String?,
     var videoInThisFav: Boolean,
-    val mediaCount: Int
+    var mediaCount: Int
 ) {
     companion object {
         fun fromHttpFavoriteFolderInfo(httpFavoriteFolderInfo: dev.aaa1115910.biliapi.http.entity.user.favorite.FavoriteFolderInfo): FavoriteFolderMetadata {
