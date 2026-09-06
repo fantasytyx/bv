@@ -16,6 +16,7 @@ import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fException
 import dev.aaa1115910.bv.util.fInfo
+import dev.aaa1115910.bv.util.isExpectedNetworkFailure
 import dev.aaa1115910.bv.util.toast
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +89,12 @@ class CommentViewModel(
         }.onFailure {
             logger.fException(it) { "Load more comments failed" }
             withContext(Dispatchers.Main) {
-                "加载评论失败：${it.localizedMessage}".toast(BVApp.context)
+                val message = if (it.isExpectedNetworkFailure()) {
+                    "网络连接失败，请稍后重试"
+                } else {
+                    it.localizedMessage ?: "未知错误"
+                }
+                "加载评论失败：$message".toast(BVApp.context)
             }
         }
         withContext(Dispatchers.Main) {

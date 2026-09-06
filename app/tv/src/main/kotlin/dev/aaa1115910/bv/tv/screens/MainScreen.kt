@@ -66,6 +66,7 @@ import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.toast
 import dev.aaa1115910.bv.viewmodel.UserViewModel
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
@@ -137,6 +138,7 @@ fun MainScreen(
         runCatching {
             mainFocusRequester.requestFocus()
         }.onFailure {
+            if (it is CancellationException) throw it
             logger.fException(it) { "request default focus requester failed" }
         }
     }

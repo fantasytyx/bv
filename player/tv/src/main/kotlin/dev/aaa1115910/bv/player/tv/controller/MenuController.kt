@@ -42,6 +42,7 @@ import dev.aaa1115910.biliapi.entity.video.Subtitle
 import dev.aaa1115910.biliapi.entity.video.SubtitleAiStatus
 import dev.aaa1115910.biliapi.entity.video.SubtitleAiType
 import dev.aaa1115910.biliapi.entity.video.SubtitleType
+import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.bv.player.entity.Audio
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LiveCodec
@@ -79,6 +80,7 @@ fun MenuController(
     onDanmakuOpacityChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onDanmakuMaskChange: (Boolean) -> Unit = {},
+    onDanmakuLaneDensityChange: (DanmakuLaneDensity) -> Unit = {},
     onDanmakuRollingDurationFactorChange: (Float) -> Unit,
     onDanmakuFilterLevelChange: (Int) -> Unit = {},
     onSubtitleChange: (Subtitle) -> Unit,
@@ -119,6 +121,7 @@ fun MenuController(
                 onDanmakuOpacityChange = onDanmakuOpacityChange,
                 onDanmakuAreaChange = onDanmakuAreaChange,
                 onDanmakuMaskChange = onDanmakuMaskChange,
+                onDanmakuLaneDensityChange = onDanmakuLaneDensityChange,
                 onDanmakuRollingDurationFactorChange = onDanmakuRollingDurationFactorChange,
                 onDanmakuFilterLevelChange = onDanmakuFilterLevelChange,
                 onSubtitleChange = onSubtitleChange,
@@ -150,6 +153,7 @@ fun MenuController(
     onDanmakuOpacityChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onDanmakuMaskChange: (Boolean) -> Unit = {},
+    onDanmakuLaneDensityChange: (DanmakuLaneDensity) -> Unit = {},
     onDanmakuRollingDurationFactorChange: (Float) -> Unit,
     onDanmakuFilterLevelChange: (Int) -> Unit = {},
     onSubtitleChange: (Subtitle) -> Unit,
@@ -194,6 +198,7 @@ fun MenuController(
                     onDanmakuOpacityChange = onDanmakuOpacityChange,
                     onDanmakuAreaChange = onDanmakuAreaChange,
                     onDanmakuMaskChange = onDanmakuMaskChange,
+                    onDanmakuLaneDensityChange = onDanmakuLaneDensityChange,
                     onDanmakuRollingDurationFactorChange = onDanmakuRollingDurationFactorChange,
                     onDanmakuFilterLevelChange = onDanmakuFilterLevelChange,
                     onFocusStateChange = { focusState = it },
@@ -244,6 +249,7 @@ private fun MenuList(
     onDanmakuOpacityChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onDanmakuMaskChange: (Boolean) -> Unit = {},
+    onDanmakuLaneDensityChange: (DanmakuLaneDensity) -> Unit = {},
     onDanmakuRollingDurationFactorChange: (Float) -> Unit,
     onDanmakuFilterLevelChange: (Int) -> Unit = {},
     onSubtitleChange: (Subtitle) -> Unit,
@@ -282,6 +288,7 @@ private fun MenuList(
                     onDanmakuAreaChange = onDanmakuAreaChange,
                     onFocusStateChange = onFocusStateChange,
                     onDanmakuMaskChange = onDanmakuMaskChange,
+                    onDanmakuLaneDensityChange = onDanmakuLaneDensityChange,
                     onDanmakuRollingDurationFactorChange = onDanmakuRollingDurationFactorChange,
                     onDanmakuFilterLevelChange = onDanmakuFilterLevelChange
                 )

@@ -21,6 +21,7 @@ import dev.aaa1115910.bv.entity.NavSwitchMode
 import dev.aaa1115910.bv.entity.PlayerType
 import dev.aaa1115910.bv.entity.ThemeType
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LiveCodec
 import dev.aaa1115910.bv.player.entity.PlayMode
@@ -164,6 +165,15 @@ object Prefs {
         }
         set(value) = runBlocking {
             dsm.editPreference(PrefKeys.prefDefaultDanmakuRollingDurationFactorKey, value)
+        }
+
+    var defaultDanmakuLaneDensity: DanmakuLaneDensity
+        get() = runBlocking {
+            val name = dsm.getPreferenceFlow(PrefKeys.prefDefaultDanmakuLaneDensityRequest).first()
+            DanmakuLaneDensity.entries.firstOrNull { it.name == name } ?: DanmakuLaneDensity.Standard
+        }
+        set(value) = runBlocking {
+            dsm.editPreference(PrefKeys.prefDefaultDanmakuLaneDensityKey, value.name)
         }
 
     var defaultVideoCodec: dev.aaa1115910.bv.player.entity.VideoCodec
@@ -608,6 +618,7 @@ object PrefKeys {
     val prefDefaultDanmakuTypesKey = stringPreferencesKey("ddts")
     val prefDefaultDanmakuAreaKey = floatPreferencesKey("dda")
     val prefDefaultDanmakuRollingDurationFactorKey = floatPreferencesKey("ddrdf")
+    val prefDefaultDanmakuLaneDensityKey = stringPreferencesKey("ddld")
     val prefDefaultVideoCodecKey = intPreferencesKey("dvc")
     val prefIncognitoModeKey = booleanPreferencesKey("im")
     val prefDefaultSubtitleKey = intPreferencesKey("default_subtitle")
@@ -698,6 +709,8 @@ object PrefKeys {
     val prefDefaultDanmakuAreaRequest = PreferenceRequest(prefDefaultDanmakuAreaKey, 0.2f)
     val prefDefaultDanmakuRollingDurationFactorRequest =
         PreferenceRequest(prefDefaultDanmakuRollingDurationFactorKey, 1f)
+    val prefDefaultDanmakuLaneDensityRequest =
+        PreferenceRequest(prefDefaultDanmakuLaneDensityKey, DanmakuLaneDensity.Standard.name)
     val prefDefaultVideoCodecRequest =
         PreferenceRequest(prefDefaultVideoCodecKey, VideoCodec.HEVC.ordinal)
     val prefIncognitoModeRequest = PreferenceRequest(prefIncognitoModeKey, false)

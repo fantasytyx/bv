@@ -19,6 +19,13 @@ fun KLogger.fError(msg: () -> Any?) {
 }
 
 fun KLogger.fException(throwable: Throwable, msg: () -> Any?) {
+    // Coroutine cancellation is expected control flow, not an actionable failure.
+    if (throwable.isCancellationFailure()) return
+    // Connectivity failures are recoverable and only need a short message.
+    if (throwable.isExpectedNetworkFailure()) {
+        warn { "$msg: ${throwable.localizedMessage}" }
+        return
+    }
     warn { "$msg: ${throwable.stackTraceToString()}" }
 }
 

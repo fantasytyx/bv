@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import dev.aaa1115910.bv.player.danmaku.DanmakuConfig
+import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.bv.player.danmaku.DanmakuView
 import dev.aaa1115910.biliapi.http.entity.video.ClipType
 import dev.aaa1115910.biliapi.entity.video.Subtitle
@@ -115,6 +116,7 @@ fun BvPlayer(
     onDanmakuOpacityChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onDanmakuMaskChange: (Boolean) -> Unit,
+    onDanmakuLaneDensityChange: (DanmakuLaneDensity) -> Unit,
     onDanmakuRollingDurationFactorChange: (Float) -> Unit,
     onDanmakuFilterLevelChange: (Int) -> Unit = {},
     onSubtitleChange: (Subtitle) -> Unit,
@@ -276,6 +278,7 @@ fun BvPlayer(
             durationMultiplier = durationMultiplier,
             opacity = currentConfigData.currentDanmakuOpacity,
             area = currentConfigData.currentDanmakuArea,
+            laneDensity = currentConfigData.currentDanmakuLaneDensity,
         ))
     }
 
@@ -790,6 +793,11 @@ fun BvPlayer(
             onDanmakuMaskChange = { mask ->
                 logger.info { "On danmaku mask change: $mask" }
                 onDanmakuMaskChange(mask)
+            },
+            onDanmakuLaneDensityChange = { density ->
+                logger.info { "On danmaku lane density change: $density" }
+                onDanmakuLaneDensityChange(density)
+                applyDanmakuConfig(danmakuConfig.copy(laneDensity = density))
             },
             onDanmakuFilterLevelChange = { filterLevel ->
                 logger.info { "On danmaku filter level change: $filterLevel" }

@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -43,6 +44,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Precision
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.UpIcon
@@ -192,13 +195,22 @@ fun CardCover(
         modifier = modifier,
         contentAlignment = Alignment.BottomCenter
     ) {
+        val context = LocalContext.current
         val showInfo = maxWidth > 160.dp
+        val imageModel = remember(cover) {
+            ImageRequest.Builder(context)
+                .data(cover.resizedImageUrl(ImageSize.SmallVideoCardCover))
+                // AsyncImage 使用测量后的卡片尺寸作为解码尺寸。
+                .precision(Precision.INEXACT)
+                .crossfade(false)
+                .build()
+        }
 
         AsyncImage(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1.6f),
-            model = cover.resizedImageUrl(ImageSize.SmallVideoCardCover),
+            model = imageModel,
             contentDescription = null,
             contentScale = ContentScale.Crop
         )

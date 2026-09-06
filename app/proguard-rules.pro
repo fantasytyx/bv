@@ -12,9 +12,9 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# 保留源文件名与行号，Release 包本地崩溃日志的堆栈才能定位到代码行
+# （类名/方法名仍会混淆，可用构建产出的 mapping.txt 还原）
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.

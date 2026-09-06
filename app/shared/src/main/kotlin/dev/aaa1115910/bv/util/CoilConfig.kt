@@ -22,6 +22,17 @@ object CoilConfig {
     private const val DISK_CACHE_SIZE = 512L * 1024 * 1024 // 512MB 磁盘缓存
     private const val DISK_CACHE_DIRECTORY = "image_cache"
 
+    // 抓取保持并发：缓存未命中时不必让每个可见卡片的 DNS/HTTP/磁盘读取串行化。
+    // 只有解码是单车道，大型 ImageDecoder 任务不会互相争抢，硬件位图上传被自然间隔开，
+    // 从而降低解码与纹理上传尖峰。
+    private val tvImageFetchDispatcher by lazy {
+        Dispatchers.IO.limitedParallelism(4)
+    }
+
+    private val tvImageDecodeDispatcher by lazy {
+        Dispatchers.IO.limitedParallelism(1)
+    }
+
     /**
      * 创建优化后的 ImageLoader
      *
@@ -33,9 +44,17 @@ object CoilConfig {
      * 5. 开启网络请求优化
      */
     fun createImageLoader(context: Context): ImageLoader {
-        return ImageLoader.Builder(context)
+        val builder = ImageLoader.Builder(context)
+        if (DeviceUtil.isTvDevice(context)) {
+            builder
+                .fetcherDispatcher(tvImageFetchDispatcher)
+                .decoderDispatcher(tvImageDecodeDispatcher)
+        } else {
             // 使用 IO 调度器进行多线程并发加载
-            .dispatcher(Dispatchers.IO)
+            builder.dispatcher(Dispatchers.IO)
+        }
+
+        return builder
             // 配置内存缓存
             .memoryCache {
                 MemoryCache.Builder(context)

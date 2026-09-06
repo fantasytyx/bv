@@ -57,6 +57,10 @@
     <string name="live_codec_flv">FLV</string>
     <string name="live_codec_avc">HLS（AVC）</string>
     <string name="video_player_menu_danmaku_rolling_duration_factor">弹幕速度</string>
+    <string name="video_player_menu_danmaku_density">弹幕密度</string>
+    <string name="video_player_menu_danmaku_density_sparse">稀疏</string>
+    <string name="video_player_menu_danmaku_density_standard">标准</string>
+    <string name="video_player_menu_danmaku_density_dense">密集</string>
     <string name="video_player_menu_danmaku_area">显示区域</string>
     <string name="video_player_menu_danmaku_mask">人像防挡</string>
     <string name="video_player_menu_danmaku_opacity">不透明度</string>

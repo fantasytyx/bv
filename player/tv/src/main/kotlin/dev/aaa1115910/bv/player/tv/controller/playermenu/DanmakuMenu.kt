@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerConfigData
 import dev.aaa1115910.bv.player.entity.VideoPlayerDanmakuMenuItem
+import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
+import dev.aaa1115910.bv.player.shared.R
 import dev.aaa1115910.bv.player.tv.controller.LocalMenuFocusStateData
 import dev.aaa1115910.bv.player.tv.controller.MenuFocusState
 import dev.aaa1115910.bv.player.tv.controller.playermenu.component.CheckBoxMenuList
@@ -47,6 +49,7 @@ fun DanmakuMenuList(
     onDanmakuOpacityChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onDanmakuMaskChange: (Boolean) -> Unit,
+    onDanmakuLaneDensityChange: (DanmakuLaneDensity) -> Unit,
     onDanmakuRollingDurationFactorChange: (Float) -> Unit,
     onDanmakuFilterLevelChange: (Int) -> Unit,
     onFocusStateChange: (MenuFocusState) -> Unit
@@ -163,6 +166,28 @@ fun DanmakuMenuList(
                     items = listOf("关闭", "开启"),
                     selected = if (videoPlayerConfigData.currentDanmakuMask) 1 else 0,
                     onSelectedChanged = { onDanmakuMaskChange(it == 1) },
+                    onFocusBackToParent = {
+                        onFocusStateChange(MenuFocusState.Menu)
+                        parentMenuFocusRequester.requestFocus()
+                    }
+                )
+
+                VideoPlayerDanmakuMenuItem.Density -> RadioMenuList(
+                    modifier = menuItemsModifier,
+                    items = DanmakuLaneDensity.entries.map {
+                        when (it) {
+                            DanmakuLaneDensity.Sparse ->
+                                context.getString(R.string.video_player_menu_danmaku_density_sparse)
+                            DanmakuLaneDensity.Standard ->
+                                context.getString(R.string.video_player_menu_danmaku_density_standard)
+                            DanmakuLaneDensity.Dense ->
+                                context.getString(R.string.video_player_menu_danmaku_density_dense)
+                        }
+                    },
+                    selected = DanmakuLaneDensity.entries.indexOf(videoPlayerConfigData.currentDanmakuLaneDensity),
+                    onSelectedChanged = {
+                        onDanmakuLaneDensityChange(DanmakuLaneDensity.entries[it])
+                    },
                     onFocusBackToParent = {
                         onFocusStateChange(MenuFocusState.Menu)
                         parentMenuFocusRequester.requestFocus()

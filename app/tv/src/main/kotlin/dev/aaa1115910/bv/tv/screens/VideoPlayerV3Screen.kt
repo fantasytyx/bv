@@ -408,6 +408,7 @@ fun VideoPlayerV3Screen(
             currentDanmakuOpacity = playerViewModel.currentDanmakuOpacity,
             currentDanmakuArea = playerViewModel.currentDanmakuArea,
             currentDanmakuMask = playerViewModel.currentDanmakuMask,
+            currentDanmakuLaneDensity = playerViewModel.currentDanmakuLaneDensity,
             currentDanmakuRollingDurationFactor = playerViewModel.currentDanmakuRollingDurationFactor,
             currentDanmakuFilterLevel = playerViewModel.currentDanmakuFilterLevel,
             currentLiveDanmakuFilterLevel = playerViewModel.currentLiveDanmakuFilterLevel,
@@ -543,7 +544,6 @@ fun VideoPlayerV3Screen(
                     }
                     autoActionCountdownJob = scope.launch {
                         if(prefsSnapshot.nextTipDuration > 0f) {
-                            delay(500)
                             autoActionTipVisible = true
                         }
                         delay((prefsSnapshot.nextTipDuration * 1000).toLong())
@@ -890,6 +890,10 @@ fun VideoPlayerV3Screen(
                 onDanmakuMaskChange = { mask ->
                     Prefs.defaultDanmakuMask = mask
                     playerViewModel.currentDanmakuMask = mask
+                },
+                onDanmakuLaneDensityChange = { density ->
+                    Prefs.defaultDanmakuLaneDensity = density
+                    playerViewModel.currentDanmakuLaneDensity = density
                 },
                 onDanmakuRollingDurationFactorChange = { factor ->
                     Prefs.defaultDanmakuRollingDurationFactor = factor

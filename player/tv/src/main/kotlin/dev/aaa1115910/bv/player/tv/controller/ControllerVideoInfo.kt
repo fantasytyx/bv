@@ -801,7 +801,7 @@ fun ControllerVideoInfoBottom(
             }
 
             Spacer(Modifier.weight(1f))
-            println("liveElapsed ${System.currentTimeMillis()} - $liveTime = $liveElapsed")
+
             Text(
                 modifier = Modifier
                     .padding(top = 8.dp, bottom = 0.dp),

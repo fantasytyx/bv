@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.aaa1115910.biliapi.entity.danmaku.DanmakuMaskSegment
+import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.biliapi.http.entity.video.ClipInfo
 import dev.aaa1115910.biliapi.entity.video.Subtitle
 import dev.aaa1115910.biliapi.entity.video.VideoShot
@@ -124,6 +125,7 @@ data class VideoPlayerConfigData(
     val currentDanmakuOpacity: Float = 1f,
     val currentDanmakuArea: Float = 1f,
     val currentDanmakuMask: Boolean = false,
+    val currentDanmakuLaneDensity: DanmakuLaneDensity = DanmakuLaneDensity.Standard,
     val currentDanmakuRollingDurationFactor: Float = 1f,
     val currentDanmakuFilterLevel: Int = 0,
     val currentLiveDanmakuFilterLevel: Int = 0,
