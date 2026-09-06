@@ -19,6 +19,7 @@ import dev.aaa1115910.biliapi.entity.video.season.SeasonDetail
 import dev.aaa1115910.biliapi.grpc.utils.handleGrpcException
 import dev.aaa1115910.biliapi.http.BiliHttpApi
 import dev.aaa1115910.biliapi.http.entity.user.garb.EquipPart
+import dev.aaa1115910.biliapi.util.AvBvConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -83,7 +84,6 @@ class VideoDetailRepository(
 
         val graphVersion = runCatching {
             BiliHttpApi.getVideoPlayerInfo(
-                av = videoDetail.aid,
                 bv = videoDetail.bvid,
                 cid = videoDetail.cid,
                 sessData = sessData.ifBlank { null }
@@ -122,8 +122,10 @@ class VideoDetailRepository(
                     // 串行执行：获取视频详情
                     val videoDetailWithoutUserActions = run {
                         val httpVideoDetail = BiliHttpApi.getVideoDetail(
-                            av = aid,
-                            sessData = authRepository.sessionData ?: ""
+                            // 使用 bvid 发起请求，相比 aid 更贴近 web 端行为，降低被风控的概率
+                            bv = AvBvConverter.av2bv(aid),
+                            sessData = authRepository.sessionData ?: "",
+                            gaiaVtoken = authRepository.gaiaVtoken
                         ).getResponseData()
                         VideoDetail.fromVideoDetail(httpVideoDetail)
                     }
@@ -134,19 +136,25 @@ class VideoDetailRepository(
                     var isCoined = false
 
                     if (withUserActions) {
-                        // 从缓存读取（缓存由 ensureStateLoaded 或本方法的首次调用填充）
-                        val cached = userActionsCache.getOrPut(aid) {
-                            Triple(
-                                runCatching { likeRepository.checkVideoLike(aid, preferApiType = ApiType.Web) }
-                                    .onFailure { println("Check video liked failed: $it") }
-                                    .getOrDefault(false),
-                                runCatching { favoriteRepository.checkVideoFavoured(aid, preferApiType = ApiType.Web) }
-                                    .onFailure { println("Check video favoured failed: $it") }
-                                    .getOrDefault(false),
-                                runCatching { coinRepository.checkVideoCoin(aid, preferApiType = ApiType.Web) }
-                                    .onFailure { println("Check video coin failed: $it") }
-                                    .getOrDefault(false)
-                            )
+                        // 未登录时跳过点赞/收藏/投币状态请求，减少对风控接口的触发
+                        val hasWebSession = !authRepository.sessionData.isNullOrBlank()
+                        val cached = if (hasWebSession) {
+                            // 从缓存读取（缓存由 ensureStateLoaded 或本方法的首次调用填充）
+                            userActionsCache.getOrPut(aid) {
+                                Triple(
+                                    runCatching { likeRepository.checkVideoLike(aid, preferApiType = ApiType.Web) }
+                                        .onFailure { println("Check video liked failed: $it") }
+                                        .getOrDefault(false),
+                                    runCatching { favoriteRepository.checkVideoFavoured(aid, preferApiType = ApiType.Web) }
+                                        .onFailure { println("Check video favoured failed: $it") }
+                                        .getOrDefault(false),
+                                    runCatching { coinRepository.checkVideoCoin(aid, preferApiType = ApiType.Web) }
+                                        .onFailure { println("Check video coin failed: $it") }
+                                        .getOrDefault(false)
+                                )
+                            }
+                        } else {
+                            Triple(false, false, false)
                         }
                         isLiked = cached.first
                         isFavoured = cached.second
@@ -156,7 +164,7 @@ class VideoDetailRepository(
                     // 串行执行：获取历史和播放器图标
                     val (history, playerIcon) = runCatching {
                         val videoModeInfo = BiliHttpApi.getVideoMoreInfo(
-                            avid = aid,
+                            bvid = AvBvConverter.av2bv(aid),
                             cid = videoDetailWithoutUserActions.cid,
                             sessData = authRepository.sessionData ?: "",
                             buvid3 = authRepository.buvid3 ?: ""
@@ -235,7 +243,7 @@ class VideoDetailRepository(
 
                 val playerIcon = runCatching {
                     val videoModeInfo = BiliHttpApi.getVideoMoreInfo(
-                        avid = firstEp.aid,
+                        bvid = firstEp.bvid,
                         cid = firstEp.cid,
                         sessData = authRepository.sessionData ?: "",
                         buvid3 = authRepository.buvid3 ?: ""

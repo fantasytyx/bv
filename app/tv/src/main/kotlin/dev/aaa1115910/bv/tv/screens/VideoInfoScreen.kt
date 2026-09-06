@@ -130,6 +130,7 @@ import dev.aaa1115910.bv.tv.activities.video.TagActivity
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.CommentPanel
+import dev.aaa1115910.bv.tv.component.GeetestTvVerifyDialog
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.UpIcon
@@ -1112,6 +1113,31 @@ fun VideoInfoScreen(
     LaunchedEffect(showCommentPanel) {
         if (!showCommentPanel) {
             commentButtonFocusRequester.requestFocus()
+        }
+    }
+
+    // 风控 Geetest 验证弹窗（TV 遥控器十字光标 + WebView）
+    if (videoDetailViewModel.showGeetestDialog) {
+        GeetestTvVerifyDialog(
+            gt = videoDetailViewModel.geetestGt,
+            challenge = videoDetailViewModel.geetestChallenge,
+            onResult = { result ->
+                videoDetailViewModel.onGeetestResult(
+                    challenge = result.challenge,
+                    validate = result.validate,
+                    seccode = result.seccode,
+                )
+            },
+            onDismiss = {
+                videoDetailViewModel.onGeetestCancelled()
+            },
+        )
+    }
+
+    // 详情加载失败（含风控申请失败/取消）时，同步错误信息到 tip
+    LaunchedEffect(videoDetailViewModel.state, videoDetailViewModel.errorMessage) {
+        if (videoDetailViewModel.state == VideoInfoState.Error && tip == "Loading") {
+            tip = videoDetailViewModel.errorMessage ?: "未知错误"
         }
     }
 }

@@ -18,6 +18,7 @@ import dev.aaa1115910.biliapi.entity.video.VideoShot
 import dev.aaa1115910.biliapi.grpc.utils.handleGrpcException
 import dev.aaa1115910.biliapi.http.BiliHttpApi
 import dev.aaa1115910.biliapi.http.BiliHttpProxyApi
+import dev.aaa1115910.biliapi.util.AvBvConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -52,12 +53,13 @@ class VideoPlayRepository(
     suspend fun getPlayData(
         aid: Long,
         cid: Long,
-        preferApiType: ApiType = ApiType.Web
+        preferApiType: ApiType = ApiType.Web,
+        tryLook: Boolean = false
     ): PlayData {
         return when (preferApiType) {
             ApiType.Web -> {
                 val playUrlData = BiliHttpApi.getVideoPlayUrl(
-                    av = aid,
+                    bv = AvBvConverter.av2bv(aid),
                     cid = cid,
                     fnval = 4048,
                     qn = 127,
@@ -65,7 +67,8 @@ class VideoPlayRepository(
                     fourk = 1,
                     sessData = authRepository.sessionData,
                     dedeUserID = authRepository.mid,
-                    gaiaVtoken = authRepository.gaiaVtoken
+                    gaiaVtoken = authRepository.gaiaVtoken,
+                    tryLook = tryLook
                 ).getResponseData()
                 PlayData.fromPlayUrlData(playUrlData)
             }
@@ -120,14 +123,15 @@ class VideoPlayRepository(
         preferCodec: CodeType = CodeType.NoCode,
         preferApiType: ApiType = ApiType.Web,
         enableProxy: Boolean = false,
-        proxyArea: String = ""
+        proxyArea: String = "",
+        tryLook: Boolean = false
     ): PlayData {
         println("get pgc play data: [aid=$aid, cid=$cid, epid=$epid, preferCodec=$preferCodec, preferApiType=$preferApiType, enableProxy=$enableProxy, proxyArea=$proxyArea]")
         return when (preferApiType) {
             ApiType.Web -> {
                 val playUrlData = if (enableProxy) {
                     BiliHttpProxyApi.getPgcVideoPlayUrlV2(
-                        av = aid,
+                        bv = aid?.let { AvBvConverter.av2bv(it) },
                         cid = cid,
                         epid = epid,
                         fnval = 4048,
@@ -139,7 +143,7 @@ class VideoPlayRepository(
                     )
                 } else {
                     BiliHttpApi.getPgcVideoPlayUrlV2(
-                        av = aid,
+                        bv = aid?.let { AvBvConverter.av2bv(it) },
                         cid = cid,
                         epid = epid,
                         fnval = 4048,
@@ -147,7 +151,8 @@ class VideoPlayRepository(
                         fnver = 0,
                         fourk = 1,
                         sessData = authRepository.sessionData,
-                        gaiaVtoken = authRepository.gaiaVtoken
+                        gaiaVtoken = authRepository.gaiaVtoken,
+                        tryLook = tryLook
 //                        buvid3 = authRepository.buvid3
                     )
                 }.getResponseData()
@@ -213,7 +218,7 @@ class VideoPlayRepository(
         return when (preferApiType) {
             ApiType.Web -> {
                 val response = BiliHttpApi.getVideoMoreInfo(
-                    avid = aid,
+                    bvid = AvBvConverter.av2bv(aid),
                     cid = cid,
                     sessData = authRepository.sessionData ?: "",
                     buvid3 = authRepository.buvid3 ?: ""
@@ -256,7 +261,7 @@ class VideoPlayRepository(
     ) {
         val result = when (preferApiType) {
             ApiType.Web -> BiliHttpApi.sendHeartbeat(
-                avid = aid.toLong(),
+                bvid = AvBvConverter.av2bv(aid),
                 cid = cid,
                 playedTime = time,
                 type = type.value,
@@ -289,7 +294,7 @@ class VideoPlayRepository(
         val danmakuMaskUrl = when (preferApiType) {
             ApiType.Web -> {
                 val response = BiliHttpApi.getVideoMoreInfo(
-                    avid = aid,
+                    bvid = AvBvConverter.av2bv(aid),
                     cid = cid,
                     sessData = authRepository.sessionData ?: "",
                     buvid3 = authRepository.buvid3 ?: ""
@@ -328,7 +333,7 @@ class VideoPlayRepository(
         preferApiType: ApiType = ApiType.Web
     ): VideoShot? {
         val videoShortResponse = when (preferApiType) {
-            ApiType.Web -> BiliHttpApi.getWebVideoShot(aid = aid, cid = cid)
+            ApiType.Web -> BiliHttpApi.getWebVideoShot(bvid = AvBvConverter.av2bv(aid), cid = cid)
             ApiType.App -> BiliHttpApi.getAppVideoShot(aid = aid, cid = cid)
         }
         val videoShot = VideoShot.fromVideoShot(videoShortResponse.getResponseData())

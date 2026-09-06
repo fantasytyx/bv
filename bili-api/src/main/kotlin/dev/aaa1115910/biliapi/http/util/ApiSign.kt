@@ -84,6 +84,10 @@ suspend fun HttpRequestBuilder.encWbi() {
     require(BiliHttpApi.wbiImgKey != null && BiliHttpApi.wbiSubKey != null) { "Wbi keys can't be null!" }
     val mixinKey = getMixinKey(BiliHttpApi.wbiImgKey + BiliHttpApi.wbiSubKey)
 
+    // HttpRequestRetry 会复用 request builder。再次签名前先移除上一次的签名参数，
+    // 否则每次重试都会再追加一对 wts/w_rid。
+    url.parameters.remove("wts")
+    url.parameters.remove("w_rid")
     val wts = (System.currentTimeMillis() / 1000).toInt()
     parameter("wts", wts)
 

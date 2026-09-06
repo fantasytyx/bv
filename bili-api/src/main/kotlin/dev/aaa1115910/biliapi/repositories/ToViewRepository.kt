@@ -4,6 +4,7 @@ import bilibili.app.interfaces.v1.HistoryGrpcKt
 import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.entity.user.ToViewData
 import dev.aaa1115910.biliapi.http.BiliHttpApi
+import dev.aaa1115910.biliapi.util.AvBvConverter
 import org.koin.core.annotation.Single
 
 @Single
@@ -76,7 +77,7 @@ class ToViewRepository(
             when (preferApiType) {
                 ApiType.Web, ApiType.App -> {
                     BiliHttpApi.addToView(
-                        avid = avid,
+                        bvid = AvBvConverter.av2bv(avid),
                         csrf = authRepository.biliJct!!,
                         sessData = authRepository.sessionData!!
                     ).code == 0

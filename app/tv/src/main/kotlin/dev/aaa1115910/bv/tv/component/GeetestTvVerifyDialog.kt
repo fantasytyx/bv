@@ -515,7 +515,7 @@ private fun buildGeetestHtml(gt: String, challenge: String): String {
         captchaObj.onClose(function() {
           // 极验面板关闭后重新弹出，防止误触关闭
           notify('验证已关闭，正在重新打开…');
-          setTimeout(function() { captchaObj.verify(); }, 500);
+          // setTimeout(function() { captchaObj.verify(); }, 500);
         });
       });
     })();

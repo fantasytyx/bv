@@ -104,6 +104,7 @@ import dev.aaa1115910.bv.util.swapList
 import dev.aaa1115910.bv.viewmodel.VideoPlayerV3ViewModel
 import dev.aaa1115910.bv.tv.component.GeetestTvVerifyDialog
 import dev.aaa1115910.biliapi.http.BiliHttpApi
+import dev.aaa1115910.biliapi.util.AvBvConverter
 import dev.aaa1115910.bv.player.entity.DefaultStartPosition
 import dev.aaa1115910.bv.player.entity.NextVideoStrategy
 import dev.aaa1115910.bv.tv.component.videocard.TabbedVideosPanel
@@ -261,7 +262,7 @@ fun VideoPlayerV3Screen(
                 try {
                     val response = BiliHttpApi.getVideoOnlineTotal(
                         cid = playerViewModel.currentCid,
-                        aid = playerViewModel.currentAid
+                        bvid = AvBvConverter.av2bv(playerViewModel.currentAid)
                     )
                     if (response.code == 0) {
                         onlineViewerCount = response.data?.total ?: ""
@@ -292,7 +293,7 @@ fun VideoPlayerV3Screen(
                         try {
                             val response = BiliHttpApi.getVideoOnlineTotal(
                                 cid = playerViewModel.currentCid,
-                                aid = playerViewModel.currentAid
+                                bvid = AvBvConverter.av2bv(playerViewModel.currentAid)
                             )
                             if (response.code == 0) {
                                 onlineViewerCount = response.data?.total ?: ""

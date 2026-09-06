@@ -2,6 +2,7 @@ package dev.aaa1115910.biliapi.repositories
 
 import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.http.BiliHttpApi
+import dev.aaa1115910.biliapi.util.AvBvConverter
 import org.koin.core.annotation.Single
 
 @Single
@@ -14,7 +15,7 @@ class CoinRepository(
     ): Boolean {
         return when (preferApiType) {
             ApiType.Web -> BiliHttpApi.checkVideoSentCoin(
-                avid = aid,
+                bvid = AvBvConverter.av2bv(aid),
                 sessData = authRepository.sessionData
             )
 

@@ -144,6 +144,7 @@ object BiliHttpApi {
     )
 
     private val videoMoreInfoCache = ConcurrentHashMap<String, CacheEntry<BiliResponse<VideoMoreInfo>>>()
+    private const val VIDEO_MORE_INFO_CACHE_TTL_MILLIS = 30_000L
 
     init {
         createClient()
@@ -185,14 +186,13 @@ object BiliHttpApi {
     /**
      * 检查响应体是否包含风控 v_voucher。
      *
-     * 当 API 返回 `{"code":0,"data":{"v_voucher":"voucher_xxx"}}` 时，
+     * 当 API 返回 `{"code":0,"data":{"v_voucher":"voucher_xxx"}}` 或
+     * `{"code":-352,"data":{"v_voucher":"voucher_xxx"}}` 时，
      * 表示触发了风控，需要通过 Geetest 验证，此方法会抛出 [VVoucherException]。
      */
     private fun checkForVVoucher(bodyText: String) {
         runCatching {
             val root = Json.parseToJsonElement(bodyText).jsonObject
-            val code = root["code"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: return
-            if (code != 0) return
             val data = root["data"]?.jsonObject ?: root["result"]?.jsonObject ?: return
             val vVoucher = data["v_voucher"]?.jsonPrimitive?.contentOrNull
             if (!vVoucher.isNullOrBlank()) {
@@ -261,17 +261,23 @@ object BiliHttpApi {
     suspend fun getVideoDetail(
         av: Long? = null,
         bv: String? = null,
-        sessData: String? = null
+        sessData: String? = null,
+        gaiaVtoken: String? = null
     ): BiliResponse<VideoDetail> {
         val response = client.get("/x/web-interface/wbi/view/detail") {
             av?.let { parameter("aid", av) }
             bv?.let { parameter("bvid", bv) }
+            gaiaVtoken?.let { parameter("gaia_vtoken", it) }
 
-            sessData?.let { header("Cookie", "SESSDATA=$sessData;") }
+            val cookieParts = mutableListOf<String>()
+            sessData?.let { cookieParts.add("SESSDATA=$it") }
+            gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
+            if (cookieParts.isNotEmpty()) header("Cookie", cookieParts.joinToString(";"))
             skipAddBuvid3Cookie()
         }
-        println("getVideoDetail:" + response.bodyAsText())
-        return response.body()
+        val bodyText = response.bodyAsText()
+        checkForVVoucher(bodyText)
+        return json.decodeFromString(bodyText)
     }
 
     /**
@@ -291,7 +297,8 @@ object BiliHttpApi {
         platform: String = "oc",
         sessData: String? = null,
         dedeUserID: Long? = null,
-        gaiaVtoken: String? = null
+        gaiaVtoken: String? = null,
+        tryLook: Boolean = false
     ): BiliResponse<PlayUrlData> {
         val response = client.get("/x/player/wbi/playurl") {
             require(av != null || bv != null) { "av and bv cannot be null at the same time" }
@@ -306,15 +313,29 @@ object BiliHttpApi {
             parameter("otype", otype)
             parameter("type", type)
             parameter("platform", platform)
-            gaiaVtoken?.let { parameter("gaia_vtoken", it) }
-            if (sessData.isNullOrEmpty()) {
-                // parameter("voice_balance", 1)
+            if (tryLook) {
+                // 试看兜底：按游客视角请求，不注入账号态与风控 token
                 parameter("web_location", "1315873")
                 parameter("gaia_source", "pre-load")
                 parameter("isGaiaAvoided", "true")
                 parameter("try_look", "1")
+            } else {
+                gaiaVtoken?.let { parameter("gaia_vtoken", it) }
+                if (sessData.isNullOrEmpty()) {
+                    // parameter("voice_balance", 1)
+                    parameter("web_location", "1315873")
+                    parameter("gaia_source", "pre-load")
+                    parameter("isGaiaAvoided", "true")
+                    parameter("try_look", "1")
+                }
             }
-            sessData?.let { header("Cookie", "SESSDATA=$sessData;DedeUserID=$dedeUserID") }
+            val cookieParts = mutableListOf<String>()
+            if (!tryLook) {
+                sessData?.let { cookieParts.add("SESSDATA=$it") }
+                dedeUserID?.let { cookieParts.add("DedeUserID=$it") }
+                gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
+            }
+            if (cookieParts.isNotEmpty()) header("Cookie", cookieParts.joinToString(";"))
         }
         val bodyText = response.bodyAsText()
         // println(bodyText)
@@ -341,7 +362,8 @@ object BiliHttpApi {
         sessData: String? = null,
         dedeUserID: Long? = null,
         buvid3: String? = null,
-        gaiaVtoken: String? = null
+        gaiaVtoken: String? = null,
+        tryLook: Boolean = false
     ): BiliResponse<PlayUrlData> {
         val response = client.get("/pgc/player/web/playurl") {
             require(av != null || bv != null) { "av and bv cannot be null at the same time" }
@@ -358,11 +380,19 @@ object BiliHttpApi {
             supportMultiAudio?.let { parameter("support_multi_audio", it) }
             drmTechType?.let { parameter("drm_tech_type", it) }
             fromClient?.let { parameter("from_client", it) }
-            gaiaVtoken?.let { parameter("gaia_vtoken", it) }
+            if (tryLook) {
+                // 试看兜底：按游客视角请求，不注入账号态与风控 token
+                parameter("try_look", "1")
+            } else {
+                gaiaVtoken?.let { parameter("gaia_vtoken", it) }
+            }
             val cookieParts = mutableListOf<String>()
-            sessData?.let { cookieParts.add("SESSDATA=$it") }
-            dedeUserID?.let { cookieParts.add("DedeUserID=$it") }
-            buvid3?.let { cookieParts.add("buvid3=$it") }
+            if (!tryLook) {
+                sessData?.let { cookieParts.add("SESSDATA=$it") }
+                dedeUserID?.let { cookieParts.add("DedeUserID=$it") }
+                buvid3?.let { cookieParts.add("buvid3=$it") }
+                gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
+            }
             if (cookieParts.isNotEmpty()) header("Cookie", cookieParts.joinToString(";"))
             //必须得加上 referer 才能通过账号身份验证
             header("referer", "https://www.bilibili.com")
@@ -390,7 +420,8 @@ object BiliHttpApi {
         fromClient: String? = null,
         sessData: String? = null,
         buvid3: String? = null,
-        gaiaVtoken: String? = null
+        gaiaVtoken: String? = null,
+        tryLook: Boolean = false
     ): BiliResponse<PlayUrlV2Data> {
         val response = client.get("/pgc/player/web/v2/playurl") {
             av?.let { parameter("avid", it) }
@@ -405,10 +436,18 @@ object BiliHttpApi {
             supportMultiAudio?.let { parameter("support_multi_audio", it) }
             drmTechType?.let { parameter("drm_tech_type", it) }
             fromClient?.let { parameter("from_client", it) }
-            gaiaVtoken?.let { parameter("gaia_vtoken", it) }
+            if (tryLook) {
+                // 试看兜底：按游客视角请求，不注入账号态与风控 token
+                parameter("try_look", "1")
+            } else {
+                gaiaVtoken?.let { parameter("gaia_vtoken", it) }
+            }
             val cookieParts = mutableListOf<String>()
-            sessData?.let { cookieParts.add("SESSDATA=$it") }
-            buvid3?.let { cookieParts.add("buvid3=$it") }
+            if (!tryLook) {
+                sessData?.let { cookieParts.add("SESSDATA=$it") }
+                buvid3?.let { cookieParts.add("buvid3=$it") }
+                gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
+            }
             if (cookieParts.isNotEmpty()) {
                 val cookieString = cookieParts.joinToString(";")
                 println("PGC v2 Cookie: $cookieString")
@@ -929,15 +968,15 @@ object BiliHttpApi {
     }.bodyAsText()
 
     /**
-     * 获取视频[avid]的[cid]视频更多信息，例如播放进度
+     * 获取视频[bvid]的[cid]视频更多信息，例如播放进度
      */
     suspend fun getVideoMoreInfo(
-        avid: Long,
+        bvid: String,
         cid: Long,
         sessData: String,
         buvid3: String
     ): BiliResponse<VideoMoreInfo> {
-        val cacheKey = "$avid-$cid-$sessData"
+        val cacheKey = "$bvid-$cid-$sessData"
         val currentTime = System.currentTimeMillis()
 
         // 清理所有过期的缓存数据
@@ -951,19 +990,22 @@ object BiliHttpApi {
 
         videoMoreInfoCache[cacheKey]?.let { cacheEntry ->
             // 缓存存在且有效，重置TTL并返回缓存结果
-            cacheEntry.expireTime = currentTime + 1000L
+            cacheEntry.expireTime = currentTime + VIDEO_MORE_INFO_CACHE_TTL_MILLIS
             return cacheEntry.data
         }
 
         // 发起请求
         val response: BiliResponse<VideoMoreInfo> = client.get("/x/player/wbi/v2") {
-            parameter("aid", avid)
+            parameter("bvid", bvid)
             parameter("cid", cid)
             header("Cookie", "buvid3=$buvid3; SESSDATA=$sessData;")
         }.body()
 
         // 缓存结果
-        videoMoreInfoCache[cacheKey] = CacheEntry(response, currentTime + 1000L)
+        videoMoreInfoCache[cacheKey] = CacheEntry(
+            response,
+            currentTime + VIDEO_MORE_INFO_CACHE_TTL_MILLIS
+        )
 
         return response
     }

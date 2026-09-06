@@ -2,6 +2,7 @@ package dev.aaa1115910.biliapi.repositories
 
 import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.http.BiliHttpApi
+import dev.aaa1115910.biliapi.util.AvBvConverter
 import org.koin.core.annotation.Single
 
 @Single
@@ -14,7 +15,7 @@ class LikeRepository(
     ): Boolean {
         return when (preferApiType) {
             ApiType.Web -> BiliHttpApi.checkVideoLiked(
-                avid = aid,
+                bvid = AvBvConverter.av2bv(aid),
                 sessData = authRepository.sessionData
             )
 
@@ -31,7 +32,7 @@ class LikeRepository(
     ) {
         val (success, message) = when (preferApiType) {
             ApiType.Web -> BiliHttpApi.sendVideoLike(
-                avid = aid,
+                bvid = AvBvConverter.av2bv(aid),
                 like = true,
                 sessData = authRepository.sessionData,
                 csrf = authRepository.biliJct
@@ -54,7 +55,7 @@ class LikeRepository(
     ) {
         val (success, message) = when (preferApiType) {
             ApiType.Web -> BiliHttpApi.sendVideoLike(
-                avid = aid,
+                bvid = AvBvConverter.av2bv(aid),
                 like = false,
                 sessData = authRepository.sessionData,
                 csrf = authRepository.biliJct

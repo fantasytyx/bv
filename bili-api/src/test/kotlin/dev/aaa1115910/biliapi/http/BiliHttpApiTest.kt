@@ -53,7 +53,7 @@ internal class BiliHttpApiTest {
     fun `get video info`() {
         assertDoesNotThrow {
             runBlocking {
-                val response = BiliHttpApi.getVideoInfo(av = 170001)
+                val response = BiliHttpApi.getVideoInfo(bv = "BV17x411w7KC")
                 println(response)
             }
         }
@@ -63,7 +63,7 @@ internal class BiliHttpApiTest {
     fun `get video info which is ugc season`() {
         assertDoesNotThrow {
             runBlocking {
-                val response = BiliHttpApi.getVideoInfo(av = 433139956)
+                val response = BiliHttpApi.getVideoInfo(bv = "BV1UG411M7XN")
                 println(response)
             }
         }
@@ -74,7 +74,7 @@ internal class BiliHttpApiTest {
         assertDoesNotThrow {
             runBlocking {
                 val response = BiliHttpApi.getVideoPlayUrl(
-                    av = 648092492,
+                    bv = "BV14e4y1g7yD",
                     cid = 903675075,
                     fnval = 4048,
                     qn = 127,
@@ -91,7 +91,7 @@ internal class BiliHttpApiTest {
         runBlocking {
             println(
                 BiliHttpApi.getPgcVideoPlayUrl(
-                    av = 672676070,
+                    bv = "BV1tU4y1b7XX",
                     cid = 331748015,
                     fnval = 4048,
                     qn = 127,
@@ -107,7 +107,7 @@ internal class BiliHttpApiTest {
         runBlocking {
             println(
                 BiliHttpApi.getPgcVideoPlayUrlV2(
-                    av = 672676070,
+                    bv = "BV1tU4y1b7XX",
                     cid = 331748015,
                     fnval = 4048,
                     qn = 127,
@@ -197,7 +197,7 @@ internal class BiliHttpApiTest {
         assertDoesNotThrow {
             runBlocking {
                 val response = BiliHttpApi.getRelatedVideos(
-                    avid = 170001
+                    bvid = "BV17x411w7KC"
                 )
                 println(response)
             }
@@ -251,7 +251,7 @@ internal class BiliHttpApiTest {
     fun `send heartbeat`() {
         runBlocking {
             val response = BiliHttpApi.sendHeartbeat(
-                avid = 170001,
+                bvid = "BV17x411w7KC",
                 cid = 280468,
                 playedTime = 23,
                 sessData = SESSDATA
@@ -264,7 +264,7 @@ internal class BiliHttpApiTest {
     fun `get video more info`() {
         runBlocking {
             val response = BiliHttpApi.getVideoMoreInfo(
-                avid = 170001,
+                bvid = "BV17x411w7KC",
                 cid = 279786,
                 sessData = SESSDATA,
                 buvid3 = generateBuvid()
@@ -279,7 +279,7 @@ internal class BiliHttpApiTest {
         runBlocking {
             println(
                 BiliHttpApi.sendVideoLike(
-                    avid = 170001,
+                    bvid = "BV17x411w7KC",
                     like = true,
                     csrf = BILI_JCT,
                     sessData = SESSDATA
@@ -293,7 +293,7 @@ internal class BiliHttpApiTest {
         runBlocking {
             println(
                 BiliHttpApi.checkVideoLiked(
-                    avid = 170001,
+                    bvid = "BV17x411w7KC",
                     sessData = SESSDATA
                 )
             )
@@ -318,7 +318,7 @@ internal class BiliHttpApiTest {
         runBlocking {
             println(
                 BiliHttpApi.checkVideoSentCoin(
-                    avid = 170001,
+                    bvid = "BV17x411w7KC",
                     sessData = SESSDATA
                 )
             )
@@ -413,7 +413,7 @@ internal class BiliHttpApiTest {
         runBlocking {
             println(
                 BiliHttpApi.getVideoTags(
-                    avid = 170001
+                    bvid = "BV17x411w7KC"
                 )
             )
         }
@@ -705,7 +705,7 @@ internal class BiliHttpApiTest {
 
     @Test
     fun `get web video shot`() = runBlocking {
-        val result = BiliHttpApi.getWebVideoShot(aid = 170001)
+        val result = BiliHttpApi.getWebVideoShot(bvid = "BV17x411w7KC")
         println(result)
     }
 
