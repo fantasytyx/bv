@@ -30,6 +30,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.aaa1115910.biliapi.entity.login.QrLoginState
 import dev.aaa1115910.bv.R
+import dev.aaa1115910.bv.component.QrImage
 import dev.aaa1115910.bv.util.toast
 import dev.aaa1115910.bv.viewmodel.login.AppQrLoginViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -92,10 +93,9 @@ fun AppQRLoginContent(
                             .background(Color.White),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Image(
+                        QrImage(
                             modifier = Modifier.size(200.dp),
-                            bitmap = appQrLoginViewModel.qrImage,
-                            contentDescription = null
+                            content = appQrLoginViewModel.loginUrl
                         )
                     }
                 }

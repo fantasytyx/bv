@@ -246,6 +246,35 @@ object Prefs {
         }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefBuvid3Key, value) }
 
+    /**
+     * Web 指纹/票据类 cookie（buvid4、b_nut、bili_ticket、bili_ticket_expires），
+     * 以 "name=value;name=value;" 格式存储，由 WebCookieManager 维护。
+     */
+    var webExtraCookies: String
+        get() = runBlocking {
+            dsm.getPreferenceFlow(PrefKeys.prefWebExtraCookiesRequest).first()
+        }
+        set(value) = runBlocking {
+            dsm.editPreference(PrefKeys.prefWebExtraCookiesKey, value)
+        }
+
+    fun getWebCookie(name: String): String? = webCookieMap(webExtraCookies)[name]
+
+    fun setWebCookies(map: Map<String, String>) {
+        webExtraCookies = buildString {
+            (webCookieMap(webExtraCookies) + map).forEach { (key, value) ->
+                if (value.isNotBlank()) append("$key=$value;")
+            }
+        }
+    }
+
+    private fun webCookieMap(raw: String): Map<String, String> =
+        raw.split(";").mapNotNull { part ->
+            val index = part.indexOf("=")
+            if (index <= 0) return@mapNotNull null
+            part.substring(0, index).trim() to part.substring(index + 1).trim()
+        }.toMap()
+
     var playerType: PlayerType
         get() = runBlocking {
             runCatching {
@@ -270,6 +299,17 @@ object Prefs {
     var refreshToken: String
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefRefreshTokenRequest).first() }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefRefreshTokenKey, value) }
+
+    /**
+     * 自定义 User-Agent，留空时由 API 层按 Web/App 自动选择。
+     */
+    var customUserAgent: String
+        get() = runBlocking {
+            dsm.getPreferenceFlow(PrefKeys.prefCustomUserAgentRequest).first()
+        }
+        set(value) = runBlocking {
+            dsm.editPreference(PrefKeys.prefCustomUserAgentKey, value)
+        }
 
     var apiType: ApiType
         get() = runBlocking {
@@ -577,11 +617,13 @@ object PrefKeys {
     val prefShowFpsKey = booleanPreferencesKey("sf")
     val prefBuvidKey = stringPreferencesKey("random_buvid")
     val prefBuvid3Key = stringPreferencesKey("random_buvid3")
+    val prefWebExtraCookiesKey = stringPreferencesKey("web_extra_cookies")
     val prefPlayerTypeKey = intPreferencesKey("pt")
     val prefDensityKey = floatPreferencesKey("density")
     val prefAlphaKey = booleanPreferencesKey("alpha")
     val prefAccessTokenKey = stringPreferencesKey("access_token")
     val prefRefreshTokenKey = stringPreferencesKey("refresh_token")
+    val prefCustomUserAgentKey = stringPreferencesKey("custom_user_agent")
     val prefApiTypeKey = intPreferencesKey("api_type")
     val prefEnableProxyKey = booleanPreferencesKey("enable_proxy")
     val prefProxyHttpServerKey = stringPreferencesKey("proxy_http_server")
@@ -668,6 +710,7 @@ object PrefKeys {
     val prefShowFpsRequest = PreferenceRequest(prefShowFpsKey, false)
     val prefBuvidRequest = PreferenceRequest(prefBuvidKey, "")
     val prefBuvid3Request = PreferenceRequest(prefBuvid3Key, "")
+    val prefWebExtraCookiesRequest = PreferenceRequest(prefWebExtraCookiesKey, "")
     val prefPlayerTypeRequest = PreferenceRequest(prefPlayerTypeKey, PlayerType.Media3.ordinal)
     val prefDensityRequest =
         PreferenceRequest(
@@ -680,6 +723,7 @@ object PrefKeys {
     val prefAlphaRequest = PreferenceRequest(prefAlphaKey, BuildConfig.BUILD_TYPE == "alpha")
     val prefAccessTokenRequest = PreferenceRequest(prefAccessTokenKey, "")
     val prefRefreshTokenRequest = PreferenceRequest(prefRefreshTokenKey, "")
+    val prefCustomUserAgentRequest = PreferenceRequest(prefCustomUserAgentKey, "")
     val prefApiTypeRequest = PreferenceRequest(prefApiTypeKey, 0)
     val prefEnabelProxyRequest = PreferenceRequest(prefEnableProxyKey, false)
     val prefProxyHttpServerRequest = PreferenceRequest(prefProxyHttpServerKey, "")

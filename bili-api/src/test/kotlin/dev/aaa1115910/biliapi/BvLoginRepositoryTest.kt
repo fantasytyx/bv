@@ -12,7 +12,6 @@ class BvLoginRepositoryTest {
     private val loginRepository = LoginRepository()
     private val phone = 16215705468L
     private val buvid = generateBuvid()
-    private val loginSessionId = loginRepository.generateLoginSessionId()
     var captchaKey: String? = null
 
     fun `send sms`() = runBlocking {
@@ -20,7 +19,6 @@ class BvLoginRepositoryTest {
         println(
             """
             buvid: $buvid
-            loginSessionId: $loginSessionId
             phoneNumber: $phone
         """.trimIndent()
         )
@@ -34,7 +32,6 @@ class BvLoginRepositoryTest {
         runCatching {
             sendSmsResult = loginRepository.requestSms(
                 phone = phone,
-                loginSessionId = loginSessionId,
                 buvid = buvid
             )
             println("Request send sms result: $sendSmsResult")
@@ -84,7 +81,6 @@ class BvLoginRepositoryTest {
                 runCatching {
                     sendSmsResult = loginRepository.requestSms(
                         phone = phone,
-                        loginSessionId = loginSessionId,
                         buvid = buvid,
                         recaptchaToken = recaptchaToken,
                         geetestChallenge = "$geetestChallenge",
@@ -120,7 +116,6 @@ class BvLoginRepositoryTest {
         val response = BiliPassportHttpApi.loginWithSms(
             cid = 86,
             tel = phone,
-            loginSessionId = loginSessionId,
             code = code,
             captchaKey = captchaKey!!
         )

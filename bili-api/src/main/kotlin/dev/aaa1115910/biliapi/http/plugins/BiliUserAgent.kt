@@ -46,11 +46,13 @@ val BiliUserAgent: ClientPlugin<BiliUserAgentConfig> =
         val webUserAgent = pluginConfig.webUserAgent
         onRequest { request, _ ->
             val userAgent =
-                if (request.host == "app.bilibili.com" || request.host == "passport.bilibili.com") {
-                    appUserAgent
-                } else {
-                    webUserAgent
-                }
+                dev.aaa1115910.biliapi.http.BiliHttpApi.userAgentProvider()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: if (request.host == "app.bilibili.com" || request.host == "passport.bilibili.com") {
+                        appUserAgent
+                    } else {
+                        webUserAgent
+                    }
             LOGGER.trace("Adding User-Agent header: agent \"${userAgent}\" for ${request.url}")
             request.header(HttpHeaders.UserAgent, userAgent)
         }

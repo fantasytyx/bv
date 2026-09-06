@@ -1,14 +1,11 @@
 package dev.aaa1115910.bv.viewmodel.login
 
-import android.graphics.BitmapFactory
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.ImageBitmapConfig
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.entity.login.QrLoginState
 import dev.aaa1115910.biliapi.repositories.LoginRepository
 import dev.aaa1115910.bv.BVApp
@@ -18,18 +15,16 @@ import dev.aaa1115910.bv.util.BlacklistUtil
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fError
 import dev.aaa1115910.bv.util.fInfo
-import dev.aaa1115910.bv.util.timeTask
 import dev.aaa1115910.bv.util.toast
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.annotation.KoinViewModel
-import qrcode.QRCode
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.util.Timer
 
 @KoinViewModel
 class AppQrLoginViewModel(
@@ -39,66 +34,116 @@ class AppQrLoginViewModel(
     var state by mutableStateOf(QrLoginState.Ready)
     private val logger = KotlinLogging.logger { }
     var loginUrl by mutableStateOf("")
-    var qrImage by mutableStateOf(ImageBitmap(1, 1, ImageBitmapConfig.Argb8888))
-    private var key = ""
 
-    private var timer = Timer()
+    private var qrRequestJob: Job? = null
+    private var pollingJob: Job? = null
+    private var requestGeneration = 0L
 
-    fun requestQRCode() {
+    fun requestQRCode(
+        preferApiType: ApiType = ApiType.App,
+        webQrSource: String? = null,
+        webQrGoUrl: String? = null
+    ) {
+        val generation = ++requestGeneration
+        qrRequestJob?.cancel()
+        pollingJob?.cancel()
         state = QrLoginState.Ready
-        logger.fInfo { "Request login qr code" }
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
+        loginUrl = ""
+        logger.fInfo { "Request login qr code with apiType=$preferApiType" }
+        qrRequestJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
                 withContext(Dispatchers.Main) { state = QrLoginState.RequestingQRCode }
-                val qrLoginData = loginRepository.requestAppQrLogin()
-                loginUrl = qrLoginData.url
-                key = qrLoginData.key
-                logger.fInfo { "Get login request code url" }
+                val qrLoginData = when (preferApiType) {
+                    ApiType.Web -> loginRepository.requestWebQrLogin(
+                        source = webQrSource,
+                        goUrl = webQrGoUrl
+                    )
+                    ApiType.App -> loginRepository.requestAppQrLogin()
+                }
+                withContext(Dispatchers.Main) {
+                    if (generation != requestGeneration) return@withContext
+                    loginUrl = qrLoginData.url
+                    state = QrLoginState.WaitingForScan
+                }
+                if (generation != requestGeneration) return@launch
+                logger.fInfo { "Get login request code url with apiType=$preferApiType" }
                 logger.info { qrLoginData.url }
-                withContext(Dispatchers.Main) { generateQRImage() }
-                runCatching { timer.cancel() }
-                timer = timeTask(2000, 2000, "check qr login result") {
-                    viewModelScope.launch {
-                        checkLoginResult()
+                pollingJob = viewModelScope.launch(Dispatchers.IO) {
+                    while (isActive && generation == requestGeneration) {
+                        delay(1000)
+                        if (checkLoginResult(
+                                generation = generation,
+                                loginKey = qrLoginData.key,
+                                apiType = preferApiType
+                            )
+                        ) {
+                            break
+                        }
                     }
                 }
-            }.onFailure {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    it.message?.toast(BVApp.context)
-                    state = QrLoginState.Error
+                    if (generation == requestGeneration) {
+                        e.message?.toast(BVApp.context)
+                        state = QrLoginState.Error
+                    }
                 }
-                logger.fError { "Get login request code url failed: ${it.stackTraceToString()}" }
-                timer.cancel()
+                logger.fError { "Get login request code url failed: ${e.stackTraceToString()}" }
             }
         }
     }
 
     fun cancelCheckLoginResultTimer() {
-        timer.cancel()
+        requestGeneration += 1
+        qrRequestJob?.cancel()
+        qrRequestJob = null
+        pollingJob?.cancel()
+        pollingJob = null
     }
 
-    private suspend fun checkLoginResult() {
-        logger.fInfo { "Check for login result" }
-        runCatching {
-            val qrLoginResult = loginRepository.checkAppQrLoginState(key)
-            withContext(Dispatchers.Main) { state = qrLoginResult.state }
-            when (state) {
+    /**
+     * @return true when polling reached a terminal state and should stop.
+     */
+    private suspend fun checkLoginResult(
+        generation: Long,
+        loginKey: String,
+        apiType: ApiType
+    ): Boolean {
+        logger.fInfo { "Check for login result with apiType=$apiType" }
+        return try {
+            val qrLoginResult = when (apiType) {
+                ApiType.Web -> loginRepository.checkWebQrLoginState(loginKey)
+                ApiType.App -> loginRepository.checkAppQrLoginState(loginKey)
+            }
+            if (generation != requestGeneration) return true
+            when (qrLoginResult.state) {
                 QrLoginState.WaitingForScan -> {
+                    withContext(Dispatchers.Main) { state = qrLoginResult.state }
                     logger.fInfo { "Waiting to scan" }
+                    false
                 }
 
                 QrLoginState.WaitingForConfirm -> {
+                    withContext(Dispatchers.Main) { state = qrLoginResult.state }
                     logger.fInfo { "Waiting to confirm" }
+                    false
                 }
 
                 QrLoginState.Expired -> {
+                    withContext(Dispatchers.Main) { state = qrLoginResult.state }
                     logger.fInfo { "QR expired" }
-                    timer.cancel()
+                    true
                 }
 
                 QrLoginState.Success -> {
                     logger.fInfo { "Login success" }
-                    Prefs.buvid3 = loginRepository.getbuvid3()
+                    runCatching {
+                        Prefs.buvid3 = loginRepository.getbuvid3()
+                    }.onFailure {
+                        logger.warn { "Get buvid3 failed: ${it.stackTraceToString()}" }
+                    }
 
                     val authData = AuthData(
                         uid = qrLoginResult.cookies!!.dedeUserId,
@@ -107,37 +152,39 @@ class AppQrLoginViewModel(
                         biliJct = qrLoginResult.cookies!!.biliJct,
                         sessData = qrLoginResult.cookies!!.sessData,
                         tokenExpiredData = qrLoginResult.cookies!!.expiredDate.time,
-                        accessToken = qrLoginResult.accessToken!!,
-                        refreshToken = qrLoginResult.refreshToken!!
+                        accessToken = qrLoginResult.accessToken.orEmpty(),
+                        refreshToken = qrLoginResult.refreshToken.orEmpty()
                     )
 
-                    timer.cancel()
-                    BlacklistUtil.checkUid(Prefs.uid)
-                    userRepository.addUser(authData)
+                    BlacklistUtil.checkUid(authData.uid)
+                    val identity = userRepository.validateAuthData(authData)
+                    userRepository.addUser(authData, identity)
+                    withContext(Dispatchers.Main) {
+                        if (generation == requestGeneration) {
+                            state = QrLoginState.Success
+                        }
+                    }
+                    true
                 }
 
                 else -> {
-                    logger.fInfo { "This state should not be here: $state" }
+                    withContext(Dispatchers.Main) { state = qrLoginResult.state }
+                    logger.fInfo { "This state should not be here: ${qrLoginResult.state}" }
+                    true
                 }
             }
-        }.onFailure {
-            if (it is CancellationException) {
-                logger.fInfo { "Timer job cancelled" }
-                return@onFailure
-            }
+        } catch (e: CancellationException) {
+            logger.fInfo { "QR polling job cancelled" }
+            throw e
+        } catch (e: Exception) {
             withContext(Dispatchers.Main) {
-                it.message?.toast(BVApp.context)
-                state = QrLoginState.Error
+                if (generation == requestGeneration) {
+                    e.message?.toast(BVApp.context)
+                    state = QrLoginState.Error
+                }
             }
-            logger.fError { "Check qr state failed: ${it.stackTraceToString()}" }
+            logger.fError { "Check qr state failed: ${e.stackTraceToString()}" }
+            true
         }
-    }
-
-    private fun generateQRImage() {
-        val output = ByteArrayOutputStream()
-        QRCode(loginUrl).render().writeImage(output)
-        val input = ByteArrayInputStream(output.toByteArray())
-        qrImage = BitmapFactory.decodeStream(input).asImageBitmap()
-        logger.fInfo { "Generated qr image" }
     }
 }

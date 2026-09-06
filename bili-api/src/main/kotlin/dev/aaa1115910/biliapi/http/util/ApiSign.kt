@@ -121,20 +121,33 @@ fun HttpClient.encApiSign() = plugin(HttpSend)
             }.toString()
         }
 
-        // 为 Web 请求自动添加 buvid3 cookie
+        // 为 Web 请求自动添加 buvid3 与 web 指纹 cookie（buvid4/b_nut/bili_ticket）
         val isAppRequest =
             request.url.parameters.contains("access_key") || request.url.host == "app.bilibili.com"
         val isSkipBuvid3Cookie = request.attributes.getOrNull(SkipAddBuvid3CookieKey) == true
         if (!isAppRequest && !isSkipBuvid3Cookie) {
-            val buvid3 = BiliHttpApi.buvid3Provider()
             val existingCookie = request.headers["Cookie"] ?: ""
+            val extraParts = mutableListOf<String>()
+            val buvid3 = BiliHttpApi.buvid3Provider()
             if (!buvid3.isNullOrBlank() && !existingCookie.contains("buvid3=")) {
-                val newCookie = if (existingCookie.isNotBlank()) {
-                    "buvid3=$buvid3; $existingCookie"
-                } else {
-                    "buvid3=$buvid3"
+                extraParts.add("buvid3=$buvid3")
+            }
+            WebCookieManager.cookieHeader()?.let { webCookie ->
+                webCookie.split(";").map { it.trim() }.filter { it.isNotBlank() }.forEach { part ->
+                    val name = part.substringBefore("=")
+                    if (!existingCookie.contains("$name=") &&
+                        extraParts.none { it.startsWith("$name=") }
+                    ) {
+                        extraParts.add(part)
+                    }
                 }
-                request.headers["Cookie"] = newCookie
+            }
+            if (extraParts.isNotEmpty()) {
+                request.headers["Cookie"] = if (existingCookie.isNotBlank()) {
+                    "${extraParts.joinToString("; ")}; $existingCookie"
+                } else {
+                    extraParts.joinToString("; ")
+                }
             }
         }
 

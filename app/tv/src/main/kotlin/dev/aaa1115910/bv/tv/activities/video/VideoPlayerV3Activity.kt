@@ -226,10 +226,11 @@ class VideoPlayerV3Activity : ComponentActivity() {
     private fun initVideoPlayer() {
         dev.aaa1115910.bv.tv.activities.video.VideoPlayerV3Activity.Companion.logger.info { "Init video player: ${Prefs.playerType.name}" }
         val options = VideoPlayerOptions(
-            userAgent = when (Prefs.apiType) {
-                ApiType.Web -> dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_WEB
-                ApiType.App -> dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_APP
-            },
+            userAgent = Prefs.customUserAgent.takeIf { it.isNotBlank() }
+                ?: when (Prefs.apiType) {
+                    ApiType.Web -> dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_WEB
+                    ApiType.App -> dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_APP
+                },
             referer = when (Prefs.apiType) {
                 ApiType.Web -> getString(R.string.video_player_referer)
                 ApiType.App -> null

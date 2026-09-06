@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class NavResponseData(
     val isLogin: Boolean,
+    val mid: Long = 0,
+    val uname: String = "",
+    val face: String = "",
     @SerialName("wbi_img")
     val wbiImg: WbiImg
 ) {

@@ -57,8 +57,10 @@ fun NetworkSetting(
     var proxyGRPCServer by remember { mutableStateOf(Prefs.proxyGRPCServer) }
     var preferOfficialCdn by remember { mutableStateOf(Prefs.preferOfficialCdn) }
     var ipv4Only by remember { mutableStateOf(Prefs.ipv4Only) }
+    var customUserAgent by remember { mutableStateOf(Prefs.customUserAgent) }
     var showProxyHttpServerEditDialog by remember { mutableStateOf(false) }
     var showProxyGRPCServerEditDialog by remember { mutableStateOf(false) }
+    var showUserAgentEditDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -153,6 +155,18 @@ fun NetworkSetting(
 
                 item {
                     SettingListItem(
+                        title = stringResource(R.string.settings_network_custom_user_agent_title),
+                        supportText = if (customUserAgent.isBlank()) {
+                            stringResource(R.string.settings_network_custom_user_agent_text)
+                        } else {
+                            customUserAgent
+                        },
+                        onClick = { showUserAgentEditDialog = true }
+                    )
+                }
+
+                item {
+                    SettingListItem(
                         title = stringResource(R.string.settings_network_test_title),
                         supportText = stringResource(R.string.settings_network_test_text),
                         onClick = {
@@ -192,6 +206,70 @@ fun NetworkSetting(
             }
         }
     )
+    UserAgentEditDialog(
+        show = showUserAgentEditDialog,
+        onHideDialog = { showUserAgentEditDialog = false },
+        userAgent = customUserAgent,
+        onUserAgentChange = {
+            customUserAgent = it
+            Prefs.customUserAgent = it
+        }
+    )
+}
+
+@Composable
+fun UserAgentEditDialog(
+    modifier: Modifier = Modifier,
+    show: Boolean,
+    onHideDialog: () -> Unit,
+    userAgent: String,
+    onUserAgentChange: (String) -> Unit
+) {
+    var userAgentString by remember(show) { mutableStateOf(userAgent) }
+
+    if (show) {
+        TvAlertDialog(
+            modifier = modifier,
+            title = { Text(text = stringResource(R.string.settings_network_custom_user_agent_title)) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = userAgentString,
+                        onValueChange = { userAgentString = it },
+                        singleLine = true,
+                        maxLines = 1,
+                        shape = MaterialTheme.shapes.medium,
+                        placeholder = { Text(text = stringResource(R.string.user_agent_edit_dialog_input_field_label)) }
+                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(imageVector = Icons.Outlined.Info, contentDescription = null)
+                        Text(
+                            text = stringResource(R.string.user_agent_edit_dialog_warning),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            onDismissRequest = onHideDialog,
+            confirmButton = {
+                Button(onClick = {
+                    onUserAgentChange(userAgentString.trim())
+                    onHideDialog()
+                }) {
+                    Text(text = stringResource(id = R.string.common_confirm))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = onHideDialog) {
+                    Text(text = stringResource(id = R.string.common_cancel))
+                }
+            }
+        )
+    }
 }
 
 @Composable

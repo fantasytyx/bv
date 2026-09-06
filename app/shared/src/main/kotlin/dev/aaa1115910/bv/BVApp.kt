@@ -13,9 +13,11 @@ import coil.Coil
 import de.schnettler.datastore.manager.DataStoreManager
 import dev.aaa1115910.biliapi.http.BiliHttpApi
 import dev.aaa1115910.biliapi.http.BiliHttpProxyApi
+import dev.aaa1115910.biliapi.http.entity.BiliAuthFailureHandler
 import dev.aaa1115910.biliapi.http.util.BiliAppConf
 import dev.aaa1115910.biliapi.http.util.BiliDns
 import dev.aaa1115910.biliapi.http.util.BiliWebConf
+import dev.aaa1115910.biliapi.http.util.WebCookieManager
 import dev.aaa1115910.biliapi.repositories.AuthRepository
 import dev.aaa1115910.biliapi.repositories.BiliApiModule
 import dev.aaa1115910.biliapi.repositories.ChannelRepository
@@ -24,6 +26,7 @@ import dev.aaa1115910.bv.entity.AuthData
 import dev.aaa1115910.bv.entity.db.UserDB
 import dev.aaa1115910.bv.network.GithubApi
 import dev.aaa1115910.bv.network.HttpServer
+import dev.aaa1115910.bv.repository.UserRepository
 import dev.aaa1115910.bv.util.BlacklistUtil
 import dev.aaa1115910.bv.util.CoilConfig
 import dev.aaa1115910.bv.util.LogCatcherUtil
@@ -31,6 +34,7 @@ import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -54,6 +58,9 @@ class BVApp : Application() {
 
         fun getAppDatabase(context: Context = this.context) = AppDatabase.getDatabase(context)
     }
+
+    private val authFailureScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val webCookieScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -79,6 +86,7 @@ class BVApp : Application() {
         updateMigration()
         HttpServer.startServer()
         updateBlacklist()
+        startWebCookieMaintenance()
         checkUpdateAtStartup()
     }
 
@@ -96,10 +104,53 @@ class BVApp : Application() {
         // 设置 sessData 提供者，用于更新 WBI keys 时携带登录凭证
         BiliHttpApi.sessDataProvider = { Prefs.sessData }
         BiliHttpApi.buvid3Provider = { Prefs.buvid3 }
+        BiliHttpApi.userAgentProvider = { Prefs.customUserAgent.takeIf { it.isNotBlank() } }
+        initWebCookieManager()
+        // 会话失效（-101）统一自动登出
+        BiliAuthFailureHandler.onAuthFailure = { message ->
+            if (Prefs.isLogin) {
+                authFailureScope.launch {
+                    val userRepository by koinApplication.koin.inject<UserRepository>()
+                    userRepository.logoutOnAuthFailure(message)
+                }
+            }
+        }
         BiliWebConf.webViewVersion = runCatching {
             WebViewCompat.getCurrentLoadedWebViewPackage()!!.versionName!!
                 .substringBefore(".").toInt()
         }.getOrDefault(144)
+    }
+
+    private fun initWebCookieManager() {
+        WebCookieManager.sessDataProvider = { Prefs.sessData }
+        WebCookieManager.biliJctProvider = { Prefs.biliJct }
+        WebCookieManager.refreshTokenProvider = { Prefs.refreshToken }
+        WebCookieManager.midProvider = { Prefs.uid }
+        WebCookieManager.cookieGetter = { name -> Prefs.getWebCookie(name) }
+        WebCookieManager.onCookiesUpdated = { updated ->
+            Prefs.setWebCookies(updated)
+            val authUpdated = updated.filterKeys {
+                it in setOf("SESSDATA", "bili_jct", "refresh_token", "DedeUserID__ckMd5", "sid")
+            }
+            if (authUpdated.isNotEmpty()) {
+                webCookieScope.launch {
+                    runCatching {
+                        val userRepository by koinApplication.koin.inject<UserRepository>()
+                        userRepository.applyWebCookieRefresh(authUpdated)
+                    }
+                }
+            }
+        }
+    }
+
+    /** 启动 Web Cookie 每日维护：指纹 cookie、bili_ticket、风控激活、cookie 续期 */
+    private fun startWebCookieMaintenance() {
+        webCookieScope.launch {
+            runCatching { WebCookieManager.ensureWebFingerprintCookies() }
+            runCatching { WebCookieManager.ensureBiliTicket() }
+            runCatching { WebCookieManager.ensureBuvidActiveOncePerDay() }
+            runCatching { WebCookieManager.refreshCookieIfNeededOncePerDay() }
+        }
     }
 
     private fun initDns() {
@@ -113,6 +164,8 @@ class BVApp : Application() {
         val authRepository by koinApplication.koin.inject<AuthRepository>()
         authRepository.sessionData = Prefs.sessData.takeIf { it.isNotEmpty() }
         authRepository.biliJct = Prefs.biliJct.takeIf { it.isNotEmpty() }
+        authRepository.dedeUserIDCkMd5 = Prefs.uidCkMd5.takeIf { it.isNotEmpty() }
+        authRepository.sid = Prefs.sid.takeIf { it.isNotEmpty() }
         authRepository.accessToken = Prefs.accessToken.takeIf { it.isNotEmpty() }
         authRepository.mid = Prefs.uid.takeIf { it != 0L }
         authRepository.buvid3 = Prefs.buvid3

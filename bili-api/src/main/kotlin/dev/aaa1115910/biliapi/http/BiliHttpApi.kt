@@ -89,6 +89,7 @@ import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -126,6 +127,8 @@ object BiliHttpApi {
     var sessDataProvider: () -> String = { "" }
     // 用于获取 buvid3 的提供者，由应用层设置
     var buvid3Provider: () -> String? = { null }
+    // 自定义 User-Agent 提供者（优先于插件默认 Web/App UA），由应用层设置
+    var userAgentProvider: () -> String? = { null }
 
     private val json = Json {
         coerceInputValues = true
@@ -180,6 +183,28 @@ object BiliHttpApi {
             }
         }.apply {
             encApiSign()
+        }
+    }
+
+    private fun HttpRequestBuilder.appendWebCookie(
+        sessData: String? = null,
+        dedeUserID: Long? = null,
+        buvid3: String? = null,
+        dedeUserIDCkMd5: String? = null,
+        biliJct: String? = null,
+        sid: String? = null,
+        gaiaVtoken: String? = null
+    ) {
+        val cookieParts = mutableListOf<String>()
+        sessData?.takeIf { it.isNotBlank() }?.let { cookieParts.add("SESSDATA=$it") }
+        dedeUserID?.let { cookieParts.add("DedeUserID=$it") }
+        dedeUserIDCkMd5?.takeIf { it.isNotBlank() }?.let { cookieParts.add("DedeUserID__ckMd5=$it") }
+        biliJct?.takeIf { it.isNotBlank() }?.let { cookieParts.add("bili_jct=$it") }
+        sid?.takeIf { it.isNotBlank() }?.let { cookieParts.add("sid=$it") }
+        buvid3?.takeIf { it.isNotBlank() }?.let { cookieParts.add("buvid3=$it") }
+        gaiaVtoken?.takeIf { it.isNotBlank() }?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
+        if (cookieParts.isNotEmpty()) {
+            header("Cookie", cookieParts.joinToString(";") + ";")
         }
     }
 
@@ -1817,15 +1842,24 @@ object BiliHttpApi {
      */
     suspend fun getWebInterfaceNav(
         buvid3: String? = null,
-        sessData: String = ""
-    ): BiliResponse<NavResponseData> =
-        client.get("/x/web-interface/nav") {
-            if (buvid3 != null && sessData.isNotEmpty()) {
-                header("Cookie", "buvid3=$buvid3; SESSDATA=$sessData;")
-            } else if (sessData.isNotEmpty()) {
-                header("Cookie", "SESSDATA=$sessData;")
-            }
-        }.body()
+        sessData: String = "",
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null,
+        biliJct: String? = null,
+        sid: String? = null
+    ): BiliResponse<NavResponseData> {
+        val response = client.get("/x/web-interface/nav") {
+            appendWebCookie(
+                sessData = sessData,
+                dedeUserID = dedeUserID,
+                buvid3 = buvid3,
+                dedeUserIDCkMd5 = dedeUserIDCkMd5,
+                biliJct = biliJct,
+                sid = sid
+            )
+        }.body<BiliResponse<NavResponseData>>()
+        return response
+    }
 
     /**
      * 风控验证注册

@@ -158,7 +158,7 @@ internal class BiliHttpApiTest {
         assertDoesNotThrow {
             runBlocking {
                 val response = BiliHttpApi.getUserCardInfo(
-                    uid = 163637592,
+                    mid = 163637592,
                     photo = true,
                     sessData = SESSDATA
                 )
