@@ -3,7 +3,6 @@
 plugins {
     alias(gradleLibs.plugins.android.library)
     alias(gradleLibs.plugins.compose.compiler)
-    alias(gradleLibs.plugins.kotlin.android)
 }
 
 android {

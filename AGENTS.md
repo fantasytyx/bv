@@ -22,9 +22,9 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
   - `player/shared/` - 共享播放器逻辑（含**自定义弹幕引擎** `danmaku/`）
 - `utils/` - 通用工具
 - `symbols/` - 共享 Compose/Symbol 资源
-- `libs/` - **预编译 AAR**（非 Maven 依赖）：`av1Decoder`、`ffmpegDecoder`、`libVLC`、`media3Container`（详见 [libs/README.md](libs/README.md)）
-  - 实际集成进 player/core 的只有 `ffmpegDecoder`；`av1Decoder`、`libVLC`、`media3Container` 在 `settings.gradle.kts` 登记但当前没有任何模块依赖，**不要**默认它们会被使用
-  - libVLC 仅有 TV 端的可选运行时下载器（`app/tv/.../LibVLCDownloaderDialog.kt`），并未集成到播放器内核
+- `libs/` - **预编译 AAR**（非 Maven 依赖）：`av1Decoder`、`ffmpegDecoder`（详见 [libs/README.md](libs/README.md)）
+  - 实际集成进 player/core 的只有 `ffmpegDecoder`；`av1Decoder` 虽在 `settings.gradle.kts` 登记但当前没有任何模块依赖，**不要**默认它会被使用
+  - libVLC 仅有 TV 端的可选运行时下载器（`app/tv/.../LibVLCDownloaderDialog.kt`），并未集成到播放器内核；Gradle 9 要求 include 的模块目录必须存在，因此 `:libs:libVLC` 已从 `settings.gradle.kts` 移除
 - `buildSrc/` - Gradle build logic（`AppConfiguration.kt`、`ProtobufConfiguration.kt`）
 
 ## 包命名空间约定
