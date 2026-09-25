@@ -41,6 +41,7 @@ import dev.aaa1115910.biliapi.http.entity.video.ClipType
 import dev.aaa1115910.biliapi.entity.video.Subtitle
 import dev.aaa1115910.bv.player.AbstractVideoPlayer
 import dev.aaa1115910.bv.player.BvVideoPlayer
+import dev.aaa1115910.bv.player.PlayerErrorText
 import dev.aaa1115910.bv.player.VideoPlayerListener
 import dev.aaa1115910.bv.player.entity.Audio
 import dev.aaa1115910.bv.player.entity.DanmakuType
@@ -387,7 +388,7 @@ fun BvPlayer(
             } else {
                 scope.launch(Dispatchers.Main) {
                     isError = true
-                    exception = error.cause as Exception?
+                    exception = PlayerErrorText.wrap(error)
                 }
             }
         }

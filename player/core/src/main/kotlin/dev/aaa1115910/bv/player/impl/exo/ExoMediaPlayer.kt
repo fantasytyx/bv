@@ -8,6 +8,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -20,6 +21,7 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import dev.aaa1115910.bv.player.AbstractVideoPlayer
 import dev.aaa1115910.bv.player.OkHttpUtil
 import dev.aaa1115910.bv.player.VideoPlayerOptions
+import dev.aaa1115910.bv.player.cdn.CdnFailoverDataSourceFactory
 import dev.aaa1115910.bv.util.formatHourMinSec
 
 /**
@@ -121,21 +123,23 @@ class ExoMediaPlayer(
     }
 
     @OptIn(UnstableApi::class)
-    override fun playUrl(videoUrl: String?, audioUrl: String?) {
-        val videoMediaSource = videoUrl?.let { createMediaSource(it) }
-        val audioMediaSource = audioUrl?.let { createMediaSource(it) }
-
-        val mediaSources = listOfNotNull(videoMediaSource, audioMediaSource)
+    override fun playUrl(videoUrls: List<String>, audioUrls: List<String>) {
+        val mediaSources = listOfNotNull(createMediaSource(videoUrls), createMediaSource(audioUrls))
+        if (mediaSources.isEmpty()) {
+            mMediaSource = null
+            return
+        }
         mMediaSource = MergingMediaSource(*mediaSources.toTypedArray())
     }
 
     /**
-     * 根据 URL 自动选择合适的 MediaSource
+     * 根据候选地址自动选择合适的 MediaSource，取第一个非空地址作为初始地址
      * - .m3u8 URL 使用 HlsMediaSource（支持 HLS 直播/点播）
      * - 其他 URL 使用 ProgressiveMediaSource（支持 FLV/MP4 等逐行下载）
      */
     @OptIn(UnstableApi::class)
-    private fun createMediaSource(url: String): MediaSource {
+    private fun createMediaSource(candidates: List<String>): MediaSource? {
+        val url = candidates.firstOrNull { it.isNotBlank() } ?: return null
         val uri = android.net.Uri.parse(url)
         val path = uri.path?.lowercase() ?: ""
         val isHls = path.endsWith(".m3u8")
@@ -152,18 +156,30 @@ class ExoMediaPlayer(
         } else {
             MediaItem.fromUri(uri)
         }
+        // 只有一个候选时无从切换，直接用原始 factory（比如直播就是固定只有一个地址）
+        val sourceFactory: DataSource.Factory =
+            if (candidates.size <= 1) {
+                dataSourceFactory
+            } else {
+                CdnFailoverDataSourceFactory(
+                    upstreamFactory = dataSourceFactory,
+                    candidates = candidates,
+                    recorder = options.cdnSpeedRecorder
+                )
+            }
         return if (isHls) {
-            HlsMediaSource.Factory(dataSourceFactory)
+            HlsMediaSource.Factory(sourceFactory)
                 .createMediaSource(mediaItem)
         } else {
-            ProgressiveMediaSource.Factory(dataSourceFactory)
+            ProgressiveMediaSource.Factory(sourceFactory)
                 .createMediaSource(mediaItem)
         }
     }
 
     @OptIn(UnstableApi::class)
     override fun prepare() {
-        mPlayer?.setMediaSource(mMediaSource!!)
+        val mediaSource = mMediaSource ?: return
+        mPlayer?.setMediaSource(mediaSource)
         mPlayer?.prepare()
         // 处理初始跳转位置，避免在 onReady 中 seek 导致的状态抖动
         if (pendingSeekPosition > 0) {

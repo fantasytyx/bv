@@ -23,6 +23,7 @@ import dev.aaa1115910.bv.player.danmaku.DanmakuView
 import dev.aaa1115910.biliapi.entity.danmaku.DanmakuMaskFrame
 import dev.aaa1115910.bv.player.AbstractVideoPlayer
 import dev.aaa1115910.bv.player.BvVideoPlayer
+import dev.aaa1115910.bv.player.PlayerErrorText
 import dev.aaa1115910.bv.player.VideoPlayerListener
 import dev.aaa1115910.bv.player.entity.Audio
 import dev.aaa1115910.bv.player.entity.DanmakuType
@@ -186,7 +187,7 @@ fun BvPlayer(
         override fun onError(error: Exception) {
             println("onError: $error")
             isError = true
-            exception = error.cause as Exception?
+            exception = PlayerErrorText.wrap(error)
         }
 
         override fun onReady() {

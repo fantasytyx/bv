@@ -16,6 +16,7 @@ import dev.aaa1115910.bv.player.VideoPlayerOptions
 import dev.aaa1115910.bv.player.impl.exo.ExoPlayerFactory
 import dev.aaa1115910.bv.tv.screens.VideoPlayerV3Screen
 import dev.aaa1115910.bv.ui.theme.BVTheme
+import dev.aaa1115910.bv.util.CdnSpeedStore
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.viewmodel.VideoPlayerV3ViewModel
@@ -237,7 +238,8 @@ class VideoPlayerV3Activity : ComponentActivity() {
             },
             enableFfmpegAudioRenderer = Prefs.enableFfmpegAudioRenderer,
             enableAsyncQueueing = Prefs.enableAsyncQueueing,
-            enableScreenRefreshRateMatching = Prefs.enableScreenRefreshRateMatching
+            enableScreenRefreshRateMatching = Prefs.enableScreenRefreshRateMatching,
+            cdnSpeedRecorder = CdnSpeedStore
         )
         val videoPlayer = when (Prefs.playerType) {
             PlayerType.Media3 -> ExoPlayerFactory().create(this, options)

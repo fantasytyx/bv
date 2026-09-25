@@ -83,7 +83,7 @@ fun BvVideoPlayerPreview(
 ) {
     LaunchedEffect(Unit) {
         player.setOptions()
-        player.playUrl(videoUrl, audioUrl)
+        player.playUrl(videoUrls = listOf(videoUrl), audioUrls = listOf(audioUrl))
         player.prepare()
     }
 

@@ -800,7 +800,7 @@ fun VideoPlayerV3Screen(
                         val time = playerViewModel.videoPlayer?.currentPosition ?: 0
                         logger.info { "Reload video and back to time: ${time.formatHourMinSec()}" }
                         scope.launch {
-                            playerViewModel.playQuality()
+                            playerViewModel.playQuality(advanceCdn = true)
                             playerViewModel.videoPlayer?.seekTo(time)
                             playerViewModel.danmakuView?.notifySeek(time)
                             playerViewModel.videoPlayer?.start()

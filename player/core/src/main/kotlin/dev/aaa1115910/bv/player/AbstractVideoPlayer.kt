@@ -39,8 +39,8 @@ abstract class AbstractVideoPlayer {
     /** 设置请求头 */
     abstract fun setHeader(headers: Map<String, String>)
 
-    /** 设置播放地址 */
-    abstract fun playUrl(videoUrl: String? = null, audioUrl: String? = null)
+    /** 设置播放地址；每个列表的第一个地址优先，失败时依次切换后面的候选 */
+    abstract fun playUrl(videoUrls: List<String> = emptyList(), audioUrls: List<String> = emptyList())
 
     /** 准备开始播放 */
     abstract fun prepare()

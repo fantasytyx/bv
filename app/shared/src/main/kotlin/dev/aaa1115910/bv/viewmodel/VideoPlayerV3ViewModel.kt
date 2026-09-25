@@ -55,6 +55,7 @@ import dev.aaa1115910.bv.player.entity.VideoListInteractiveNode
 import dev.aaa1115910.bv.player.entity.VideoListItemData
 import dev.aaa1115910.bv.player.entity.VideoRotation
 import dev.aaa1115910.bv.repository.VideoInfoRepository
+import dev.aaa1115910.bv.util.CdnSpeedStore
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.VVoucherAlreadyAttemptedException
 import dev.aaa1115910.bv.util.fError
@@ -1011,11 +1012,16 @@ class VideoPlayerV3ViewModel(
         return true
     }
 
+    /** 用户手动刷新 CDN 的累计次数；一次刷新只加一次，视频流与音频流共用这个步数。 */
+    private var cdnAdvanceSteps = 0
+
     suspend fun playQuality(
         qn: Resolution = currentQuality,
         codec: VideoCodec = currentVideoCodec,
-        audio: Audio = currentAudio
+        audio: Audio = currentAudio,
+        advanceCdn: Boolean = false
     ) {
+        if (advanceCdn) cdnAdvanceSteps++
         if (qn != currentQuality) {
             // 更新清晰度后需要先设置清晰度再更新编码列表
             withContext(Dispatchers.Main) { currentQuality = qn }
@@ -1073,14 +1079,18 @@ class VideoPlayerV3ViewModel(
         logger.fInfo { "all audio hosts: ${audioUrls.map { with(URI(it)) { "$scheme://$authority" } }}" }
 
         //replace cdn
+        val videoCandidates: List<String>
+        val audioCandidates: List<String>
         if (Prefs.enableProxy && proxyArea != ProxyArea.MainLand) {
-            videoUrl = videoUrl.replaceUrlDomainWithAliCdn()
-            audioUrl = audioUrl?.replaceUrlDomainWithAliCdn()
+            videoCandidates = videoUrls.filterNotNull().map { it.replaceUrlDomainWithAliCdn() }
+            audioCandidates = audioUrls.map { it.replaceUrlDomainWithAliCdn() }
         } else {
             // 如果未通过网络代理获得播放地址，才判断是否应该替换为官方 cdn
-            videoUrl = selectOfficialCdnUrl(videoUrls.filterNotNull())
-            audioUrl = audioUrls.takeIf { it.isNotEmpty() }?.let(::selectOfficialCdnUrl)
+            videoCandidates = CdnSpeedStore.order(videoUrls.filterNotNull(), currentCid, cdnAdvanceSteps)
+            audioCandidates = CdnSpeedStore.order(audioUrls, currentCid, cdnAdvanceSteps)
         }
+        videoUrl = videoCandidates.firstOrNull() ?: videoUrl
+        audioUrl = audioCandidates.firstOrNull()
 
         if (audioUrl == null) {
             logger.fWarn { "Failed to get audio URL, fallback to video-only playback" }
@@ -1107,7 +1117,7 @@ class VideoPlayerV3ViewModel(
             lastAudioHost = audioHost
             logger.info { "Video url: $videoUrl" }
             logger.info { "Audio url: $audioUrl" }
-            videoPlayer!!.playUrl(videoUrl, audioUrl)
+            videoPlayer!!.playUrl(videoCandidates, audioCandidates)
             val initialSeekPosition = resolveInitialPlaybackPositionMs()
             if (initialSeekPosition != null) {
                 logger.info { "Set initial seek position: ${initialSeekPosition}ms" }
@@ -1269,17 +1279,21 @@ class VideoPlayerV3ViewModel(
             audioItem?.baseUrl?.let(audioUrls::add)
             audioUrls.addAll(audioItem?.backUrl ?: emptyList())
 
+            val videoCandidates: List<String>
+            val audioCandidates: List<String>
             if (Prefs.enableProxy && proxyArea != ProxyArea.MainLand) {
-                videoUrl = videoUrl.replaceUrlDomainWithAliCdn()
-                audioUrl = audioUrl?.replaceUrlDomainWithAliCdn()
+                videoCandidates = videoUrls.filterNotNull().map { it.replaceUrlDomainWithAliCdn() }
+                audioCandidates = audioUrls.map { it.replaceUrlDomainWithAliCdn() }
             } else {
-                videoUrl = selectOfficialCdnUrl(videoUrls.filterNotNull())
-                audioUrl = audioUrls.takeIf { it.isNotEmpty() }?.let(::selectOfficialCdnUrl)
+                videoCandidates = CdnSpeedStore.order(videoUrls.filterNotNull(), currentCid, cdnAdvanceSteps)
+                audioCandidates = CdnSpeedStore.order(audioUrls, currentCid, cdnAdvanceSteps)
             }
+            videoUrl = videoCandidates.firstOrNull() ?: videoUrl
+            audioUrl = audioCandidates.firstOrNull()
 
             withContext(Dispatchers.Main) {
                 videoPlayer?.let { player ->
-                    player.playUrl(videoUrl, audioUrl)
+                    player.playUrl(videoCandidates, audioCandidates)
                     player.prepare()
                     player.seekTo(currentPos)
                     if (wasPlaying) player.start()
@@ -1509,48 +1523,6 @@ class VideoPlayerV3ViewModel(
             .authority("upos-sz-mirrorali.bilivideo.com")
             .build()
             .toString()
-    }
-
-    private fun selectOfficialCdnUrl(urls: List<String>): String {
-        if (urls.isEmpty()) {
-            logger.fInfo { "doesn't find any url, select a random url" }
-            return urls.randomOrNull() ?: ""
-        }
-
-        // 判定是否为“官方” CDN 的简单规则，和之前逻辑保持一致
-        val isOfficialCdn: (String) -> Boolean = {
-            !it.contains(".mcdn.bilivideo.") &&
-            !it.contains(".szbdyd.com") &&
-            !Regex("^(https?://)?(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(:\\d{1,5})?)(/[a-zA-Z0-9_./-]*)?(\\?.*)?$")
-                .matches(it)
-        }
-
-        if (!Prefs.preferOfficialCdn) {
-            // 当用户不偏好官方 CDN 时，使用加权随机：官方权重 0.8，非官方权重 1.2（基准为 1）
-            logger.fInfo { "doesn't need to filter official cdn url, select a weighted random url (favor non-official)" }
-
-            val weights = urls.map { url -> if (isOfficialCdn(url)) 1 else 1 }
-            val total = weights.sum()
-            // 如果权重计算异常，退回随机
-            if (total <= 0.0) return urls.randomOrNull() ?: ""
-
-            val r = kotlin.random.Random.Default.nextDouble() * total
-            var acc = 0.0
-            for (i in urls.indices) {
-                acc += weights[i]
-                if (r <= acc) return urls[i]
-            }
-            return urls.randomOrNull() ?: ""
-        }
-
-        val filteredUrls = urls.filter{isOfficialCdn(it)}
-        if (filteredUrls.isEmpty()) {
-            logger.fInfo { "doesn't find any official cdn url, select a random url" }
-            return urls.random()
-        } else {
-            logger.fInfo { "filtered official cdn urls: $filteredUrls" }
-            return filteredUrls.random()
-        }
     }
 
     private suspend fun updateDanmakuMask() {
@@ -1799,7 +1771,7 @@ class VideoPlayerV3ViewModel(
 
             runCatching {
                 withContext(Dispatchers.Main) {
-                    videoPlayer?.playUrl(videoUrl = playInfo.streamUrl)
+                    videoPlayer?.playUrl(videoUrls = listOf(playInfo.streamUrl))
                     videoPlayer?.prepare()
                     videoPlayer?.start()
                     loadState = RequestState.Success
@@ -1901,7 +1873,7 @@ class VideoPlayerV3ViewModel(
                 availableLiveLines.clear()
                 availableLiveLines.addAll(playInfo.availableLines)
                 liveTime = playInfo.liveTime
-                videoPlayer?.playUrl(videoUrl = playInfo.streamUrl)
+                videoPlayer?.playUrl(videoUrls = listOf(playInfo.streamUrl))
                 videoPlayer?.prepare()
                 videoPlayer?.start()
                 loadState = RequestState.Success
@@ -1992,7 +1964,7 @@ class VideoPlayerV3ViewModel(
 
             // 无缝切换：更新播放器URL
             withContext(Dispatchers.Main) {
-                videoPlayer?.playUrl(videoUrl = playInfo.streamUrl)
+                videoPlayer?.playUrl(videoUrls = listOf(playInfo.streamUrl))
             }
 
             logger.fInfo { "Live URL refreshed successfully, new expiresAt=$liveStreamExpiresAt" }
@@ -2023,7 +1995,7 @@ class VideoPlayerV3ViewModel(
 
             runCatching {
                 withContext(Dispatchers.Main) {
-                    videoPlayer?.playUrl(videoUrl = streamUrl)
+                    videoPlayer?.playUrl(videoUrls = listOf(streamUrl))
                     videoPlayer?.prepare()
                     videoPlayer?.start()
                     loadState = RequestState.Success

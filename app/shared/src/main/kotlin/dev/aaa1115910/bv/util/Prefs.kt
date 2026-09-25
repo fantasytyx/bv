@@ -629,6 +629,7 @@ object PrefKeys {
     val prefBuvidKey = stringPreferencesKey("random_buvid")
     val prefBuvid3Key = stringPreferencesKey("random_buvid3")
     val prefWebExtraCookiesKey = stringPreferencesKey("web_extra_cookies")
+    val prefCdnSpeedScoresKey = stringPreferencesKey("cdn_speed_scores")
     val prefPlayerTypeKey = intPreferencesKey("pt")
     val prefDensityKey = floatPreferencesKey("density")
     val prefAlphaKey = booleanPreferencesKey("alpha")
@@ -724,6 +725,7 @@ object PrefKeys {
     val prefBuvidRequest = PreferenceRequest(prefBuvidKey, "")
     val prefBuvid3Request = PreferenceRequest(prefBuvid3Key, "")
     val prefWebExtraCookiesRequest = PreferenceRequest(prefWebExtraCookiesKey, "")
+    val prefCdnSpeedScoresRequest = PreferenceRequest(prefCdnSpeedScoresKey, "")
     val prefPlayerTypeRequest = PreferenceRequest(prefPlayerTypeKey, PlayerType.Media3.ordinal)
     val prefDensityRequest =
         PreferenceRequest(

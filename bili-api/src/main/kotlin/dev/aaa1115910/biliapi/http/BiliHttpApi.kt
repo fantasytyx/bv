@@ -325,7 +325,9 @@ object BiliHttpApi {
         gaiaVtoken: String? = null,
         tryLook: Boolean = false
     ): BiliResponse<PlayUrlData> {
-        val response = client.get("/x/player/wbi/playurl") {
+        // 游客态必须走非 wbi 端点：try_look=1 只在非 wbi 端点生效，wbi 端点会忽略它并把 dash 压到 480P
+        val isGuest = tryLook || sessData.isNullOrEmpty()
+        val response = client.get(if (isGuest) "/x/player/playurl" else "/x/player/wbi/playurl") {
             require(av != null || bv != null) { "av and bv cannot be null at the same time" }
             parameter("avid", av)
             parameter("bvid", bv)

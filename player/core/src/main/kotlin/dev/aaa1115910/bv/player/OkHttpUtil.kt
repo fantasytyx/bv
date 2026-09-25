@@ -13,6 +13,7 @@ import javax.net.ssl.X509TrustManager
 object OkHttpUtil {
     fun generateCustomSslOkHttpClient(context: Context): OkHttpClient {
         val certificateFactory = CertificateFactory.getInstance("X.509")
+        // 只能补 SHA-2 的根：SHA-1 的根（如 GlobalSign R1）会被 Conscrypt 的 ChainStrengthAnalyzer 拒绝
         val customCaMap = mapOf(
             "custom:r5" to "GlobalSign ECC Root CA R5.crt"
         )
