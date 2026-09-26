@@ -19,7 +19,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -47,6 +47,7 @@ import dev.aaa1115910.bv.tv.util.isLiveRecommendItem
 import dev.aaa1115910.bv.tv.util.liveNavItemsOrderFlow
 import dev.aaa1115910.bv.tv.util.parseLiveNavItemsOrder
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.util.toast
 import dev.aaa1115910.bv.viewmodel.live.LiveMode
@@ -57,7 +58,6 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 
 // 子分区 TopNavItem
 private data class SubAreaNavItem(val area: LiveAreaItem) : TopNavItem {
@@ -73,14 +73,13 @@ fun LiveContent(
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger("LiveContent")
     val context = LocalContext.current
-    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsState(Prefs.navSwitchMode)
+    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
     val videoInfoRepository: VideoInfoRepository = koinInject()
 
     val gridState = rememberLazyGridState()
     // 使用 MainScreen 传入的 FocusRequester 作为默认入口焦点（从侧边栏按右进入内容区）
     val parentNavFocusRequester = navFocusRequester
     val subNavFocusRequester = remember { FocusRequester() }
-    val roomListFocusRestorer = rememberTvLazyListFocusRestorer()
     var focusOnContent by remember { mutableStateOf(false) }
     var parentNavHasFocus by remember { mutableStateOf(false) }
     var subNavHasFocus by remember { mutableStateOf(false) }
@@ -131,9 +130,9 @@ fun LiveContent(
         topBar = {
             androidx.compose.foundation.layout.Column {
                 // 第一行：推荐 + 关注 + 主分区（根据设置过滤和排序）
-                val liveNavOrderString by liveNavItemsOrderFlow.collectAsState(
-                    initial = Prefs.liveNavItemsOrder
-                )
+                val liveNavOrderString by liveNavItemsOrderFlow.collectAsStateLazily {
+                    Prefs.liveNavItemsOrder
+                }
 
                 val parentNavItems = remember(
                     liveNavOrderString,
@@ -281,15 +280,14 @@ fun LiveContent(
             } else {
                 ProvideListBringIntoViewSpec(topPadding = 12.dp, bottomPadding = 28.dp) {
                     LazyVerticalGrid(
-                        modifier = roomListFocusRestorer.containerModifier(
-                            Modifier
-                                .fillMaxSize()
-                                .blockDownFocusExitAtGridEnd(
-                                    currentIndex = focusedIndex,
-                                    itemCount = totalItems,
-                                    columnCount = 4
-                                )
-                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .focusRestorer()
+                            .blockDownFocusExitAtGridEnd(
+                                currentIndexProvider = { focusedIndex },
+                                itemCount = totalItems,
+                                columnCount = 4
+                            ),
                         state = gridState,
                         columns = GridCells.Fixed(4),
                         contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp),
@@ -300,10 +298,7 @@ fun LiveContent(
                             items = liveViewModel.roomList,
                             key = { index, room -> "$index-room-${room.roomId}" }
                         ) { index, room ->
-                            val entryCardModifier = roomListFocusRestorer.firstItemModifier(index)
-
                             LiveRoomCard(
-                                modifier = entryCardModifier,
                                 data = room,
                                 onClick = {
                                     // 保存焦点位置

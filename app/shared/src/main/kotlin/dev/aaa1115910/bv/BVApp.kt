@@ -75,16 +75,19 @@ class BVApp : Application() {
         context = this.applicationContext
         HandroidLoggerAdapter.DEBUG = BuildConfig.DEBUG
         dataStoreManager = DataStoreManager(applicationContext.dataStore)
-        if (Prefs.blacklistUser) {
-            R.string.blacklist_user_toast.toast(context)
-            return
-        }
+        // 先在后台把 DataStore 读进内存，下面第一次读偏好时就不会在主线程做磁盘 I/O
+        Prefs.warmUp()
         koinApplication = startKoin {
             androidLogger(if (BuildConfig.DEBUG) Level.ERROR else Level.NONE)
             androidContext(this@BVApp)
             modules(AppModule().module)
         }
         initCoil()
+        // Koin/Coil 初始化期间 DataStore 已加载完，这里的读取是内存命中
+        if (Prefs.blacklistUser) {
+            R.string.blacklist_user_toast.toast(context)
+            return
+        }
         initApiConfig()
         initDns()
         initRepository()

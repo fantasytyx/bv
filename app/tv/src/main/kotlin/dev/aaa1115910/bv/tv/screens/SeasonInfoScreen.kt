@@ -1010,8 +1010,7 @@ fun SeasonEpisodeRow(
 
         LazyRow(
             modifier = Modifier
-                .padding(top = 15.dp)
-                .focusRestorer(focusRequester),
+                .padding(top = 15.dp),
             state = rowState,
             contentPadding = PaddingValues(horizontal = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp),

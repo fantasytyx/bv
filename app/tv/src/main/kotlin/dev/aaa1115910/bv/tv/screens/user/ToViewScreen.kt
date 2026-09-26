@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -50,7 +51,6 @@ import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.repository.VideoInfoRepository
@@ -70,7 +70,6 @@ fun ToViewScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val videoInfoRepository: VideoInfoRepository = koinInject()
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     val lazyGridState = rememberLazyGridState()
     var currentIndex by remember { mutableIntStateOf(0) }
     val showLargeTitle by remember { derivedStateOf { currentIndex < 4 } }
@@ -167,9 +166,10 @@ fun ToViewScreen(
             )
             ProvideListBringIntoViewSpec(padding = 24.dp) {
                 LazyVerticalGrid(
-                    modifier = listFocusRestorer.containerModifier(
-                        Modifier.blockDownFocusExitAtGridEnd(
-                            currentIndex = currentIndex,
+                    modifier = Modifier
+                        .focusRestorer()
+                        .blockDownFocusExitAtGridEnd(
+                            currentIndexProvider = { currentIndex },
                             itemCount = toViewViewModel.histories.size,
                             columnCount = 4
                         )
@@ -188,8 +188,7 @@ fun ToViewScreen(
                                 return@onPreviewKeyEvent true
                             }
                             false
-                        }
-                ),
+                        },
                 columns = GridCells.Fixed(4),
                 state = lazyGridState,
                 contentPadding = PaddingValues(
@@ -209,8 +208,7 @@ fun ToViewScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         SmallVideoCard(
-                            modifier = listFocusRestorer.firstItemModifier(index)
-                                .focusRequester(getFocusRequester(index)),
+                            modifier = Modifier.focusRequester(getFocusRequester(index)),
                             data = item,
                             onClick = {
                                 if (deleteMode) {

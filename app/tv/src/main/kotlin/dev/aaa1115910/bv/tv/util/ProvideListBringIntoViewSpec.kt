@@ -1,5 +1,7 @@
 package dev.aaa1115910.bv.tv.util
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -40,6 +42,12 @@ fun ProvideListBringIntoViewSpec(
     val bottomPaddingPx = remember(bottomPadding, density) { with(density) { bottomPadding.toPx() } }
     val bringIntoViewSpec = remember(topPaddingPx, bottomPaddingPx) {
         object : BringIntoViewSpec {
+            // 焦点滚动必须瞬时完成：spring 动画期间列表还没把下一行组合出来，此时快速连按
+            // DOWN 会让焦点搜索走 beyond-bounds 兜底、落到下一行第一列（跳列 bug）。
+            // 瞬时滚动保证焦点移动后下一帧列表就已就位。
+            @Suppress("OVERRIDE_DEPRECATION")
+            override val scrollAnimationSpec: AnimationSpec<Float> = snap()
+
             override fun calculateScrollDistance(
                 offset: Float,
                 size: Float,

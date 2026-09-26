@@ -1890,8 +1890,7 @@ fun VideoPartRow(
 
         LazyRow(
             modifier = Modifier
-                .padding(top = 4.dp)
-                .focusRestorer(focusRequester),
+                .padding(top = 4.dp),
             state = listState,
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -1991,8 +1990,7 @@ fun VideoUgcSeasonRow(
 
         LazyRow(
             modifier = Modifier
-                .padding(top = 4.dp)
-                .focusRestorer(focusRequester),
+                .padding(top = 4.dp),
             state = listState,
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)

@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -73,7 +74,6 @@ import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.manager.FollowStateManager
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.Prefs
@@ -130,7 +130,6 @@ fun UpSpaceScreen(
     }
 
     val listFocusRequester = remember { FocusRequester() }
-    val listFocusRestorer = rememberTvLazyListFocusRestorer(listFocusRequester)
     LaunchedEffect(userSpaceViewModel.tvSpaceVideos.isNotEmpty()) {
         listFocusRequester.requestFocus()
     }
@@ -431,15 +430,14 @@ fun UpSpaceScreen(
     ) { innerPadding ->
         ProvideListBringIntoViewSpec(padding = 26.dp) {
             LazyVerticalGrid(
-                modifier = listFocusRestorer.containerModifier(
-                    Modifier
-                        .padding(innerPadding)
-                        .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentIndex,
-                            itemCount = userSpaceViewModel.tvSpaceVideos.size,
-                            columnCount = 4
-                        )
-                ),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .focusRestorer()
+                    .blockDownFocusExitAtGridEnd(
+                        currentIndexProvider = { currentIndex },
+                        itemCount = userSpaceViewModel.tvSpaceVideos.size,
+                        columnCount = 4
+                    ),
                 columns = GridCells.Fixed(4),
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -450,7 +448,7 @@ fun UpSpaceScreen(
                     key = { index, video -> "$index-${video.stableItemKey()}" }
                 ) { index, video ->
                     SmallVideoCard(
-                        modifier = listFocusRestorer.firstItemModifier(index),
+                        modifier = if (index == 0) Modifier.focusRequester(listFocusRequester) else Modifier,
                         data = video,
                         onClick = {
                             if (!isLongPress) {

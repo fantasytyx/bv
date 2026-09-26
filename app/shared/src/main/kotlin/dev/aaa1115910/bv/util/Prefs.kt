@@ -32,9 +32,13 @@ import dev.aaa1115910.bv.player.entity.DefaultSubtitle
 import dev.aaa1115910.bv.player.entity.PlayerLoadNextAction
 import dev.aaa1115910.bv.player.entity.PlayerDefaultStartPosition
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.Date
 import java.util.UUID
@@ -43,6 +47,23 @@ import kotlin.math.roundToInt
 object Prefs {
     private val dsm = BVApp.dataStoreManager
     val logger = KotlinLogging.logger { }
+
+    private val warmUpScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var warmedUp = false
+
+    /**
+     * 后台预读一次 DataStore，让主线程后续的 getter 命中内存缓存。
+     * DataStore 首次读取要做磁盘 I/O + 解析，落在主线程会直接拖慢冷启动。
+     */
+    fun warmUp() {
+        if (warmedUp) return
+        warmedUp = true
+        warmUpScope.launch {
+            runCatching { dsm.getPreferenceFlow(PrefKeys.prefBlacklistUserRequest).first() }
+        }
+    }
 
     var isLogin: Boolean
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefIsLoginRequest).first() }
@@ -763,7 +784,7 @@ object PrefKeys {
     val prefPlayerSeekForwardStepRequest = PreferenceRequest(prefPlayerSeekForwardStepKey, 10)
     val prefPlayerSeekBackwardStepRequest = PreferenceRequest(prefPlayerSeekBackwardStepKey, 5)
     val prefPlayerNextTipDurationRequest = PreferenceRequest(prefPlayerNextTipDurationKey, 3f)
-    val prefPlayerShowBottomProgressBarRequest = PreferenceRequest(prefPlayerShowBottomProgressBarKey, false)
+    val prefPlayerShowBottomProgressBarRequest = PreferenceRequest(prefPlayerShowBottomProgressBarKey, true)
     val prefShowUGCVideoInfoRequest = PreferenceRequest(prefShowUGCVideoInfoKey, true)
     val prefIsLoopRequest = PreferenceRequest(prefIsLoopKey, false)
     val prefShowDanmakuRequest = PreferenceRequest(prefShowDanmakuKey, true)

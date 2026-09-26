@@ -37,6 +37,7 @@ import dev.aaa1115910.bv.tv.screens.main.pgc.VarietyContent
 import dev.aaa1115910.bv.tv.util.parsePgcTopNavItemsOrder
 import dev.aaa1115910.bv.tv.util.pgcNavItemsFlow
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.util.rememberDebouncer
@@ -64,7 +65,7 @@ fun PgcContent(
 ) {
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger("PgcContent")
-    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsState(Prefs.navSwitchMode)
+    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
 
     val animeState = rememberLazyListState()
     val guoChuangState = rememberLazyListState()

@@ -696,7 +696,7 @@ internal class DanmakuEngine(
     private companion object {
         private const val TAG = "DanmakuEngine"
         // 滚动弹幕的基础穿屏时长（durationMultiplier = 1.0 时）。
-        const val DEFAULT_ROLLING_DURATION_MS = 8_000f
+        const val DEFAULT_ROLLING_DURATION_MS = 8_800f
         // 弹幕显示时长下限，避免过快难以阅读。
         const val MIN_ROLLING_DURATION_MS = 2_500
         // 弹幕显示时长上限，避免长时间占轨。

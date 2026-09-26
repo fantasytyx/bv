@@ -26,10 +26,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.component.UgcTopNavItem
-import dev.aaa1115910.bv.tv.screens.main.ugc.CreateUgcContent
+import dev.aaa1115910.bv.tv.screens.main.ugc.UgcRegionScaffold
 import dev.aaa1115910.bv.tv.util.parseUgcTopNavItemsOrder
 import dev.aaa1115910.bv.tv.util.ugcNavItemsFlow
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.viewmodel.ugc.UgcAiViewModel
@@ -104,7 +105,7 @@ fun UgcContent(
 ) {
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger("UgcContent")
-    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsState(Prefs.navSwitchMode)
+    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
 
     // 为当前选中的tab创建LazyGridState
     val currentLazyGridState = rememberLazyGridState()
@@ -256,8 +257,7 @@ fun UgcContent(
                     }
                 }
             ) { screen ->
-                CreateUgcContent(
-                    navItem = screen,
+                UgcRegionScaffold(
                     lazyGridState = currentLazyGridState,
                     ugcViewModel = viewModelMap[screen]!!
                 )

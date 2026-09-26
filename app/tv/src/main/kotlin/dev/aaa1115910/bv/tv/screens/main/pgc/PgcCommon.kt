@@ -31,8 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -64,7 +63,6 @@ import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.ImageSize
 import dev.aaa1115910.bv.util.resizedImageUrl
@@ -81,8 +79,6 @@ fun PgcScaffold(
     featureButtons: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val carouselFocusRequester = remember { FocusRequester() }
-    val carouselFocusRestorer = rememberTvLazyListFocusRestorer(carouselFocusRequester)
     val currentFeedIndex = remember { mutableIntStateOf(0) }
 
     val carouselItems = pgcViewModel.carouselItems
@@ -90,15 +86,14 @@ fun PgcScaffold(
 
     ProvideListBringIntoViewSpec {
         LazyColumn(
-            modifier = carouselFocusRestorer.containerModifier(
-                modifier
-                    .fillMaxSize()
-                    .blockDownFocusExitAtGridEnd(
-                        currentIndex = currentFeedIndex.intValue,
-                        itemCount = pgcFeeds.size,
-                        columnCount = 1
-                    )
-            ),
+            modifier = modifier
+                .fillMaxSize()
+                .focusRestorer()
+                .blockDownFocusExitAtGridEnd(
+                    currentIndexProvider = { currentFeedIndex.intValue },
+                    itemCount = pgcFeeds.size,
+                    columnCount = 1
+                ),
             state = lazyListState
         ) {
             item {
@@ -111,8 +106,7 @@ fun PgcScaffold(
                     PgcCarousel(
                         modifier = Modifier
                             .width(880.dp)
-                            .padding(32.dp, 0.dp)
-                            .focusRequester(carouselFocusRequester),
+                            .padding(32.dp, 0.dp),
                         data = carouselItems,
                         onClick = { item ->
                             SeasonInfoActivity.actionStart(
@@ -182,9 +176,8 @@ fun PgcFeedVideoRow(
     data: List<PgcItem>
 ) {
     val context = LocalContext.current
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     LazyRow(
-        modifier = listFocusRestorer.containerModifier(modifier),
+        modifier = modifier,
         contentPadding = PaddingValues(horizontal = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(32.dp)
     ) {
@@ -204,7 +197,7 @@ fun PgcFeedVideoRow(
             }
 
             SeasonCard(
-                modifier = listFocusRestorer.firstItemModifier(index, cardModifier),
+                modifier = cardModifier,
                 coverHeight = 180.dp,
                 data = SeasonCardData(
                     seasonId = feedItem.seasonId,
@@ -231,7 +224,6 @@ fun PgcFeedRankRow(
     data: PgcFeedData.FeedRank
 ) {
     val context = LocalContext.current
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     Box(
         modifier = modifier
             .height(300.dp)
@@ -302,7 +294,7 @@ fun PgcFeedRankRow(
             }
 
             LazyRow(
-                modifier = listFocusRestorer.containerModifier(modifier),
+                modifier = modifier,
                 contentPadding = PaddingValues(horizontal = 32.dp),
                 horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
@@ -322,7 +314,7 @@ fun PgcFeedRankRow(
                     }
 
                     SeasonCard(
-                        modifier = listFocusRestorer.firstItemModifier(index, cardModifier),
+                        modifier = cardModifier,
                         coverHeight = 180.dp,
                         data = SeasonCardData(
                             seasonId = feedItem.seasonId,

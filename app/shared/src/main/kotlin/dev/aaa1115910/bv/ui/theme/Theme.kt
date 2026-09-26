@@ -28,6 +28,7 @@ import androidx.tv.material3.lightColorScheme
 import dev.aaa1115910.bv.component.FpsMonitor
 import dev.aaa1115910.bv.entity.ThemeType
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 
 @Composable
 fun BVTheme(
@@ -40,7 +41,7 @@ fun BVTheme(
     val view = LocalView.current
 
     val themeType = if (view.isInEditMode) ThemeType.Auto
-    else Prefs.themeTypeFlow.collectAsState(Prefs.themeType).value
+    else Prefs.themeTypeFlow.collectAsStateLazily { Prefs.themeType }.value
 
     val tvLightColorScheme = lightColorScheme()
     val tvDarkColorScheme = darkColorScheme(

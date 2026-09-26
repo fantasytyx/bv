@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -64,9 +64,9 @@ import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.component.TopNavItem
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.onDelayFocusChanged
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.util.toast
@@ -86,7 +86,7 @@ fun FavoriteScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val videoInfoRepository: VideoInfoRepository = getKoin().get()
-    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsState(Prefs.navSwitchMode)
+    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
     var currentIndex by remember { mutableIntStateOf(0) }
     val showLargeTitle by remember { derivedStateOf { currentIndex < 4 } }
     val titleFontSize by animateFloatAsState(
@@ -95,8 +95,6 @@ fun FavoriteScreen(
     )
     val focusRequester = remember { FocusRequester() }
     val defaultFocusRequester = remember { FocusRequester() }
-    val gridDefaultFocusRequester = remember { FocusRequester() }
-    val gridFocusRestorer = rememberTvLazyListFocusRestorer(gridDefaultFocusRequester)
     var focusOnTabs by remember { mutableStateOf(true) }
     var focusOnGrid by remember { mutableStateOf(false) }
     val lazyGridState = rememberLazyGridState()
@@ -248,31 +246,30 @@ fun FavoriteScreen(
 
             ProvideListBringIntoViewSpec(padding = 24.dp) {
                 LazyVerticalGrid(
-                    modifier = gridFocusRestorer.containerModifier(
-                        Modifier
-                            .weight(1f)
-                            .blockDownFocusExitAtGridEnd(
-                                currentIndex = currentIndex,
-                                itemCount = favoriteViewModel.favorites.size,
-                                columnCount = 4
-                            )
-                            .onPreviewKeyEvent { keyEvent ->
-                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                                    (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU ||
-                                     keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DEL)
-                                ) {
-                                    deleteMode = !deleteMode
-                                    return@onPreviewKeyEvent true
-                                }
-                                if (deleteMode && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
-                                    if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                        deleteMode = false
-                                    }
-                                    return@onPreviewKeyEvent true
-                                }
-                                false
+                    modifier = Modifier
+                        .focusRestorer()
+                        .weight(1f)
+                        .blockDownFocusExitAtGridEnd(
+                            currentIndexProvider = { currentIndex },
+                            itemCount = favoriteViewModel.favorites.size,
+                            columnCount = 4
+                        )
+                        .onPreviewKeyEvent { keyEvent ->
+                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
+                                (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU ||
+                                 keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DEL)
+                            ) {
+                                deleteMode = !deleteMode
+                                return@onPreviewKeyEvent true
                             }
-                    ),
+                            if (deleteMode && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
+                                    deleteMode = false
+                                }
+                                return@onPreviewKeyEvent true
+                            }
+                            false
+                        },
                     state = lazyGridState,
                     columns = GridCells.Fixed(4),
                     contentPadding = PaddingValues(
@@ -289,8 +286,7 @@ fun FavoriteScreen(
                         key = { _, history -> history.stableItemKey() }
                     ) { index, history ->
                         SmallVideoCard(
-                            modifier = gridFocusRestorer.firstItemModifier(index)
-                                .focusRequester(getFocusRequester(index)),
+                            modifier = Modifier.focusRequester(getFocusRequester(index)),
                             data = history,
                             onClick = {
                                 if (deleteMode) {

@@ -1,41 +1,9 @@
 package dev.aaa1115910.bv.tv.util
 
 import android.view.KeyEvent
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
-
-@Stable
-class TvLazyListFocusRestorer internal constructor(
-    val fallbackFocusRequester: FocusRequester
-) {
-    fun containerModifier(modifier: Modifier = Modifier): Modifier {
-        return modifier.focusRestorer(fallbackFocusRequester)
-    }
-
-    fun firstItemModifier(index: Int, modifier: Modifier = Modifier): Modifier {
-        return if (index == 0) {
-            modifier.focusRequester(fallbackFocusRequester)
-        } else {
-            modifier
-        }
-    }
-}
-
-@Composable
-fun rememberTvLazyListFocusRestorer(
-    fallbackFocusRequester: FocusRequester = remember { FocusRequester() }
-): TvLazyListFocusRestorer {
-    return remember(fallbackFocusRequester) {
-        TvLazyListFocusRestorer(fallbackFocusRequester)
-    }
-}
 
 fun VideoCardData.stableItemKey(): Any {
     return when {
@@ -45,8 +13,9 @@ fun VideoCardData.stableItemKey(): Any {
     }
 }
 
+/** 数据还在加载、末尾行下面暂无内容时消费 DOWN，避免焦点被甩到别的列或左侧导航栏 */
 fun Modifier.blockDownFocusExitAtGridEnd(
-    currentIndex: Int,
+    currentIndexProvider: () -> Int,
     itemCount: Int,
     columnCount: Int
 ): Modifier {
@@ -57,6 +26,7 @@ fun Modifier.blockDownFocusExitAtGridEnd(
             return@onPreviewKeyEvent false
         }
 
+        val currentIndex = currentIndexProvider()
         val hasNextRow = itemCount > 0 && currentIndex >= 0 && currentIndex + columnCount < itemCount
         !hasNextRow
     }

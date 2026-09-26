@@ -89,7 +89,7 @@ fun SearchResultVideoFilter(
                         modifier = Modifier.onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown) {
                                 if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                    durationFocusRequester.requestFocus()
+                                    runCatching { durationFocusRequester.requestFocus() }
                                     return@onPreviewKeyEvent true
                                 }
                                 return@onPreviewKeyEvent true
@@ -103,7 +103,7 @@ fun SearchResultVideoFilter(
                             key = { index, orderType -> "$index-order-${orderType.name}" }
                         ) { _, orderType ->
                             FilterDialogFilterChip(
-                                focusRequester = defaultFocusRequester,
+                                focusRequester = if (orderType == selectedOrder) defaultFocusRequester else null,
                                 selected = orderType == selectedOrder,
                                 onClick = { onSelectedOrderChange(orderType) },
                                 label = { Text(text = orderType.getDisplayName(context)) },
@@ -115,14 +115,14 @@ fun SearchResultVideoFilter(
                         modifier = Modifier.onPreviewKeyEvent {
                             if (it.key == Key.DirectionDown) {
                                 if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                    partitionFocusRequester.requestFocus()
+                                    runCatching { partitionFocusRequester.requestFocus() }
                                     return@onPreviewKeyEvent true
                                 }
                                 return@onPreviewKeyEvent true
                             }
                             if (it.key == Key.DirectionUp) {
                                 if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                    defaultFocusRequester.requestFocus()
+                                    runCatching { defaultFocusRequester.requestFocus() }
                                     return@onPreviewKeyEvent true
                                 }
                                 return@onPreviewKeyEvent true
@@ -136,7 +136,7 @@ fun SearchResultVideoFilter(
                             key = { index, duration -> "$index-duration-${duration.name}" }
                         ) { _, duration ->
                             FilterDialogFilterChip(
-                                focusRequester = durationFocusRequester,
+                                focusRequester = if (duration == selectedDuration) durationFocusRequester else null,
                                 selected = duration == selectedDuration,
                                 onClick = { onSelectedDurationChange(duration) },
                                 label = { Text(text = duration.getDisplayName(context)) },
@@ -149,14 +149,14 @@ fun SearchResultVideoFilter(
                             if (it.key == Key.DirectionDown) {
                                 if (selectedChildPartition == null) return@onPreviewKeyEvent false
                                 if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                    partitionChildFocusRequester.requestFocus()
+                                    runCatching { partitionChildFocusRequester.requestFocus() }
                                     return@onPreviewKeyEvent true
                                 }
                                 return@onPreviewKeyEvent true
                             }
                             if (it.key == Key.DirectionUp) {
                                 if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                    durationFocusRequester.requestFocus()
+                                    runCatching { durationFocusRequester.requestFocus() }
                                     return@onPreviewKeyEvent true
                                 }
                                 return@onPreviewKeyEvent true
@@ -167,7 +167,7 @@ fun SearchResultVideoFilter(
                     ) {
                         item {
                             FilterDialogFilterChip(
-                                focusRequester = partitionFocusRequester,
+                                focusRequester = if (null == selectedPartition) partitionFocusRequester else null,
                                 selected = null == selectedPartition,
                                 onClick = {
                                     onSelectedPartitionChange(null)
@@ -182,7 +182,7 @@ fun SearchResultVideoFilter(
                             key = { index, partition -> "$index-partition-${partition.tid}" }
                         ) { _, partition ->
                             FilterDialogFilterChip(
-                                focusRequester = partitionFocusRequester,
+                                focusRequester = if (partition == selectedPartition) partitionFocusRequester else null,
                                 selected = partition == selectedPartition,
                                 onClick = {
                                     onSelectedPartitionChange(partition)
@@ -198,7 +198,7 @@ fun SearchResultVideoFilter(
                             modifier = Modifier.onPreviewKeyEvent {
                                 if (it.key == Key.DirectionUp) {
                                     if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                        partitionFocusRequester.requestFocus()
+                                        runCatching { partitionFocusRequester.requestFocus() }
                                         return@onPreviewKeyEvent true
                                     }
                                     return@onPreviewKeyEvent true
@@ -212,7 +212,7 @@ fun SearchResultVideoFilter(
                                 key = { index, partition -> "$index-child-${partition.tid}" }
                             ) { _, partition ->
                                 FilterDialogFilterChip(
-                                    focusRequester = partitionChildFocusRequester,
+                                    focusRequester = if (partition == selectedChildPartition) partitionChildFocusRequester else null,
                                     selected = partition == selectedChildPartition,
                                     onClick = {
                                         onSelectedChildPartitionChange(
@@ -242,14 +242,14 @@ fun SearchResultVideoFilter(
 @Composable
 private fun FilterDialogFilterChip(
     modifier: Modifier = Modifier,
-    focusRequester: FocusRequester,
+    focusRequester: FocusRequester? = null,
     selected: Boolean,
     onClick: () -> Unit,
     label: @Composable () -> Unit,
     enabled: Boolean = true
 ) {
     var hasFocus by remember { mutableStateOf(false) }
-    val focusRequesterModifier = if (selected)
+    val focusRequesterModifier = if (focusRequester != null)
         modifier.focusRequester(focusRequester)
     else modifier
 

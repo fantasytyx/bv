@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -51,7 +52,6 @@ import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.util.ImageSize
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.getDisplayName
@@ -74,7 +74,6 @@ fun FollowingSeasonScreen(
     val context = LocalContext.current
     val logger = KotlinLogging.logger { }
     val scope = rememberCoroutineScope()
-    val gridFocusRestorer = rememberTvLazyListFocusRestorer()
 
     var currentIndex by remember { mutableIntStateOf(0) }
     val showLargeTitle by remember { derivedStateOf { currentIndex < 6 } }
@@ -226,31 +225,30 @@ fun FollowingSeasonScreen(
     ) { innerPadding ->
         ProvideListBringIntoViewSpec {
             LazyVerticalGrid(
-                modifier = gridFocusRestorer.containerModifier(
-                    Modifier
-                        .padding(innerPadding)
-                        .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentIndex,
-                            itemCount = followingSeasons.size,
-                            columnCount = 6
-                        )
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                                (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU ||
-                                 keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DEL)
-                            ) {
-                                deleteMode = !deleteMode
-                                return@onPreviewKeyEvent true
-                            }
-                            if (deleteMode && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
-                                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
-                                    deleteMode = false
-                                }
-                                return@onPreviewKeyEvent true
-                            }
-                            false
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .focusRestorer()
+                    .blockDownFocusExitAtGridEnd(
+                        currentIndexProvider = { currentIndex },
+                        itemCount = followingSeasons.size,
+                        columnCount = 6
+                    )
+                    .onPreviewKeyEvent { keyEvent ->
+                        if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
+                            (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU ||
+                             keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DEL)
+                        ) {
+                            deleteMode = !deleteMode
+                            return@onPreviewKeyEvent true
                         }
-                ),
+                        if (deleteMode && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
+                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
+                                deleteMode = false
+                            }
+                            return@onPreviewKeyEvent true
+                        }
+                        false
+                    },
                 columns = GridCells.Fixed(6),
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -261,8 +259,7 @@ fun FollowingSeasonScreen(
                     key = { _, followingSeason -> "season-${followingSeason.seasonId}" }
                 ) { index, followingSeason ->
                     SeasonCard(
-                        modifier = gridFocusRestorer.firstItemModifier(index)
-                            .focusRequester(getFocusRequester(index)),
+                        modifier = Modifier.focusRequester(getFocusRequester(index)),
                         data = SeasonCardData(
                             seasonId = followingSeason.seasonId,
                             title = followingSeason.title,

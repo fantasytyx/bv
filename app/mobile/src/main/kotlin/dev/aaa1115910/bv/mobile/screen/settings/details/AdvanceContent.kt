@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -27,7 +28,7 @@ fun AdvanceContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val interfaceMode = Prefs.interfaceMode
+    val interfaceMode = remember { Prefs.interfaceMode }
     val interfaceModeTitle = stringResource(R.string.settings_ui_interface_mode_title)
     val apiTitle = stringResource(R.string.settings_item_api)
 

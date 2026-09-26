@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -62,8 +62,8 @@ import dev.aaa1115910.bv.tv.component.live.LiveRoomCard
 import dev.aaa1115910.bv.tv.screens.user.UpCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.focusedScale
 import dev.aaa1115910.bv.util.removeHtmlTags
@@ -83,9 +83,8 @@ fun SearchResultScreen(
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger { }
     val videoInfoRepository: VideoInfoRepository = getKoin().get()
-    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsState(Prefs.navSwitchMode)
+    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
     val tabRowFocusRequester = remember { FocusRequester() }
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     val searchTopNavItems = remember { SearchType.entries.map(::SearchTopNavItem) }
 
     var rowSize by remember { mutableIntStateOf(4) }
@@ -278,23 +277,22 @@ fun SearchResultScreen(
             )
             ProvideListBringIntoViewSpec(padding = 26.dp) {
                 LazyVerticalGrid(
-                    modifier = listFocusRestorer.containerModifier(
-                        Modifier
-                            .blockDownFocusExitAtGridEnd(
-                                currentIndex = currentIndex,
-                                itemCount = searchResult.count,
-                                columnCount = rowSize
-                            )
-                            .onPreviewKeyEvent {
-                                when (it.key) {
-                                    Key.Back -> {
-                                        if (it.type == KeyEventType.KeyUp) backToTabRow()
-                                        return@onPreviewKeyEvent true
-                                    }
+                    modifier = Modifier
+                        .focusRestorer()
+                        .blockDownFocusExitAtGridEnd(
+                            currentIndexProvider = { currentIndex },
+                            itemCount = searchResult.count,
+                            columnCount = rowSize
+                        )
+                        .onPreviewKeyEvent {
+                            when (it.key) {
+                                Key.Back -> {
+                                    if (it.type == KeyEventType.KeyUp) backToTabRow()
+                                    return@onPreviewKeyEvent true
                                 }
-                                false
                             }
-                    ),
+                            false
+                        },
                     columns = GridCells.Fixed(rowSize),
                     contentPadding = PaddingValues(24.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -311,7 +309,6 @@ fun SearchResultScreen(
                         key = { index, item -> "$index-${searchResultItemKey(item)}" }
                     ) { index, searchResultItem ->
                         SearchResultListItem(
-                            modifier = listFocusRestorer.firstItemModifier(index),
                             searchResult = searchResultItem,
                             onClick = { onClickResult(searchResultItem) },
                             onLongClick = onLongClickSearchResultItem,

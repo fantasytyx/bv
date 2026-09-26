@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -50,9 +51,8 @@ import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
-import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
+import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.repository.VideoInfoRepository
@@ -71,7 +71,6 @@ fun HistoryScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val videoInfoRepository: VideoInfoRepository = koinInject()
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     val lazyGridState = rememberLazyGridState()
     var currentIndex by remember { mutableIntStateOf(0) }
     val showLargeTitle by remember { derivedStateOf { currentIndex < 4 } }
@@ -170,10 +169,10 @@ fun HistoryScreen(
             )
             ProvideListBringIntoViewSpec(padding = 24.dp) {
                 LazyVerticalGrid(
-                    modifier = listFocusRestorer.containerModifier(
-                        Modifier
-                            .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentIndex,
+                    modifier = Modifier
+                        .focusRestorer()
+                        .blockDownFocusExitAtGridEnd(
+                            currentIndexProvider = { currentIndex },
                             itemCount = historyViewModel.histories.size,
                             columnCount = 4
                         )
@@ -192,93 +191,91 @@ fun HistoryScreen(
                                 return@onPreviewKeyEvent true
                             }
                             false
-                        }
-                ),
-                columns = GridCells.Fixed(4),
-                state = lazyGridState,
-                contentPadding = PaddingValues(
-                    top = if (showPageTitle) 20.dp else 4.dp,
-                    bottom = 20.dp,
-                    start = 20.dp,
-                    end = 20.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(13.dp)
-            ) {
-                itemsIndexed(
-                    items = historyViewModel.histories,
-                    key = { _, history -> history.historyKid ?: history.hashCode() }
-                ) { index, history ->
-                    Box(
-                        contentAlignment = Alignment.Center
-                    ) {
-                        SmallVideoCard(
-                            modifier = listFocusRestorer.firstItemModifier(index)
-                                .focusRequester(getFocusRequester(index)),
-                            data = history,
-                            onClick = {
-                                if (deleteMode) {
-                                    selectedVideo = history
-                                    selectedIndex = index
-                                    showDeleteConfirmDialog = true
-                                } else {
-                                    videoInfoRepository.setPreloadedVideoList(historyViewModel.histories)
-                                    if (history.jumpToSeason) {
-                                        SeasonInfoActivity.actionStart(
-                                            context = context,
-                                            epId = history.epId,
-                                            seasonId = history.seasonId,
-                                            proxyArea = ProxyArea.checkProxyArea(history.title)
-                                        )
-                                    } else {
-                                        VideoInfoActivity.actionStart(
-                                            context = context,
-                                            aid = history.avid,
-                                            proxyArea = ProxyArea.checkProxyArea(history.title)
-                                        )
-                                    }
-                                }
-                            },
-                            onLongClick = {
-                                if (deleteMode) {
-                                    selectedIndex = index
-                                    showClearConfirmDialog = true
-                                } else {
-                                    menuAid = history.avid
-                                    menuUpId = history.upId
-                                    menuUpName = history.upName
-                                    menuUpFace = history.upFace
-                                    menuHistoryBusiness = history.historyBusiness
-                                    menuHistoryKid = history.historyKid ?: 0L
-                                    showVideoActionMenu = true
-                                }
-                            },
-                            onFocus = {
-                                currentIndex = index
-                                //预加载
-                                if (index + 12 > historyViewModel.histories.size) {
-                                    historyViewModel.update()
-                                }
-                            }
-                        )
-                    }
-                }
-
-                if (historyViewModel.histories.isEmpty() && historyViewModel.noMore) {
-                    item(span = { GridItemSpan(4) }) {
+                        },
+                    columns = GridCells.Fixed(4),
+                    state = lazyGridState,
+                    contentPadding = PaddingValues(
+                        top = if (showPageTitle) 20.dp else 4.dp,
+                        bottom = 20.dp,
+                        start = 20.dp,
+                        end = 20.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(13.dp)
+                ) {
+                    itemsIndexed(
+                        items = historyViewModel.histories,
+                        key = { _, history -> history.historyKid ?: history.hashCode() }
+                    ) { index, history ->
                         Box(
-                            modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = stringResource(R.string.no_data),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            SmallVideoCard(
+                                modifier = Modifier.focusRequester(getFocusRequester(index)),
+                                data = history,
+                                onClick = {
+                                    if (deleteMode) {
+                                        selectedVideo = history
+                                        selectedIndex = index
+                                        showDeleteConfirmDialog = true
+                                    } else {
+                                        videoInfoRepository.setPreloadedVideoList(historyViewModel.histories)
+                                        if (history.jumpToSeason) {
+                                            SeasonInfoActivity.actionStart(
+                                                context = context,
+                                                epId = history.epId,
+                                                seasonId = history.seasonId,
+                                                proxyArea = ProxyArea.checkProxyArea(history.title)
+                                            )
+                                        } else {
+                                            VideoInfoActivity.actionStart(
+                                                context = context,
+                                                aid = history.avid,
+                                                proxyArea = ProxyArea.checkProxyArea(history.title)
+                                            )
+                                        }
+                                    }
+                                },
+                                onLongClick = {
+                                    if (deleteMode) {
+                                        selectedIndex = index
+                                        showClearConfirmDialog = true
+                                    } else {
+                                        menuAid = history.avid
+                                        menuUpId = history.upId
+                                        menuUpName = history.upName
+                                        menuUpFace = history.upFace
+                                        menuHistoryBusiness = history.historyBusiness
+                                        menuHistoryKid = history.historyKid ?: 0L
+                                        showVideoActionMenu = true
+                                    }
+                                },
+                                onFocus = {
+                                    currentIndex = index
+                                    //预加载
+                                    if (index + 12 > historyViewModel.histories.size) {
+                                        historyViewModel.update()
+                                    }
+                                }
                             )
+                        }
+                    }
+
+                    if (historyViewModel.histories.isEmpty() && historyViewModel.noMore) {
+                        item(span = { GridItemSpan(4) }) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.no_data),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
         }
     }
 

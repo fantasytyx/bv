@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -36,7 +37,6 @@ import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.viewmodel.TagViewModel
 import dev.aaa1115910.bv.repository.VideoInfoRepository
@@ -50,7 +50,6 @@ fun TagScreen(
 ) {
     val context = LocalContext.current
     val videoInfoRepository: VideoInfoRepository = koinInject()
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     var currentIndex by remember { mutableIntStateOf(0) }
     // 长按菜单状态
     var showVideoActionMenu by remember { mutableStateOf(false) }
@@ -116,15 +115,14 @@ fun TagScreen(
     ) { innerPadding ->
         ProvideListBringIntoViewSpec(padding = 26.dp) {
             LazyVerticalGrid(
-                modifier = listFocusRestorer.containerModifier(
-                    Modifier
-                        .padding(innerPadding)
-                        .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentIndex,
-                            itemCount = tagViewModel.topVideos.size,
-                            columnCount = 4
-                        )
-                ),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .focusRestorer()
+                    .blockDownFocusExitAtGridEnd(
+                        currentIndexProvider = { currentIndex },
+                        itemCount = tagViewModel.topVideos.size,
+                        columnCount = 4
+                    ),
                 columns = GridCells.Fixed(4),
                 contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -138,7 +136,6 @@ fun TagScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         SmallVideoCard(
-                            modifier = listFocusRestorer.firstItemModifier(index),
                             data = video,
                             onClick = {
                                 videoInfoRepository.setPreloadedVideoList(tagViewModel.topVideos)

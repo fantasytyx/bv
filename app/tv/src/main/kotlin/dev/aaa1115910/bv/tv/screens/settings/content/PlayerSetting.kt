@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,6 +65,7 @@ import dev.aaa1115910.bv.tv.component.settings.SettingSwitchListItem
 import dev.aaa1115910.bv.tv.component.settings.SettingNumberListItem
 import dev.aaa1115910.bv.tv.screens.settings.SettingsMenuNavItem
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 
 @Composable
 fun PlayerSetting(
@@ -88,9 +88,9 @@ fun PlayerSetting(
     var playerNextTipDuration by remember { mutableDoubleStateOf(Prefs.playerNextTipDuration.toDouble()) }
     var portraitVideoFixMode by remember { mutableStateOf(Prefs.portraitVideoFixMode) }
     var showOnlineViewerCountDialog by remember { mutableStateOf(false) }
-    val showOnlineViewerCount by Prefs.showOnlineViewerCountFlow.collectAsState(Prefs.showOnlineViewerCount)
+    val showOnlineViewerCount by Prefs.showOnlineViewerCountFlow.collectAsStateLazily { Prefs.showOnlineViewerCount }
     var showLiveViewerCountTipDialog by remember { mutableStateOf(false) }
-    val showLiveViewerCountTip by Prefs.showLiveViewerCountTipFlow.collectAsState(Prefs.showLiveViewerCountTip)
+    val showLiveViewerCountTip by Prefs.showLiveViewerCountTipFlow.collectAsStateLazily { Prefs.showLiveViewerCountTip }
     var enableAsyncQueueing by remember { mutableStateOf(Prefs.enableAsyncQueueing) }
     var enableScreenRefreshRateMatching by remember { mutableStateOf(Prefs.enableScreenRefreshRateMatching) }
     var skipPgcIntroOutro by remember { mutableStateOf(Prefs.skipPgcIntroOutro) }

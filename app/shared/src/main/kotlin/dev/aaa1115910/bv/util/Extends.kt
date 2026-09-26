@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -21,6 +23,7 @@ import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -244,3 +247,13 @@ fun LazyStaggeredGridState.OnBottomReached(
             }
     }
 }
+
+/**
+ * 与 collectAsState 相同，但初始值只在首次组合时求值。
+ *
+ * 直接把 `Prefs.xxx` 传进 collectAsState，会让它作为参数在**每次重组**时求值，
+ * 而 Prefs 的 getter 是 `runBlocking` 读 DataStore，等于每帧阻塞主线程。
+ */
+@Composable
+fun <T> Flow<T>.collectAsStateLazily(initial: () -> T): State<T> =
+    collectAsState(remember { initial() })

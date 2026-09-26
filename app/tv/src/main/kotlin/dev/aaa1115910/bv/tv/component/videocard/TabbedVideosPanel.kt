@@ -22,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -37,7 +39,6 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.tv.util.stableItemKey
 
 @Composable
@@ -94,8 +95,6 @@ fun TabbedVideosPanel(
             preloadedListState.scrollToItem(currentVideoIndexInPreloaded)
         }
     }
-
-    val listFocusRestorer = rememberTvLazyListFocusRestorer(focusRequester)
 
     // 长按菜单状态
     var showVideoActionMenu by remember { mutableStateOf(false) }
@@ -154,13 +153,12 @@ fun TabbedVideosPanel(
             )
         }
         LazyRow(
-            modifier = listFocusRestorer.containerModifier(
-                Modifier
-                    .padding(vertical = 15.dp)
-                    .onGloballyPositioned {
-                        rowHeight = with(density) { it.size.height.toDp() }
-                    }
-            ),
+            modifier = Modifier
+                .padding(vertical = 15.dp)
+                .onGloballyPositioned {
+                    rowHeight = with(density) { it.size.height.toDp() }
+                }
+                .focusRestorer(),
             state = lazyListState,
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -172,7 +170,9 @@ fun TabbedVideosPanel(
             ) { index, videoData ->
                 val isCurrentVideo = isPreloadedTab && index == currentVideoIndexInPreloaded
                 SmallVideoCard(
-                    modifier = listFocusRestorer.firstItemModifier(index, Modifier.width(200.dp)),
+                    modifier = Modifier
+                        .width(200.dp)
+                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                     data = videoData,
                     unfocusedBorderColor = if (isCurrentVideo) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else null,
                     onClick = {

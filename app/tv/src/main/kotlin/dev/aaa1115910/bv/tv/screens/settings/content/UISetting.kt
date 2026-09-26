@@ -76,6 +76,7 @@ import dev.aaa1115910.bv.tv.util.parseNavItemsOrderToConfig
 import dev.aaa1115910.bv.tv.util.saveDrawerNavConfigs
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.requestFocus
 import kotlin.math.roundToInt
 
@@ -95,9 +96,9 @@ fun UISetting(
     var showLiveNavItemsDialog by remember { mutableStateOf(false) }
     var showDrawerNavItemsDialog by remember { mutableStateOf(false) }
     val density by Prefs.densityFlow.collectAsState(context.resources.displayMetrics.widthPixels / 960f)
-    val themeType by Prefs.themeTypeFlow.collectAsState(Prefs.themeType)
-    val interfaceMode = Prefs.interfaceMode
-    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsState(Prefs.navSwitchMode)
+    val themeType by Prefs.themeTypeFlow.collectAsStateLazily { Prefs.themeType }
+    val interfaceMode = remember { Prefs.interfaceMode }
+    val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
     var showUGCVideoInfo by remember { mutableStateOf(Prefs.showUGCVideoInfo) }
     var videoInfoHistoryIncludeFromPlayer by remember { mutableStateOf(Prefs.videoInfoHistoryIncludeFromPlayer) }
     var ugcVideoInfoHistoryCount by remember { mutableIntStateOf(Prefs.ugcVideoInfoHistoryCount) }

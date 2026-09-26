@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -61,7 +62,6 @@ import coil.compose.AsyncImage
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.viewmodel.user.FollowViewModel
@@ -75,7 +75,6 @@ fun FollowScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val defaultFocusRequester = remember { FocusRequester() }
-    val gridFocusRestorer = rememberTvLazyListFocusRestorer(defaultFocusRequester)
 
     var currentIndex by remember { mutableIntStateOf(0) }
     val showLargeTitle by remember { derivedStateOf { currentIndex < 3 } }
@@ -168,7 +167,7 @@ fun FollowScreen(
         }
     ) { innerPadding ->
         LazyVerticalGrid(
-            modifier = gridFocusRestorer.containerModifier(Modifier.padding(innerPadding)),
+            modifier = Modifier.padding(innerPadding).focusRestorer(),
             columns = GridCells.Fixed(3),
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -179,7 +178,8 @@ fun FollowScreen(
                     items = filteredUsers,
                     key = { index, up -> "$index-up-${up.mid}" }
                 ) { index, up ->
-                    val upCardModifier = gridFocusRestorer.firstItemModifier(index)
+                    val upCardModifier =
+                        if (index == 0) Modifier.focusRequester(defaultFocusRequester) else Modifier
                     UpCard(
                         modifier = upCardModifier,
                         face = up.avatar,

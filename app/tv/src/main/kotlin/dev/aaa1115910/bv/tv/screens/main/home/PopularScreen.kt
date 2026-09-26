@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
@@ -35,7 +36,6 @@ import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.viewmodel.home.PopularViewModel
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +52,6 @@ fun PopularScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val videoInfoRepository: VideoInfoRepository = koinInject()
-    val listFocusRestorer = rememberTvLazyListFocusRestorer()
     var currentFocusedIndex by remember { mutableIntStateOf(0) }
     val shouldLoadMore by remember {
         derivedStateOf { popularViewModel.popularVideoList.isNotEmpty() && currentFocusedIndex + 12 > popularViewModel.popularVideoList.size }
@@ -105,15 +104,14 @@ fun PopularScreen(
     val spacedBy = dimensionResource(R.dimen.grid_spacedBy)
     ProvideListBringIntoViewSpec {
         LazyVerticalGrid(
-            modifier = listFocusRestorer.containerModifier(
-                modifier
-                    .fillMaxSize()
-                    .blockDownFocusExitAtGridEnd(
-                        currentIndex = currentFocusedIndex,
-                        itemCount = popularViewModel.popularVideoList.size,
-                        columnCount = 4
-                    )
-            ),
+            modifier = modifier
+                .fillMaxSize()
+                .focusRestorer()
+                .blockDownFocusExitAtGridEnd(
+                    currentIndexProvider = { currentFocusedIndex },
+                    itemCount = popularViewModel.popularVideoList.size,
+                    columnCount = 4
+                ),
             columns = GridCells.Fixed(4),
             state = lazyGridState,
             contentPadding = PaddingValues(padding),
@@ -125,7 +123,6 @@ fun PopularScreen(
                 key = { index, item -> "$index-av-${item.aid}" }
             ) { index, item ->
                 SmallVideoCard(
-                    modifier = listFocusRestorer.firstItemModifier(index),
                     data = remember(item.aid) {
                         VideoCardData(
                             avid = item.aid,

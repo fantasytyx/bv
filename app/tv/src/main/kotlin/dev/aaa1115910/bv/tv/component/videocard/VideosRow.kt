@@ -2,7 +2,6 @@ package dev.aaa1115910.bv.tv.component.videocard
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,11 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -36,9 +32,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.tv.util.stableItemKey
-import dev.aaa1115910.bv.util.ifElse
 
 @Composable
 fun VideosRow(
@@ -49,16 +43,12 @@ fun VideosRow(
     showMore: () -> Unit,
     onOpenSeasonInfo: (VideoCardData) -> Unit = {},
     onOpenVideoInfo: (VideoCardData) -> Unit = {},
-    focusRequester: FocusRequester? = null // 渲染为 播放器-推荐视频 时有值
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val internalFocusRequester = remember { FocusRequester() }
-    val activeFocusRequester = focusRequester ?: internalFocusRequester
-    val listFocusRestorer = rememberTvLazyListFocusRestorer(activeFocusRequester)
     var hasFocus by remember { mutableStateOf(false) }
     val titleFontSize by animateFloatAsState(
-        targetValue = if (focusRequester != null) 24f else if (hasFocus) 30f else 14f,
+        targetValue = if (hasFocus) 30f else 14f,
         label = "title font size",
         animationSpec = tween(
             durationMillis = 120
@@ -84,14 +74,6 @@ fun VideosRow(
     Column(
         modifier = modifier
             .onFocusChanged { hasFocus = it.hasFocus }
-            .ifElse(focusRequester != null, Modifier.background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color.Black.copy(alpha = 0.7f)
-                    )
-                )
-            ))
     ) {
         Text(
             modifier = Modifier.padding(start = 36.dp, top = 3.dp, bottom = 3.dp),
@@ -99,15 +81,14 @@ fun VideosRow(
             fontSize = titleFontSize.sp
         )
         LazyRow(
-            modifier = listFocusRestorer.containerModifier(
-                Modifier
-                    .padding(vertical = 15.dp)
-                    .onGloballyPositioned {
-                        rowHeight = with(density) {
-                            it.size.height.toDp()
-                        }
+            modifier = Modifier
+                .padding(vertical = 15.dp)
+                .onGloballyPositioned {
+                    rowHeight = with(density) {
+                        it.size.height.toDp()
                     }
-            ),
+                }
+                .focusRestorer(),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
             contentPadding = PaddingValues(horizontal = 36.dp)
@@ -115,9 +96,9 @@ fun VideosRow(
             itemsIndexed(
                 items = videos,
                 key = { index, videoData -> "$index-${videoData.stableItemKey()}" }
-            ) { index, videoData ->
+            ) { _, videoData ->
                 SmallVideoCard(
-                    modifier = listFocusRestorer.firstItemModifier(index, Modifier.width(200.dp)),
+                    modifier = Modifier.width(200.dp),
                     data = videoData,
                     onClick = {
                         if (videoData.jumpToSeason) {
@@ -126,7 +107,7 @@ fun VideosRow(
                             onOpenVideoInfo(videoData)
                         }
                     },
-                    onLongClick={onLongClickVideo(videoData)}
+                    onLongClick = { onLongClickVideo(videoData) }
                 )
             }
             if (!hideShowMore) {

@@ -99,6 +99,8 @@ fun SearchInputScreen(
         drawerItemFocusRequesters[DrawerItem.Search]?.requestFocus()
     }
 
+    val showProxyOptions = remember { Prefs.enableProxy }
+
     SearchInputScreenContent(
         modifier = modifier
             .onFocusChanged { focusOnContent = it.hasFocus },
@@ -106,7 +108,7 @@ fun SearchInputScreen(
         searchKeyword = searchKeyword,
         onSearchKeywordChange = { searchInputViewModel.keyword = it },
         onSearch = onSearch,
-        showProxyOptions = Prefs.enableProxy,
+        showProxyOptions = showProxyOptions,
         enableProxy = enableProxy,
         onEnableProxyChange = { enableProxy = it },
         hotwords = hotwords,

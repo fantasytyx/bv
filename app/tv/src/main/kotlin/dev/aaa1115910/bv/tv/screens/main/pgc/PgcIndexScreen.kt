@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -42,7 +43,6 @@ import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.getDisplayName
 import dev.aaa1115910.bv.viewmodel.index.PgcIndexViewModel
@@ -59,7 +59,6 @@ fun PgcIndexScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger { }
-    val gridFocusRestorer = rememberTvLazyListFocusRestorer()
 
     var currentSeasonIndex by remember { mutableIntStateOf(0) }
     val showLargeTitle by remember {
@@ -135,15 +134,14 @@ fun PgcIndexScreen(
     ) { innerPadding ->
         ProvideListBringIntoViewSpec {
             LazyVerticalGrid(
-                modifier = gridFocusRestorer.containerModifier(
-                    Modifier
-                        .padding(innerPadding)
-                        .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentSeasonIndex,
-                            itemCount = pgcItems.size,
-                            columnCount = 6
-                        )
-                ),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .focusRestorer()
+                    .blockDownFocusExitAtGridEnd(
+                        currentIndexProvider = { currentSeasonIndex },
+                        itemCount = pgcItems.size,
+                        columnCount = 6
+                    ),
                 columns = GridCells.Fixed(6),
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -154,7 +152,6 @@ fun PgcIndexScreen(
                     key = { index, pgcItem -> "$index-season-${pgcItem.seasonId}" }
                 ) { index, pgcItem ->
                     SeasonCard(
-                        modifier = gridFocusRestorer.firstItemModifier(index),
                         data = SeasonCardData.fromPgcItem(pgcItem),
                         onFocus = {
                             currentSeasonIndex = index

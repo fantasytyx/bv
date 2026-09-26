@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
@@ -50,7 +51,6 @@ import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.tv.util.rememberTvLazyListFocusRestorer
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.toast
@@ -66,13 +66,10 @@ import org.koin.compose.koinInject
 fun UgcRegionScaffold(
     modifier: Modifier = Modifier,
     lazyGridState: LazyGridState = rememberLazyGridState(),
-    ugcViewModel: UgcViewModel,
-    childRegionButtons: (@Composable () -> Unit)? = null
+    ugcViewModel: UgcViewModel
 ) {
     val context = LocalContext.current
     val videoInfoRepository: VideoInfoRepository = koinInject()
-    val carouselFocusRestorer = rememberTvLazyListFocusRestorer()
-    val cardFocusRestorer = rememberTvLazyListFocusRestorer()
     var currentFocusedIndex by remember { mutableIntStateOf(0) }
     val shouldLoadMore by remember {
         derivedStateOf { !ugcViewModel.ugcItems.isEmpty() && currentFocusedIndex + 12 > ugcViewModel.ugcItems.size }
@@ -106,25 +103,23 @@ fun UgcRegionScaffold(
     ProvideListBringIntoViewSpec {
         LazyVerticalGrid(
             modifier = if (ugcViewModel.showCarousel && ugcViewModel.carouselItems.isNotEmpty()) {
-                carouselFocusRestorer.containerModifier(
-                    modifier
-                        .fillMaxSize()
-                        .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentFocusedIndex,
-                            itemCount = ugcViewModel.ugcItems.size,
-                            columnCount = 4
-                        )
-                )
+                modifier
+                    .fillMaxSize()
+                    .focusRestorer()
+                    .blockDownFocusExitAtGridEnd(
+                        currentIndexProvider = { currentFocusedIndex },
+                        itemCount = ugcViewModel.ugcItems.size,
+                        columnCount = 4
+                    )
             } else {
-                cardFocusRestorer.containerModifier(
-                    modifier
-                        .fillMaxSize()
-                        .blockDownFocusExitAtGridEnd(
-                            currentIndex = currentFocusedIndex,
-                            itemCount = ugcViewModel.ugcItems.size,
-                            columnCount = 4
-                        )
-                )
+                modifier
+                    .fillMaxSize()
+                    .focusRestorer()
+                    .blockDownFocusExitAtGridEnd(
+                        currentIndexProvider = { currentFocusedIndex },
+                        itemCount = ugcViewModel.ugcItems.size,
+                        columnCount = 4
+                    )
             },
             columns = GridCells.Fixed(4),
             state = lazyGridState,
@@ -136,7 +131,7 @@ fun UgcRegionScaffold(
             if (ugcViewModel.showCarousel && ugcViewModel.carouselItems.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     UgcCarousel(
-                        modifier = carouselFocusRestorer.firstItemModifier(0, Modifier.fillMaxWidth()),
+                        modifier = Modifier.fillMaxWidth(),
                         data = ugcViewModel.carouselItems,
                         onClick = { item -> 
                             videoInfoRepository.preloadedVideoList.clear()
@@ -149,19 +144,11 @@ fun UgcRegionScaffold(
                 }
             }
 
-            // 子区域按钮
-            // if (childRegionButtons != null) {
-            //     item(span = { GridItemSpan(maxLineSpan) }) {
-            //         childRegionButtons()
-            //     }
-            // }
-
             itemsIndexed(
                 items = ugcViewModel.ugcItems,
                 key = { index, item -> "$index-av-${item.aid}" }
             ) { index, item ->
                 SmallVideoCard(
-                    modifier = cardFocusRestorer.firstItemModifier(index),
                     data = remember(item.aid) {
                         VideoCardData(
                             avid = item.aid,
