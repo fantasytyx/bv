@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -47,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
@@ -59,6 +62,7 @@ import dev.aaa1115910.biliapi.entity.video.season.Episode
 import dev.aaa1115910.biliapi.entity.video.season.Section
 import dev.aaa1115910.biliapi.repositories.CommentRepository
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.focusedBorder
 import dev.aaa1115910.bv.util.isDpadDown
 import dev.aaa1115910.bv.util.isDpadLeft
 import dev.aaa1115910.bv.util.isKeyDown
@@ -105,6 +109,9 @@ fun CommentPanel(
     var currentPage by remember { mutableStateOf(CommentPage()) }
     var hasNext by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // 排序方式：默认按热度
+    var commentSort by remember { mutableStateOf(CommentSort.Hot) }
 
     // 子评论浮窗状态
     var showSubCommentPanel by remember { mutableStateOf(false) }
@@ -200,7 +207,7 @@ fun CommentPanel(
                 val data = commentRepository.getComments(
                     id = currentOid,
                     type = 1L, // 视频评论
-                    sort = CommentSort.Hot,
+                    sort = commentSort,
                     page = page,
                     preferApiType = Prefs.apiType
                 )
@@ -220,6 +227,18 @@ fun CommentPanel(
             } finally {
                 loading = false
             }
+        }
+    }
+
+    // 在按热度 / 按时间之间切换，并重新从第一页加载
+    fun toggleCommentSort() {
+        commentSort = if (commentSort == CommentSort.Hot) CommentSort.Time else CommentSort.Hot
+        focusedCommentIndex = 0
+        scope.launch {
+            // 等待正在进行的加载结束，避免请求被丢弃
+            while (loading) delay(50)
+            listState.scrollToItem(0)
+            loadComments(true)
         }
     }
 
@@ -385,7 +404,7 @@ fun CommentPanel(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "评论",
+                                    text = if (commentSort == CommentSort.Hot) "热门评论" else "最新评论",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = Color.White
                                 )
@@ -404,11 +423,20 @@ fun CommentPanel(
                                     )
                                 }
                             }
-                            Text(
-                                text = if (comments.isNotEmpty()) "${comments.size} 条" else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CommentSortToggle(
+                                    sort = commentSort,
+                                    onToggle = { toggleCommentSort() }
+                                )
+                                Text(
+                                    text = if (comments.isNotEmpty()) "${comments.size} 条" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
                         }
 
                         // 评论列表
@@ -602,6 +630,51 @@ fun CommentPanel(
                 imageViewerBitmaps = emptyMap()
             }
         )
+    }
+}
+
+/**
+ * 评论排序切换按钮：在按热度 / 按时间之间来回切换
+ */
+@Composable
+private fun CommentSortToggle(
+    sort: CommentSort,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isHot = sort == CommentSort.Hot
+
+    Surface(
+        modifier = modifier.focusedBorder(MaterialTheme.shapes.small),
+        onClick = onToggle,
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.1f),
+            focusedContainerColor = Color.White.copy(alpha = 0.16f),
+            pressedContainerColor = Color.White.copy(alpha = 0.22f)
+        ),
+        scale = ClickableSurfaceDefaults.scale(
+            focusedScale = 1f,
+            pressedScale = 1f
+        ),
+        shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.small)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                modifier = Modifier.size(16.dp),
+                imageVector = Icons.Rounded.SwapVert,
+                contentDescription = null,
+                tint = if (isHot) Color.White else Color.White.copy(alpha = 0.8f)
+            )
+            Text(
+                text = if (isHot) "按热度" else "按时间",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isHot) Color.White else Color.White.copy(alpha = 0.8f)
+            )
+        }
     }
 }
 

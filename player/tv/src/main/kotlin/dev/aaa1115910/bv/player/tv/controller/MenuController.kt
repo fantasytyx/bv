@@ -44,6 +44,7 @@ import dev.aaa1115910.biliapi.entity.video.SubtitleAiType
 import dev.aaa1115910.biliapi.entity.video.SubtitleType
 import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LiveCodec
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerConfigData
@@ -88,7 +89,8 @@ fun MenuController(
     onSubtitleBackgroundOpacityChange: (Float) -> Unit,
     onSubtitleBottomPadding: (Dp) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
-    onDebugInfoChange: (Boolean) -> Unit = {}
+    onDebugInfoChange: (Boolean) -> Unit = {},
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val defaultFocusRequester = remember { FocusRequester() }
@@ -116,6 +118,7 @@ fun MenuController(
                 onAudioChange = onAudioChange,
                 onLiveQualityChange = onLiveQualityChange,
                 onLiveCodecChange = onLiveCodecChange,
+                onLiveLineChange = onLiveLineChange,
                 onDanmakuSwitchChange = onDanmakuSwitchChange,
                 onDanmakuSizeChange = onDanmakuSizeChange,
                 onDanmakuOpacityChange = onDanmakuOpacityChange,
@@ -129,7 +132,8 @@ fun MenuController(
                 onSubtitleBackgroundOpacityChange = onSubtitleBackgroundOpacityChange,
                 onSubtitleBottomPadding = onSubtitleBottomPadding,
                 onPlayModeChange = onPlayModeChange,
-                onDebugInfoChange = onDebugInfoChange
+                onDebugInfoChange = onDebugInfoChange,
+                onAudioBalanceLevelChange = onAudioBalanceLevelChange
             )
         }
     }
@@ -161,7 +165,8 @@ fun MenuController(
     onSubtitleBackgroundOpacityChange: (Float) -> Unit,
     onSubtitleBottomPadding: (Dp) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
-    onDebugInfoChange: (Boolean) -> Unit = {}
+    onDebugInfoChange: (Boolean) -> Unit = {},
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit = {}
 ) {
     var selectedNavItem by remember { mutableStateOf(VideoPlayerMenuNavItem.Picture) }
     var focusState by remember { mutableStateOf(MenuFocusState.MenuNav) }
@@ -207,7 +212,8 @@ fun MenuController(
                     onSubtitleBackgroundOpacityChange = onSubtitleBackgroundOpacityChange,
                     onSubtitleBottomPadding = onSubtitleBottomPadding,
                     onPlayModeChange = onPlayModeChange,
-                    onDebugInfoChange = onDebugInfoChange
+                    onDebugInfoChange = onDebugInfoChange,
+                    onAudioBalanceLevelChange = onAudioBalanceLevelChange
                 )
                 MenuNavList(
                     modifier = Modifier
@@ -258,6 +264,7 @@ private fun MenuList(
     onSubtitleBottomPadding: (Dp) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
     onDebugInfoChange: (Boolean) -> Unit = {},
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit = {},
     onFocusStateChange: (MenuFocusState) -> Unit
 ) {
     Box(
@@ -308,6 +315,7 @@ private fun MenuList(
                 OthersMenuList(
                     onPlayModeChange = onPlayModeChange,
                     onDebugInfoChange = onDebugInfoChange,
+                    onAudioBalanceLevelChange = onAudioBalanceLevelChange,
                     onFocusStateChange = onFocusStateChange
                 )
             }

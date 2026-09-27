@@ -187,7 +187,7 @@ internal class DanmakuEngine(
                     actionPaint.textSize = layoutTextSizePx
                     actionPaint.getFontMetrics(actionFontMetrics)
                     cachedTextBoxHeight = (actionFontMetrics.descent - actionFontMetrics.ascent) + outlinePad * 2f
-                    val baseLaneHeight = max(18f, cachedTextBoxHeight * 1.15f)
+                    val baseLaneHeight = max(18f, cachedTextBoxHeight * 1.18f)
                     cachedLaneHeight = max(cachedTextBoxHeight, baseLaneHeight * cfg.laneDensity.laneHeightFactor)
                     cachedUsableHeight = (availableHeight * areaFraction).toInt().coerceAtLeast(0)
                     cachedLaneCount = max(1, (cachedUsableHeight / cachedLaneHeight).toInt())

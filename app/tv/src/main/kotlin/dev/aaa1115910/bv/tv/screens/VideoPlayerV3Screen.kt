@@ -218,6 +218,7 @@ fun VideoPlayerV3Screen(
     var autoActionTipText by remember { mutableStateOf("") }
     var skipNextKeyUpCancel by remember { mutableStateOf(false) }
     var showDebugInfo by remember { mutableStateOf(Prefs.playerShowDebugInfo) }
+    var audioBalanceLevel by remember { mutableStateOf(Prefs.playerAudioBalanceLevel) }
 
     // 在线观看人数状态
     var onlineViewerCount by remember { mutableStateOf("") }
@@ -439,6 +440,7 @@ fun VideoPlayerV3Screen(
             currentLiveLineIndex = playerViewModel.currentLiveLineIndex,
             controllerButtonsOrder = prefsSnapshot.controllerButtonsOrder,
             showDebugInfo = showDebugInfo,
+            audioBalanceLevel = audioBalanceLevel,
             longPressAction = prefsSnapshot.longPressAction,
             longPressSpeed = prefsSnapshot.longPressSpeed
         ),
@@ -930,6 +932,11 @@ fun VideoPlayerV3Screen(
                 onDebugInfoChange = { enabled ->
                     Prefs.playerShowDebugInfo = enabled
                     showDebugInfo = enabled
+                },
+                onAudioBalanceLevelChange = { level ->
+                    Prefs.playerAudioBalanceLevel = level
+                    audioBalanceLevel = level
+                    playerViewModel.videoPlayer?.setAudioBalanceLevel(level)
                 },
                 onOpenUpSpace = {
                     UpInfoActivity.actionStart(

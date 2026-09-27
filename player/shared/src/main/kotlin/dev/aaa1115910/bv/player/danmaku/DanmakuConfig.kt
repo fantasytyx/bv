@@ -3,9 +3,9 @@ package dev.aaa1115910.bv.player.danmaku
 import android.graphics.Typeface
 
 enum class DanmakuLaneDensity(val laneHeightFactor: Float) {
-    Sparse(1.25f),
+    Sparse(1.3f),
     Standard(1.0f),
-    Dense(0.85f),
+    Dense(0.8f),
 }
 
 enum class DanmakuFontWeight(val typeface: Typeface) {

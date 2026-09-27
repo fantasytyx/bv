@@ -156,6 +156,7 @@ fun VideoPlayerScreen(
     }
 
     var isVideoFullscreen by rememberSaveable { mutableStateOf(false) }
+    var audioBalanceLevel by remember { mutableStateOf(Prefs.playerAudioBalanceLevel) }
     val forcePortrait =
         windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact || windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact
 
@@ -353,6 +354,7 @@ fun VideoPlayerScreen(
                             currentSubtitleBackgroundOpacity = playerViewModel.currentSubtitleBackgroundOpacity,
                             currentSubtitleBottomPadding = playerViewModel.currentSubtitleBottomPadding,
                             currentPlayMode = playerViewModel.currentPlayMode,
+                            audioBalanceLevel = audioBalanceLevel,
                             incognitoMode = Prefs.incognitoMode,
                             defaultStartPosition = Prefs.playerDefaultStartPosition.toPlayerType()
                         ),
@@ -434,6 +436,11 @@ fun VideoPlayerScreen(
                             onPlayModeChange = { playMode ->
                                 playerViewModel.currentPlayMode = playMode
                                 Prefs.defaultPlayMode = playMode
+                            },
+                            onAudioBalanceLevelChange = { level ->
+                                Prefs.playerAudioBalanceLevel = level
+                                audioBalanceLevel = level
+                                playerViewModel.videoPlayer?.setAudioBalanceLevel(level)
                             },
                             onLoadNextVideo = playerViewModel::playNextVideo,
                             onLoadNewVideo = { videoListItem ->

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerConfigData
 import dev.aaa1115910.bv.player.entity.PlayMode
 import dev.aaa1115910.bv.player.entity.PlayMode.ListOrder
@@ -45,7 +46,8 @@ private val MobileSupportedPlayModes = listOf(
 fun MoreMenu(
     modifier: Modifier = Modifier,
     onClose: () -> Unit,
-    onPlayModeChange: (PlayMode) -> Unit
+    onPlayModeChange: (PlayMode) -> Unit,
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit
 ) {
     val videoPlayerConfigData = LocalVideoPlayerConfigData.current
 
@@ -78,6 +80,13 @@ fun MoreMenu(
                     modifier = Modifier,
                     playMode = videoPlayerConfigData.currentPlayMode,
                     onPlayModeChange = onPlayModeChange
+                )
+            }
+            item {
+                AudioBalanceContent(
+                    modifier = Modifier.padding(top = 16.dp),
+                    level = videoPlayerConfigData.audioBalanceLevel,
+                    onLevelChange = onAudioBalanceLevelChange
                 )
             }
         }
@@ -116,13 +125,44 @@ fun PlayModeContent(
     }
 }
 
+@Composable
+fun AudioBalanceContent(
+    modifier: Modifier = Modifier,
+    level: AudioBalanceLevel,
+    onLevelChange: (AudioBalanceLevel) -> Unit
+) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = modifier
+    ) {
+        Text(
+            text = "音量均衡",
+            style = MaterialTheme.typography.titleSmall
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AudioBalanceLevel.ordered.forEach {
+                FilterChip(
+                    label = { Text(text = it.getDisplayName(context)) },
+                    selected = level == it,
+                    onClick = { onLevelChange(it) }
+                )
+            }
+        }
+    }
+}
+
 @Preview
 @Composable
 private fun MoreMenuPreview() {
     MaterialDarkTheme {
         MoreMenu(
             onClose = {},
-            onPlayModeChange = {}
+            onPlayModeChange = {},
+            onAudioBalanceLevelChange = {}
         )
     }
 }

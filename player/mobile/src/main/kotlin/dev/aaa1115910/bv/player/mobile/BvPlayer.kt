@@ -26,6 +26,7 @@ import dev.aaa1115910.bv.player.BvVideoPlayer
 import dev.aaa1115910.bv.player.PlayerErrorText
 import dev.aaa1115910.bv.player.VideoPlayerListener
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerClockData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerConfigData
@@ -72,6 +73,7 @@ fun BvPlayer(
     onDanmakuScaleChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit,
     onLoadNextVideo: () -> Unit,
     onLoadNewVideo: (VideoListItem) -> Unit,
     videoPlayer: AbstractVideoPlayer,
@@ -362,6 +364,7 @@ fun BvPlayer(
                 applyDanmakuConfig(danmakuConfig.copy(area = it))
             },
             onPlayModeChange = onPlayModeChange,
+            onAudioBalanceLevelChange = onAudioBalanceLevelChange,
             onPlayNewVideo = {
                 //if (!Prefs.incognitoMode) sendHeartbeat()
                 onLoadNewVideo(it)
@@ -380,7 +383,8 @@ fun BvPlayer(
                     danmakuView.apply {
                         setPositionProvider { videoPlayer.currentPosition.coerceAtLeast(0L) }
                         setIsPlayingProvider { videoPlayer.isPlaying }
-                        setPlaybackSpeedProvider { currentConfigData.currentVideoSpeed }
+                        // 用播放器实际速率，而不是配置里的速率：两者会在长按加速等场景下不一致
+                        setPlaybackSpeedProvider { videoPlayer.speed }
                         setConfig(danmakuConfig)
                     }
                 },

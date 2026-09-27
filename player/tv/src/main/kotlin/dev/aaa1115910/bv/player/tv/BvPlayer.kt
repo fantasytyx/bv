@@ -44,6 +44,7 @@ import dev.aaa1115910.bv.player.BvVideoPlayer
 import dev.aaa1115910.bv.player.PlayerErrorText
 import dev.aaa1115910.bv.player.VideoPlayerListener
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LiveCodec
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerClockState
@@ -126,6 +127,7 @@ fun BvPlayer(
     onSubtitleBottomPadding: (Dp) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
     onDebugInfoChange: (Boolean) -> Unit = {},
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit = {},
     onToggleRelatedVideos: (Boolean) -> Unit = {},
     onToggleRelatedRooms: (Boolean) -> Unit = {},
     onSwitchNextRoom: () -> Unit = {},
@@ -834,6 +836,10 @@ fun BvPlayer(
                 logger.info { "On debug info change: $enabled" }
                 onDebugInfoChange(enabled)
             },
+            onAudioBalanceLevelChange = { level ->
+                logger.info { "On audio balance level change: $level" }
+                onAudioBalanceLevelChange(level)
+            },
             onRequestFocus = { focusRequester.requestFocus(scope) },
             onOpenUpSpace = onOpenUpSpace,
             onRefreshVideo = onRefreshVideo,
@@ -881,7 +887,8 @@ fun BvPlayer(
                     danmakuView.apply {
                         setPositionProvider { if(currentConfigData.isLive) SystemClock.elapsedRealtime() else videoPlayer.currentPosition.coerceAtLeast(0L) }
                         setIsPlayingProvider { videoPlayer.isPlaying }
-                        setPlaybackSpeedProvider { currentPlaySpeed }
+                        // 用播放器实际速率，而不是配置里的速率：长按加速只改播放器速率
+                        setPlaybackSpeedProvider { videoPlayer.speed }
                         setMaskEnabled(videoPlayerConfigData.currentDanmakuMask)
                         setMaskSegments(videoPlayerDanmakuMaskData.danmakuMasks.toList())
                         setConfig(danmakuConfig)

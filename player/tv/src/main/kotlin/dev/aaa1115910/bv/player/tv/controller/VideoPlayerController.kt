@@ -40,6 +40,7 @@ import androidx.tv.material3.Text
 import dev.aaa1115910.biliapi.entity.video.Subtitle
 import dev.aaa1115910.bv.player.AbstractVideoPlayer
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LiveCodec
@@ -125,6 +126,7 @@ fun VideoPlayerController(
     onLoadNextVideo: (Boolean) -> Unit,
     openPlayListRequestToken: Long = 0L,
     onDebugInfoChange: (Boolean) -> Unit = {},
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit = {},
 
     onRequestFocus: () -> Unit,
     onShowComment: () -> Unit = {},
@@ -740,7 +742,8 @@ fun VideoPlayerController(
             onSubtitleBackgroundOpacityChange = onSubtitleBackgroundOpacityChange,
             onSubtitleBottomPadding = onSubtitleBottomPadding,
             onPlayModeChange = onPlayModeChange,
-            onDebugInfoChange = onDebugInfoChange
+            onDebugInfoChange = onDebugInfoChange,
+            onAudioBalanceLevelChange = onAudioBalanceLevelChange
         )
         // 缓存底部进度条显示条件，避免频繁计算
         val shouldShowBottomProgressBar by remember { 

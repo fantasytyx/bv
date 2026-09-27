@@ -416,20 +416,6 @@ fun ControllerVideoInfoBottom(
                 visible = !isLive
             ),
             ControlButton(
-                id = "resolution",
-                text = currentQualityText,
-                onClick = { showQualityDialog = true },
-                width = 46,
-                visible = (isLive && availableLiveQualities.isNotEmpty()) || (!isLive && availableResolutions.isNotEmpty())
-            ),
-            ControlButton(
-                id = "audio",
-                text = currentAudioText,
-                onClick = { showAudioDialog = true },
-                width = 50,
-                visible = !isLive && availableAudio.size > 1
-            ),
-            ControlButton(
                 id = "upSpace",
                 painterId = upSpaceIconId,
                 scale = 0.72f,
@@ -501,6 +487,20 @@ fun ControllerVideoInfoBottom(
                 icon = Icons.Outlined.Settings,
                 onClick = onOpenSetting,
                 scale = 0.9f
+            ),
+            ControlButton(
+                id = "resolution",
+                text = currentQualityText,
+                onClick = { showQualityDialog = true },
+                width = 46,
+                visible = (isLive && availableLiveQualities.isNotEmpty()) || (!isLive && availableResolutions.isNotEmpty())
+            ),
+            ControlButton(
+                id = "audio",
+                text = currentAudioText,
+                onClick = { showAudioDialog = true },
+                width = 50,
+                visible = !isLive && availableAudio.size > 1
             )
         )
 

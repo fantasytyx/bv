@@ -21,6 +21,7 @@ import dev.aaa1115910.bv.entity.NavSwitchMode
 import dev.aaa1115910.bv.entity.PlayerType
 import dev.aaa1115910.bv.entity.ThemeType
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.danmaku.DanmakuLaneDensity
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LiveCodec
@@ -577,6 +578,19 @@ object Prefs {
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefEnableScreenRefreshRateMatchingRequest).first() }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefEnableScreenRefreshRateMatching, value) }
 
+    var playerSkipSilence: Boolean
+        get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefPlayerSkipSilenceRequest).first() }
+        set(value) = runBlocking { dsm.editPreference(PrefKeys.prefPlayerSkipSilenceKey, value) }
+
+    var playerAudioBalanceLevel: AudioBalanceLevel
+        get() = runBlocking {
+            val ordinal = dsm.getPreferenceFlow(PrefKeys.prefPlayerAudioBalanceLevelRequest).first()
+            AudioBalanceLevel.entries.getOrElse(ordinal) { AudioBalanceLevel.Off }
+        }
+        set(value) = runBlocking {
+            dsm.editPreference(PrefKeys.prefPlayerAudioBalanceLevelKey, value.ordinal)
+        }
+
     var skipPgcIntroOutro: Boolean
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefSkipPgcIntroOutroRequest).first() }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefSkipPgcIntroOutroKey, value) }
@@ -697,6 +711,8 @@ object PrefKeys {
     val prefCachedLiveAreaGroupsKey = stringPreferencesKey("cached_live_area_groups")
     val prefEnableAsyncQueueing = booleanPreferencesKey("enable_async_queueing")
     val prefEnableScreenRefreshRateMatching = booleanPreferencesKey("enable_screen_refresh_rate_matching")
+    val prefPlayerSkipSilenceKey = booleanPreferencesKey("player_skip_silence")
+    val prefPlayerAudioBalanceLevelKey = intPreferencesKey("player_audio_balance_level")
     val prefSkipPgcIntroOutroKey = booleanPreferencesKey("skip_pgc_intro_outro")
     val prefPlayerControllerButtonsOrderKey = stringPreferencesKey("player_controller_buttons_order")
     val prefUgcVideoInfoHistoryCountKey = intPreferencesKey("ugc_video_info_history_count")
@@ -802,6 +818,9 @@ object PrefKeys {
     val prefCachedLiveAreaGroupsRequest = PreferenceRequest(prefCachedLiveAreaGroupsKey, "")
     val prefEnableAsyncQueueingRequest = PreferenceRequest(prefEnableAsyncQueueing, false)
     val prefEnableScreenRefreshRateMatchingRequest = PreferenceRequest(prefEnableScreenRefreshRateMatching, false)
+    val prefPlayerSkipSilenceRequest = PreferenceRequest(prefPlayerSkipSilenceKey, true)
+    val prefPlayerAudioBalanceLevelRequest =
+        PreferenceRequest(prefPlayerAudioBalanceLevelKey, AudioBalanceLevel.Off.ordinal)
     val prefSkipPgcIntroOutroRequest = PreferenceRequest(prefSkipPgcIntroOutroKey, false)
     val prefPlayerControllerButtonsOrderRequest = PreferenceRequest(prefPlayerControllerButtonsOrderKey, "")
     val prefUgcVideoInfoHistoryCountRequest = PreferenceRequest(prefUgcVideoInfoHistoryCountKey, 2)

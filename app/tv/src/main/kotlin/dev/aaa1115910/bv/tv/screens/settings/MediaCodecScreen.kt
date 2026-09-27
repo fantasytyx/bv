@@ -46,6 +46,7 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.R
+import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.CodecInfoData
 import dev.aaa1115910.bv.util.CodecMedia
@@ -55,6 +56,8 @@ import dev.aaa1115910.bv.util.CodecUtil
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.util.swapList
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun MediaCodecScreen(
@@ -68,13 +71,17 @@ fun MediaCodecScreen(
 
     var currentCodecInfoData by remember { mutableStateOf<CodecInfoData?>(null) }
     var focusInNav by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
 
     val decoderList = remember { mutableStateListOf<CodecInfoData>() }
 
     LaunchedEffect(Unit) {
-        val list = CodecUtil.parseCodecs().filter { it.type == CodecType.Decoder }
+        val list = withContext(Dispatchers.IO) {
+            CodecUtil.parseCodecs().filter { it.type == CodecType.Decoder }
+        }
         decoderList.swapList(list)
         currentCodecInfoData = list.firstOrNull()
+        isLoading = false
     }
 
     Scaffold(
@@ -123,6 +130,7 @@ fun MediaCodecScreen(
                     .weight(5f)
                     .fillMaxSize(),
                 onBackNav = { focusInNav = true },
+                isLoading = isLoading,
                 currentCodecInfoData = currentCodecInfoData
             )
         }
@@ -155,7 +163,7 @@ fun MediaCodecListItems(
     ) {
         itemsIndexed(
             items = codecInfoDataList,
-            key = { index, codecInfoData -> "$index-$codecInfoData" }
+            key = { index, codecInfoData -> "$index-${codecInfoData.name}" }
         ) { _, codecInfoData ->
             val buttonModifier = if (currentCodecInfoData == codecInfoData) Modifier
                 .focusRequester(focusRequester)
@@ -222,6 +230,7 @@ fun MediaCodecListItem(
 fun MediaCodecDetails(
     modifier: Modifier = Modifier,
     onBackNav: () -> Unit,
+    isLoading: Boolean,
     currentCodecInfoData: CodecInfoData?
 ) {
     val context = LocalContext.current
@@ -350,7 +359,11 @@ fun MediaCodecDetails(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = stringResource(R.string.codec_list_empty))
+            if (isLoading) {
+                LoadingTip()
+            } else {
+                Text(text = stringResource(R.string.codec_list_empty))
+            }
         }
     }
 }
@@ -383,9 +396,7 @@ private val previewCodecInfoData = CodecInfoData(
     colorFormats = listOf(21, 19, 20),
     audioBitrateRange = 0..0,
     videoBitrateRange = 0..0,
-    videoFrame = 0..0,
-    supportedFrameRates = emptyList(),
-    achievableFrameRates = emptyList()
+    videoFrame = 0..0
 )
 
 @Preview(device = "id:tv_1080p")
@@ -406,7 +417,8 @@ private fun MediaCodecDetailsPreview() {
     BVTheme {
         MediaCodecDetails(
             currentCodecInfoData = previewCodecInfoData,
-            onBackNav = {}
+            onBackNav = {},
+            isLoading = false
         )
     }
 }

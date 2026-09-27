@@ -33,6 +33,17 @@ import kotlinx.coroutines.withContext
 private val ActionedColor = Color(0xfffb7299)
 
 /**
+ * 视频操作菜单的额外菜单项
+ *
+ * @param item 菜单项
+ * @param index 插入位置，0 为菜单最前面；超出范围时落到末尾
+ */
+data class VideoActionMenuExtraItem(
+    val item: CardActionMenuItem,
+    val index: Int = Int.MAX_VALUE
+)
+
+/**
  * UGC 视频卡片操作菜单
  *
  * @param show 是否显示
@@ -43,7 +54,7 @@ private val ActionedColor = Color(0xfffb7299)
  * @param onDismiss 关闭回调
  * @param onDelete 删除操作回调，不为 null 时显示删除菜单项
  * @param deleteLabel 删除菜单项文案，默认"删除"
- * @param extraItems 额外的操作项（CardActionMenuItem），显示在菜单顶部（第一项默认获得焦点）
+ * @param extraItems 额外的操作项，按各自 index 插入到固定菜单项之间
  */
 @Composable
 fun VideoActionMenu(
@@ -55,7 +66,7 @@ fun VideoActionMenu(
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
     deleteLabel: String = "删除",
-    extraItems: List<CardActionMenuItem> = emptyList()
+    extraItems: List<VideoActionMenuExtraItem> = emptyList()
 ) {
     if (!show) return
 
@@ -83,7 +94,6 @@ fun VideoActionMenu(
         show = show,
         onDismiss = onDismiss,
         items = buildList {
-            addAll(extraItems)
             add(
                 CardActionMenuItem(
                     icon = Icons.Rounded.Person,
@@ -165,6 +175,9 @@ fun VideoActionMenu(
                     )
                 )
             }
+        }.toMutableList().apply {
+            // 按 extraItems 顺序依次插入，越界时落到末尾
+            extraItems.forEach { extra -> add(extra.index.coerceIn(0, size), extra.item) }
         },
         // 收藏夹选择对话框（叠加在菜单之上，仅登录后可用）
         overlay = {

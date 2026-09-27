@@ -239,6 +239,8 @@ class VideoPlayerV3Activity : ComponentActivity() {
             enableFfmpegAudioRenderer = Prefs.enableFfmpegAudioRenderer,
             enableAsyncQueueing = Prefs.enableAsyncQueueing,
             enableScreenRefreshRateMatching = Prefs.enableScreenRefreshRateMatching,
+            enableSkipSilence = Prefs.playerSkipSilence,
+            audioBalanceLevel = Prefs.playerAudioBalanceLevel,
             cdnSpeedRecorder = CdnSpeedStore
         )
         val videoPlayer = when (Prefs.playerType) {

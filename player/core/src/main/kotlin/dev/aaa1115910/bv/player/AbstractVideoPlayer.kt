@@ -1,5 +1,7 @@
 package dev.aaa1115910.bv.player
 
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
+
 abstract class AbstractVideoPlayer {
     /** 播放器事件回调 */
     protected var mPlayerEventListener: VideoPlayerListener? = null
@@ -80,6 +82,9 @@ abstract class AbstractVideoPlayer {
 
     /** 播放速度 */
     abstract var speed: Float
+
+    /** 设置音量均衡挡位，可播放中动态切换 */
+    open fun setAudioBalanceLevel(level: AudioBalanceLevel) {}
 
     /** 当前缓冲的网速 */
     abstract val tcpSpeed: Long

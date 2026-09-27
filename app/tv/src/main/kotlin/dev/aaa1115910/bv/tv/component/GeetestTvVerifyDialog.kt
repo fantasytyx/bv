@@ -12,7 +12,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -26,7 +29,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -115,17 +117,11 @@ private fun GeetestTvVerifyContent(
     val density = LocalDensity.current
     val focusRequester = remember { FocusRequester() }
 
-    // WebView 容器实际像素尺寸
-    var containerWidthPx by remember { mutableFloatStateOf(0f) }
-    var containerHeightPx by remember { mutableFloatStateOf(0f) }
-
-    // 光标位置 (像素坐标，相对于 WebView 容器)
-    var cursorX by remember { mutableFloatStateOf(0f) }
-    var cursorY by remember { mutableFloatStateOf(0f) }
-    var cursorInitialized by remember { mutableStateOf(false) }
-
     // 状态提示
     var statusText by remember { mutableStateOf("正在加载验证码…") }
+
+    // 计时起点，仅用于日志：定位"验证内容迟迟不显示"发生在哪一步
+    val startMs = remember { SystemClock.uptimeMillis() }
 
     // WebView 引用
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -136,15 +132,6 @@ private fun GeetestTvVerifyContent(
     // 移动步长
     val baseStep = with(density) { 6.dp.toPx() }
     val fastStep = with(density) { 20.dp.toPx() }
-
-    // 初始化光标到中心
-    LaunchedEffect(containerWidthPx, containerHeightPx) {
-        if (containerWidthPx > 0 && containerHeightPx > 0 && !cursorInitialized) {
-            cursorX = containerWidthPx / 2f
-            cursorY = containerHeightPx / 2f
-            cursorInitialized = true
-        }
-    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -163,23 +150,17 @@ private fun GeetestTvVerifyContent(
         }
     }
 
-    fun clampCursor() {
-        cursorX = cursorX.coerceIn(0f, containerWidthPx)
-        cursorY = cursorY.coerceIn(0f, containerHeightPx)
-    }
-
+    // 光标位置由覆盖层自己持有：移动光标不写 Compose 状态，因此方向键连按
+    // （每秒十余次）不会触发弹窗重组 + WebView 重新测量
     fun moveCursor(dx: Float, dy: Float, fast: Boolean) {
         val step = if (fast) fastStep else baseStep
-        cursorX += dx * step
-        cursorY += dy * step
-        clampCursor()
+        overlayRef?.moveBy(dx * step, dy * step)
     }
 
     fun dispatchClickToWebView() {
         val wv = webViewRef ?: return
+        val (x, y) = overlayRef?.cursorPosition() ?: return
         val now = SystemClock.uptimeMillis()
-        val x = cursorX
-        val y = cursorY
         val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
         val up = MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, x, y, 0)
         wv.dispatchTouchEvent(down)
@@ -269,6 +250,21 @@ private fun GeetestTvVerifyContent(
                         isFocusable = false
                         isFocusableInTouchMode = false
                         webChromeClient = WebChromeClient()
+                        // 只做计时/报错：gt.js 是 head 里的阻塞脚本，它没下完 JS 就不会执行，
+                        // 界面会一直停在"正在加载验证码…"（onPageFinished 覆盖到这一步）
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                logger.info { "Geetest page finished at +${SystemClock.uptimeMillis() - startMs}ms" }
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?,
+                            ) {
+                                logger.warn { "Geetest page error: ${error?.errorCode} ${error?.description}" }
+                            }
+                        }
 
                         addJavascriptInterface(
                             object {
@@ -294,7 +290,10 @@ private fun GeetestTvVerifyContent(
 
                                 @JavascriptInterface
                                 fun onStatusUpdate(text: String?) {
-                                    text?.let { statusText = it }
+                                    text?.let {
+                                        logger.info { "Geetest status at +${SystemClock.uptimeMillis() - startMs}ms: $it" }
+                                        statusText = it
+                                    }
                                 }
                             },
                             "Android"
@@ -328,17 +327,6 @@ private fun GeetestTvVerifyContent(
                         addView(overlay)
                     }
                 },
-                update = { frame ->
-                    val wv = webViewRef ?: return@AndroidView
-                    wv.post {
-                        if (wv.width > 0 && wv.height > 0) {
-                            containerWidthPx = wv.width.toFloat()
-                            containerHeightPx = wv.height.toFloat()
-                        }
-                    }
-                    // 更新覆盖层光标位置
-                    overlayRef?.setCursorPosition(cursorX, cursorY)
-                },
             )
         }
 
@@ -359,6 +347,7 @@ private fun GeetestTvVerifyContent(
 private class CrosshairOverlayView(context: Context) : View(context) {
     private var cx = 0f
     private var cy = 0f
+    private var centered = false
 
     private val density = context.resources.displayMetrics.density
     private val armLen = 18f * density
@@ -394,15 +383,40 @@ private class CrosshairOverlayView(context: Context) : View(context) {
         pathEffect = DashPathEffect(floatArrayOf(6f * density, 4f * density), 0f)
     }
 
-    fun setCursorPosition(x: Float, y: Float) {
-        cx = x
-        cy = y
+    /** 相对移动，越界贴边 */
+    fun moveBy(dx: Float, dy: Float) {
+        centerIfNeeded()
+        cx = (cx + dx).coerceIn(0f, width.toFloat())
+        cy = (cy + dy).coerceIn(0f, height.toFloat())
         invalidate()
+    }
+
+    /** 未完成首次布局时返回 null（此时点击没有意义） */
+    fun cursorPosition(): Pair<Float, Float>? {
+        centerIfNeeded()
+        return if (centered) cx to cy else null
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (centered) {
+            cx = cx.coerceIn(0f, w.toFloat())
+            cy = cy.coerceIn(0f, h.toFloat())
+        }
+        centerIfNeeded()
+        invalidate()
+    }
+
+    private fun centerIfNeeded() {
+        if (centered || width <= 0 || height <= 0) return
+        cx = width / 2f
+        cy = height / 2f
+        centered = true
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (cx == 0f && cy == 0f) return
+        if (!centered) return
 
         // 阴影线
         canvas.drawLine(cx, cy - gap - armLen, cx, cy - gap, shadowPaint)

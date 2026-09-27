@@ -78,6 +78,11 @@
     <string name="video_player_menu_nav_subtitle">字幕设置</string>
     <string name="video_player_menu_others_play_mode">播放模式</string>
     <string name="video_player_menu_others_debug_info">调试信息</string>
+    <string name="video_player_menu_others_audio_balance">音量均衡</string>
+    <string name="video_player_menu_audio_balance_off">关闭</string>
+    <string name="video_player_menu_audio_balance_low">低</string>
+    <string name="video_player_menu_audio_balance_medium">中</string>
+    <string name="video_player_menu_audio_balance_high">高</string>
     <string name="video_player_menu_picture_aspect_ratio">画面比例</string>
     <string name="video_player_menu_picture_audio">音频编码</string>
     <string name="video_player_menu_picture_codec">视频编码</string>

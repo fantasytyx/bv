@@ -15,6 +15,8 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.MediaSource
@@ -24,7 +26,9 @@ import androidx.media3.exoplayer.video.VideoRendererEventListener
 import dev.aaa1115910.bv.player.AbstractVideoPlayer
 import dev.aaa1115910.bv.player.OkHttpUtil
 import dev.aaa1115910.bv.player.VideoPlayerOptions
+import dev.aaa1115910.bv.player.audio.VolumeBalanceAudioProcessor
 import dev.aaa1115910.bv.player.cdn.CdnFailoverDataSourceFactory
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.util.formatHourMinSec
 
 /**
@@ -58,13 +62,15 @@ class ExoMediaPlayer(
             options.referer?.let { setDefaultRequestProperties(mapOf("referer" to it)) }
         }
 
+    private val volumeBalanceProcessor = VolumeBalanceAudioProcessor(options.audioBalanceLevel)
+
     init {
         initPlayer()
     }
 
     @OptIn(UnstableApi::class)
     override fun initPlayer() {
-        val renderersFactory = BvRenderersFactory(context).apply {
+        val renderersFactory = BvRenderersFactory(context, volumeBalanceProcessor).apply {
             setExtensionRendererMode(
                 when (options.enableFfmpegAudioRenderer) {
                     true -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
@@ -101,6 +107,7 @@ class ExoMediaPlayer(
             .Builder(context)
             .setRenderersFactory(renderersFactory)
             .setLoadControl(loadControl)
+            .setSkipSilenceEnabled(options.enableSkipSilence)
             .setSeekForwardIncrementMs(1000 * 10)
             .setSeekBackIncrementMs(1000 * 10)
             .setVideoChangeFrameRateStrategy(
@@ -151,8 +158,10 @@ class ExoMediaPlayer(
                 .setUri(uri)
                 .setLiveConfiguration(
                     MediaItem.LiveConfiguration.Builder()
-                        .setTargetOffsetMs(5000)
-                        .setMaxPlaybackSpeed(1.02f)
+                        .setMinOffsetMs(2000)
+                        .setMaxOffsetMs(15000)
+                        .setMinPlaybackSpeed(0.95f)
+                        .setMaxPlaybackSpeed(1.05f)
                         .build()
                 )
                 .build()
@@ -245,6 +254,11 @@ class ExoMediaPlayer(
         set(value) {
             mPlayer?.setPlaybackSpeed(value)
         }
+
+    override fun setAudioBalanceLevel(level: AudioBalanceLevel) {
+        volumeBalanceProcessor.setLevel(level)
+    }
+
     override val tcpSpeed: Long
         get() = 0L
 
@@ -426,23 +440,23 @@ class ExoMediaPlayer(
         }
         return when (deviceTier) {
             DeviceTier.LOW -> BufferConfig(
-                minBufferMs = 7000,   // 7秒最小缓冲
+                minBufferMs = if(isLive) 2000 else 7000,   // 7秒最小缓冲
                 maxBufferMs = 11000,  // 11秒最大缓冲
                 backBufferMs = 0, // 0秒回退缓冲
                 targetBufferBytes = calculateBufferSize(availableMemory, 0.08, 5, 50), // 8%内存，5-50MB
                 prioritizeTime = false // 改为优先大小限制，严格控制内存使用
             )
             DeviceTier.MID -> BufferConfig(
-                minBufferMs = 11000,  // 11秒最小缓冲
+                minBufferMs = if(isLive) 2000 else 11000,  // 11秒最小缓冲
                 maxBufferMs = 16000,  // 16秒最大缓冲
                 backBufferMs = 0, // 0秒回退缓冲
                 targetBufferBytes = calculateBufferSize(availableMemory, 0.13, 5, 150), // 13%内存，5-150MB
                 prioritizeTime = false
             )
             DeviceTier.HIGH -> BufferConfig(
-                minBufferMs = 12000,  // 12秒最小缓冲
+                minBufferMs = if(isLive) 2000 else 12000,  // 12秒最小缓冲
                 maxBufferMs = 22000,  // 22秒最大缓冲
-                backBufferMs = 11000, // 11秒回退缓冲
+                backBufferMs = if(isLive) 0 else 11000, // 11秒回退缓冲
                 targetBufferBytes = calculateBufferSize(availableMemory, 0.18, 10, 300), // 18%内存，10-300MB
                 prioritizeTime = false
             )
@@ -483,7 +497,22 @@ class ExoMediaPlayer(
  * 且其调用 RendererCapabilities.create 在未混淆构建下会抛 NoSuchMethodError 导致进播放页崩溃。
  */
 @OptIn(UnstableApi::class)
-private class BvRenderersFactory(context: Context) : DefaultRenderersFactory(context) {
+private class BvRenderersFactory(
+    context: Context,
+    private val volumeBalanceProcessor: VolumeBalanceAudioProcessor
+) : DefaultRenderersFactory(context) {
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean
+    ): AudioSink {
+        return DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+            .setAudioProcessors(arrayOf(volumeBalanceProcessor))
+            .build()
+    }
+
     override fun buildVideoRenderers(
         context: Context,
         extensionRendererMode: Int,

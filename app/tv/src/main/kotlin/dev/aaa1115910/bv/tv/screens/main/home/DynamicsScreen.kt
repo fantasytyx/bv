@@ -49,6 +49,7 @@ import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.CardActionMenuItem
+import dev.aaa1115910.bv.tv.component.VideoActionMenuExtraItem
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.onMenuKeyDown
@@ -241,9 +242,11 @@ fun DynamicsScreen(
             upFace = menuUpFace,
             onDismiss = { showVideoActionMenu = false },
             extraItems = listOf(
-                CardActionMenuItem(icon = Icons.Rounded.People, text = "已关注 UP 列表") {
-                    context.startActivity(Intent(context, FollowActivity::class.java))
-                }
+                VideoActionMenuExtraItem(
+                    CardActionMenuItem(icon = Icons.Rounded.People, text = "已关注 UP 列表") {
+                        context.startActivity(Intent(context, FollowActivity::class.java))
+                    }
+                )
             )
         )
     } else {

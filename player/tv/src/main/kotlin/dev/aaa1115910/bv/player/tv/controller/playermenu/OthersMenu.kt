@@ -26,6 +26,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerConfigData
 import dev.aaa1115910.bv.player.entity.PlayMode
 import dev.aaa1115910.bv.player.entity.VideoPlayerOthersMenuItem
@@ -39,6 +40,7 @@ import dev.aaa1115910.bv.util.ifElse
 fun OthersMenuList(
     modifier: Modifier = Modifier,
     onPlayModeChange: (PlayMode) -> Unit,
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit = {},
     onDebugInfoChange: (Boolean) -> Unit = {},
     onFocusStateChange: (MenuFocusState) -> Unit
 ) {
@@ -74,6 +76,20 @@ fun OthersMenuList(
                         items = availableModes.map { it.getDisplayName(context) },
                         selected = availableModes.indexOf(effectivePlayMode),
                         onSelectedChanged = { onPlayModeChange(availableModes[it]) },
+                        onFocusBackToParent = {
+                            onFocusStateChange(MenuFocusState.Menu)
+                            parentMenuFocusRequester.requestFocus()
+                        }
+                    )
+                }
+
+                VideoPlayerOthersMenuItem.AudioBalance -> {
+                    val options = AudioBalanceLevel.ordered
+                    RadioMenuList(
+                        modifier = menuItemsModifier,
+                        items = options.map { it.getDisplayName(context) },
+                        selected = options.indexOf(videoPlayerConfigData.audioBalanceLevel).coerceAtLeast(0),
+                        onSelectedChanged = { onAudioBalanceLevelChange(options[it]) },
                         onFocusBackToParent = {
                             onFocusStateChange(MenuFocusState.Menu)
                             parentMenuFocusRequester.requestFocus()

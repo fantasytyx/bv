@@ -17,6 +17,10 @@ object LogCatcherUtil {
     private const val MAX_LOG_COUNT = 10
     private const val PREFS_READ_TIMEOUT_MS = 1500L
 
+    // libc 对受限属性（debug.stagefright.* 等）的每次读取都会刷一条 Access denied，
+    // 播放时可达每秒数十条，日志里没有保留价值
+    private val LIBC_ACCESS_DENIED = Regex(""" W libc\s+: Access denied finding property """)
+
     private lateinit var appContext: Context
     var manualFiles: List<File> = emptyList()
     var crashFiles: List<File> = emptyList()
@@ -133,7 +137,9 @@ object LogCatcherUtil {
             .start()
         try {
             process.inputStream.bufferedReader().use { reader ->
-                reader.forEachLine { appendLine(it) }
+                reader.forEachLine { line ->
+                    if (!LIBC_ACCESS_DENIED.containsMatchIn(line)) appendLine(line)
+                }
             }
         } finally {
             runCatching { process.destroy() }

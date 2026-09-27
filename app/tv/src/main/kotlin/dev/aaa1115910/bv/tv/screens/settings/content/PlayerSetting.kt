@@ -44,6 +44,7 @@ import androidx.tv.material3.RadioButton
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.PortraitVideoFixMode
 import dev.aaa1115910.bv.player.entity.PlayerLoadNextAction
 import dev.aaa1115910.bv.player.entity.PlayerDefaultStartPosition
@@ -93,6 +94,8 @@ fun PlayerSetting(
     val showLiveViewerCountTip by Prefs.showLiveViewerCountTipFlow.collectAsStateLazily { Prefs.showLiveViewerCountTip }
     var enableAsyncQueueing by remember { mutableStateOf(Prefs.enableAsyncQueueing) }
     var enableScreenRefreshRateMatching by remember { mutableStateOf(Prefs.enableScreenRefreshRateMatching) }
+    var playerSkipSilence by remember { mutableStateOf(Prefs.playerSkipSilence) }
+    var playerAudioBalanceLevel by remember { mutableStateOf(Prefs.playerAudioBalanceLevel) }
     var skipPgcIntroOutro by remember { mutableStateOf(Prefs.skipPgcIntroOutro) }
     var showControllerButtonDialog by remember { mutableStateOf(false) }
     var defaultSubtitle by remember { mutableStateOf(Prefs.defaultSubtitle) }
@@ -182,6 +185,30 @@ fun PlayerSetting(
                     onCheckedChange = {
                         enableFfmpegAudioRenderer = it
                         Prefs.enableFfmpegAudioRenderer = it
+                    }
+                )
+            }
+            item {
+                SettingSwitchListItem(
+                    title = "跳过静音",
+                    supportText = "自动跳过音频中的静音段，高倍速播放（2 倍以上）时减少语音失真；对连续说话或无静音的视频无效",
+                    checked = playerSkipSilence,
+                    onCheckedChange = {
+                        playerSkipSilence = it
+                        Prefs.playerSkipSilence = it
+                    }
+                )
+            }
+            item {
+                SettingListItemWithDialog(
+                    title = "音量均衡",
+                    supportText = "统一不同视频的响度，只做整体增益与峰值软限制，不改变音调与音色；播放中也可在播放器菜单里调整",
+                    options = AudioBalanceLevel.ordered,
+                    getDisplayName = { item, ctx -> item.getDisplayName(ctx) },
+                    value = playerAudioBalanceLevel,
+                    onValueChange = {
+                        Prefs.playerAudioBalanceLevel = it
+                        playerAudioBalanceLevel = it
                     }
                 )
             }

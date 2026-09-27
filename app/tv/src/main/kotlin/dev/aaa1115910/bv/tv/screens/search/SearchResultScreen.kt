@@ -65,6 +65,7 @@ import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.component.TopNavItem
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.CardActionMenuItem
+import dev.aaa1115910.bv.tv.component.VideoActionMenuExtraItem
 import dev.aaa1115910.bv.tv.component.live.LiveRoomCard
 import dev.aaa1115910.bv.tv.screens.user.UpCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
@@ -400,7 +401,10 @@ fun SearchResultScreen(
         onDismiss = { menuVideo = null },
         extraItems = if (filterAvailable) {
             listOf(
-                CardActionMenuItem(icon = Icons.Rounded.Tune, text = "筛选") { showFilter = true }
+                VideoActionMenuExtraItem(
+                    item = CardActionMenuItem(icon = Icons.Rounded.Tune, text = "筛选") { showFilter = true },
+                    index = 0
+                )
             )
         } else {
             emptyList()

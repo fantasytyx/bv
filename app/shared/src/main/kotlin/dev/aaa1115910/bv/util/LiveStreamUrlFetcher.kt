@@ -265,7 +265,7 @@ object LiveStreamUrlFetcher {
                     selectBestCodec(format.codec)
                 } ?: continue
                 val urlInfo = selectUrlInfo(codec.urlInfo, preferredLineIndex) ?: continue
-                val lineIndex = codec.urlInfo.indexOf(urlInfo).coerceAtLeast(0)
+                val lineIndex = resolveLineIndex(codec, urlInfo, preferredLineIndex)
                 val fullUrl = "${urlInfo.host}${codec.baseUrl}${urlInfo.extra}"
                 val expiresAt = parseExpiresFromExtra(urlInfo.extra)
                 logger.debug { "Built URL with format $formatName, codec ${codec.codecName}: $fullUrl" }
@@ -289,7 +289,7 @@ object LiveStreamUrlFetcher {
                     selectBestCodec(format.codec)
                 } ?: continue
                 val urlInfo = selectUrlInfo(codec.urlInfo, preferredLineIndex) ?: continue
-                val lineIndex = codec.urlInfo.indexOf(urlInfo).coerceAtLeast(0)
+                val lineIndex = resolveLineIndex(codec, urlInfo, preferredLineIndex)
                 val fullUrl = "${urlInfo.host}${codec.baseUrl}${urlInfo.extra}"
                 val expiresAt = parseExpiresFromExtra(urlInfo.extra)
                 logger.debug { "Built URL with fallback format ${format.formatName}, codec ${codec.codecName}: $fullUrl" }
@@ -314,6 +314,20 @@ object LiveStreamUrlFetcher {
             ?.let { urlInfos[it] }
             ?: selectBestUrlInfo(urlInfos)
     }
+
+    /**
+     * 计算实际生效的线路序号。
+     *
+     * 用户指定线路时直接沿用请求的序号：`url_info` 若出现重复项，`indexOf` 只会返回第一个，
+     * 界面上的线路标记就一直停在“线路 1”，看起来像切换线路没生效。
+     */
+    private fun resolveLineIndex(
+        codec: ApiLiveCodec,
+        urlInfo: LiveUrlInfo,
+        preferredLineIndex: Int?
+    ): Int = preferredLineIndex
+        ?.coerceIn(0, codec.urlInfo.lastIndex)
+        ?: codec.urlInfo.indexOf(urlInfo).coerceAtLeast(0)
 
     private fun selectBestUrlInfo(urlInfos: List<LiveUrlInfo>): LiveUrlInfo? =
         urlInfos.maxWithOrNull(

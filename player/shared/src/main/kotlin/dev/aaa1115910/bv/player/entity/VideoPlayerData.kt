@@ -157,6 +157,7 @@ data class VideoPlayerConfigData(
     val availableLiveLines: List<LiveStreamLine> = emptyList(),
     val currentLiveLineIndex: Int = 0,
     val showDebugInfo: Boolean = false,
+    val audioBalanceLevel: AudioBalanceLevel = AudioBalanceLevel.Off,
     val longPressAction: Int = 0, // 0 = 打开菜单, 1 = 加速播放
     val longPressSpeed: Float = 2f,
 )

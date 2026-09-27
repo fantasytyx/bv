@@ -52,6 +52,7 @@ import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.CardActionMenuItem
+import dev.aaa1115910.bv.tv.component.VideoActionMenuExtraItem
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
@@ -325,7 +326,9 @@ fun ToViewScreen(
         upFace = menuUpFace,
         onDismiss = { showVideoActionMenu = false },
         extraItems = listOf(
-            CardActionMenuItem(icon = Icons.Rounded.DeleteSweep, text = "批量删除") { deleteMode = true }
+            VideoActionMenuExtraItem(
+                CardActionMenuItem(icon = Icons.Rounded.DeleteSweep, text = "批量删除") { deleteMode = true }
+            )
         ),
         onDelete = {
             val nextIndex = if (currentIndex < toViewViewModel.histories.size - 1) currentIndex + 1 else currentIndex - 1

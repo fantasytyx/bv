@@ -31,7 +31,6 @@ fun MenuNavList(
         VideoPlayerMenuNavItem.entries.toMutableList().apply {
             if (videoPlayerConfigData.isLive) {
                 remove(VideoPlayerMenuNavItem.ClosedCaption)
-                remove(VideoPlayerMenuNavItem.Others)
             }
         }
     }

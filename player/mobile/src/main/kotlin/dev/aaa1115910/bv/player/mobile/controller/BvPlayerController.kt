@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import dev.aaa1115910.bv.player.entity.Audio
+import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
 import dev.aaa1115910.bv.player.entity.DanmakuType
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerConfigData
 import dev.aaa1115910.bv.player.entity.LocalVideoPlayerSeekData
@@ -95,6 +96,7 @@ fun BvPlayerController(
     onDanmakuScaleChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit,
     onPlayNewVideo: (VideoListItem) -> Unit,
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -193,6 +195,7 @@ fun BvPlayerController(
                 onDanmakuScaleChange = onDanmakuScaleChange,
                 onDanmakuAreaChange = onDanmakuAreaChange,
                 onPlayModeChange = onPlayModeChange,
+                onAudioBalanceLevelChange = onAudioBalanceLevelChange,
                 onPlayNewVideo = onPlayNewVideo
             )
         }
@@ -217,6 +220,7 @@ private fun BvPlayerControllerSettings(
     onDanmakuScaleChange: (Float) -> Unit,
     onDanmakuAreaChange: (Float) -> Unit,
     onPlayModeChange: (PlayMode) -> Unit,
+    onAudioBalanceLevelChange: (AudioBalanceLevel) -> Unit,
     onPlayNewVideo: (VideoListItem) -> Unit
 ) {
     MaterialDarkTheme {
@@ -268,7 +272,8 @@ private fun BvPlayerControllerSettings(
                 MenuType.More -> {
                     MoreMenu(
                         onClose = onCloseMenu,
-                        onPlayModeChange = onPlayModeChange
+                        onPlayModeChange = onPlayModeChange,
+                        onAudioBalanceLevelChange = onAudioBalanceLevelChange
                     )
                 }
             }
@@ -711,6 +716,7 @@ private fun BvPlayerControllerPreview() {
                 onDanmakuAreaChange = {},
                 onDanmakuScaleChange = {},
                 onPlayModeChange = {},
+                onAudioBalanceLevelChange = {},
                 onPlayNewVideo = {}
             ) {
                 Box(

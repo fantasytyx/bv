@@ -83,6 +83,8 @@ class VideoPlayerActivity : ComponentActivity() {
                 ApiType.Web -> getString(R.string.video_player_referer)
                 ApiType.App -> null
             },
+            enableSkipSilence = Prefs.playerSkipSilence,
+            audioBalanceLevel = Prefs.playerAudioBalanceLevel,
             cdnSpeedRecorder = CdnSpeedStore
         )
         val videoPlayer = when (Prefs.playerType) {
