@@ -40,7 +40,8 @@ fun handleGrpcException(it: Throwable) {
             val statusDetailsKey = Metadata.Key.of(
                 "grpc-status-details-bin", Metadata.BINARY_BYTE_MARSHALLER
             )
-            val data = it.trailers[statusDetailsKey]
+            val data = it.trailers?.get(statusDetailsKey)
+                ?: throw IllegalStateException("grpc-status-details-bin trailer is missing")
             val status = Status.parseFrom(data).getDetail()
             when (status) {
                 is bilibili.rpc.Status -> {

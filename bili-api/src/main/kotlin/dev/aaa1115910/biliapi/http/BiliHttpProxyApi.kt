@@ -5,71 +5,29 @@ import dev.aaa1115910.biliapi.http.entity.BiliResponse
 import dev.aaa1115910.biliapi.http.entity.search.SearchResultData
 import dev.aaa1115910.biliapi.http.entity.video.PlayUrlData
 import dev.aaa1115910.biliapi.http.entity.video.PlayUrlV2Data
-import dev.aaa1115910.biliapi.http.plugins.BiliUserAgent
-import dev.aaa1115910.biliapi.http.util.BiliDns
-import dev.aaa1115910.biliapi.http.util.encApiSign
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpRequestRetry
-import io.ktor.client.plugins.compression.ContentEncoding
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.URLProtocol
-import io.ktor.serialization.kotlinx.json.json
-import kotlinx.serialization.json.Json
 
 object BiliHttpProxyApi {
     private var client: HttpClient? = null
 
-    private val json = Json {
-        coerceInputValues = true
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
-
     fun createClient(proxyServer: String) {
-        client = HttpClient(OkHttp) {
-            engine {
-                config {
-                    dns(BiliDns)
-                }
-            }
-            BiliUserAgent()
-            install(ContentNegotiation) {
-                json(json)
-            }
-            install(ContentEncoding) {
-                deflate(1.0F)
-                gzip(0.9F)
-            }
-            install(HttpRequestRetry) {
-                retryOnException(maxRetries = 2)
-            }
-            defaultRequest {
-                url {
-                    val proxyServerSpilt = proxyServer.split(":")
-                    val endPoint = proxyServerSpilt.first()
-                    val port = proxyServerSpilt.getOrNull(1)?.toInt()
-                    host = endPoint
-                    if (endPoint == "127.0.0.1") {
-                        //local debug
-                        this.port = 8080
-                    } else {
-                        if (port != null) {
-                            this.port = port
-                        } else {
-                            protocol = URLProtocol.HTTPS
-                        }
-                    }
-                }
-            }
-        }.apply {
-            encApiSign()
-        }
+        val proxyServerSplit = proxyServer.split(":")
+        val endPoint = proxyServerSplit.first()
+        val port = proxyServerSplit.getOrNull(1)?.toInt()
+        val isLocalDebug = endPoint == "127.0.0.1"
+        client = BiliHttpClient.create(
+            host = endPoint,
+            port = if (isLocalDebug) 8080 else port,
+            // 未指定端口时才用 https；给了端口（含本地调试）沿用 http
+            protocol = if (isLocalDebug || port != null) URLProtocol.HTTP else URLProtocol.HTTPS,
+            addApiSign = true,
+            retryOnException = 2,
+        )
     }
 
     suspend fun getPgcVideoPlayUrl(

@@ -19,7 +19,6 @@ import dev.aaa1115910.biliapi.http.util.BiliDns
 import dev.aaa1115910.biliapi.http.util.BiliWebConf
 import dev.aaa1115910.biliapi.http.util.WebCookieManager
 import dev.aaa1115910.biliapi.repositories.AuthRepository
-import dev.aaa1115910.biliapi.repositories.BiliApiModule
 import dev.aaa1115910.biliapi.repositories.ChannelRepository
 import dev.aaa1115910.bv.dao.AppDatabase
 import dev.aaa1115910.bv.entity.AuthData
@@ -40,12 +39,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
-import org.koin.core.KoinApplication
+import org.koin.core.KoinApplication as KoinRuntimeApplication
 import org.koin.core.annotation.ComponentScan
+import org.koin.core.annotation.Configuration
+import org.koin.core.annotation.KoinApplication
 import org.koin.core.annotation.Module
-import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
-import org.koin.ksp.generated.module
+import org.koin.plugin.module.dsl.startKoin
 import org.slf4j.impl.HandroidLoggerAdapter
 
 class BVApp : Application() {
@@ -53,7 +53,7 @@ class BVApp : Application() {
         @SuppressLint("StaticFieldLeak")
         lateinit var context: Context
         lateinit var dataStoreManager: DataStoreManager
-        lateinit var koinApplication: KoinApplication
+        lateinit var koinApplication: KoinRuntimeApplication
         var instance: BVApp? = null
 
         fun getAppDatabase(context: Context = this.context) = AppDatabase.getDatabase(context)
@@ -77,10 +77,9 @@ class BVApp : Application() {
         dataStoreManager = DataStoreManager(applicationContext.dataStore)
         // 先在后台把 DataStore 读进内存，下面第一次读偏好时就不会在主线程做磁盘 I/O
         Prefs.warmUp()
-        koinApplication = startKoin {
+        koinApplication = startKoin<BVKoinApp> {
             androidLogger(if (BuildConfig.DEBUG) Level.ERROR else Level.NONE)
             androidContext(this@BVApp)
-            modules(AppModule().module)
         }
         initCoil()
         // Koin/Coil 初始化期间 DataStore 已加载完，这里的读取是内存命中
@@ -246,6 +245,10 @@ class BVApp : Application() {
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "Settings")
 
-@Module(includes = [BiliApiModule::class])
+@Module
+@Configuration
 @ComponentScan
 class AppModule
+
+@KoinApplication
+class BVKoinApp

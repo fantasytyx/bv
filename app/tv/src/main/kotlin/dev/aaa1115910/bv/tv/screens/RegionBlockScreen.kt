@@ -42,7 +42,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.ui.theme.BVTheme
-import okhttp3.internal.toHexString
 import qrcode.QRCode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -55,7 +54,7 @@ fun RegionBlockScreen(
     val context = LocalContext.current
     var qrImage by remember { mutableStateOf(ImageBitmap(1, 1, ImageBitmapConfig.Argb8888)) }
     val primaryColorHex =
-        "#" + MaterialTheme.colorScheme.surface.toArgb().toHexString().substring(2)
+        "#" + Integer.toHexString(MaterialTheme.colorScheme.surface.toArgb()).substring(2)
 
     var finishNumberTarget by remember { mutableIntStateOf(0) }
     val finishNumber by animateIntAsState(

@@ -21,7 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.koin.android.annotation.KoinViewModel
+import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
 class SearchResultViewModel(
@@ -66,6 +66,8 @@ class SearchResultViewModel(
     fun update() {
         resetPages()
         clearResults()
+        // 重新筛选后要重新加载，避免之前「当前页数量不足 20 条」把 hasMore 置 false 后不再请求
+        hasMore[searchType] = true
         viewModelScope.launch {
             loadMore(searchType, true)
         }
@@ -77,6 +79,8 @@ class SearchResultViewModel(
         mediaFtSearchResult.resetPage()
         biliUserSearchResult.resetPage()
         liveRoomSearchResult.resetPage()
+        // 实际请求用的是 pages，必须一起重置，否则重新筛选会请求到旧页码
+        SearchType.entries.forEach { pages[it] = SearchTypePage() }
     }
 
     private fun clearResults() {

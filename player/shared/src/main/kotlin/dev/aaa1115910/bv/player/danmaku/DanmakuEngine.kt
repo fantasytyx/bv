@@ -702,7 +702,7 @@ internal class DanmakuEngine(
         // 弹幕显示时长上限，避免长时间占轨。
         const val MAX_ROLLING_DURATION_MS = 20_000
         // 固定弹幕的基础停留时长（durationMultiplier = 1.0 时）。
-        const val FIXED_DURATION_MS = 5_000
+        const val FIXED_DURATION_MS = 5_500
         // 长弹幕允许比短弹幕更快，但最多只放大到短弹幕基准速度的这个倍数。
         const val MAX_LONG_SCROLL_SPEED_RATIO = 1.5f
         // 单帧最多尝试生成多少条到时弹幕，防止瞬时高峰拖垮 action 线程。

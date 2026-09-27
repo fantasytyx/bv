@@ -3,8 +3,6 @@ package dev.aaa1115910.biliapi.http
 import dev.aaa1115910.biliapi.BiliApiConstants
 import dev.aaa1115910.biliapi.http.entity.BiliResponse
 import dev.aaa1115910.biliapi.http.entity.biliplus.View
-import dev.aaa1115910.biliapi.http.plugins.BiliUserAgent
-import dev.aaa1115910.biliapi.http.util.BiliDns
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpRequestRetry
@@ -16,7 +14,6 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.URLProtocol
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
@@ -26,41 +23,17 @@ object BiliPlusHttpApi {
     private var endPoint: String = "www.biliplus.com"
     private lateinit var client: HttpClient
 
-    private val json = Json {
-        coerceInputValues = true
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json = BiliHttpClient.json
 
     init {
         createClient()
     }
 
     private fun createClient() {
-        client = HttpClient(OkHttp) {
-            engine {
-                config {
-                    dns(BiliDns)
-                }
-            }
-            BiliUserAgent()
-            install(ContentNegotiation) {
-                json(json)
-            }
-            install(ContentEncoding) {
-                deflate(1.0F)
-                gzip(0.9F)
-            }
-            install(HttpRequestRetry) {
-                retryOnException(maxRetries = 2)
-            }
-            defaultRequest {
-                url {
-                    host = endPoint
-                    protocol = URLProtocol.HTTPS
-                }
-            }
-        }
+        client = BiliHttpClient.create(
+            host = endPoint,
+            retryOnException = 2,
+        )
     }
 
     suspend fun view(

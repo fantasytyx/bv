@@ -32,10 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.R
+import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.viewmodel.TagViewModel
@@ -57,6 +59,14 @@ fun TagScreen(
     var menuUpId by remember { mutableLongStateOf(0L) }
     var menuUpName by remember { mutableStateOf("") }
     var menuUpFace by remember { mutableStateOf("") }
+
+    val openVideoMenu: (VideoCardData) -> Unit = { video ->
+        menuAid = video.avid
+        menuUpId = video.upId
+        menuUpName = video.upName
+        menuUpFace = video.upFace
+        showVideoActionMenu = true
+    }
 
     val showLargeTitle by remember { derivedStateOf { currentIndex < 4 } }
     val titleFontSize by animateFloatAsState(
@@ -122,7 +132,10 @@ fun TagScreen(
                         currentIndexProvider = { currentIndex },
                         itemCount = tagViewModel.topVideos.size,
                         columnCount = 4
-                    ),
+                    )
+                    .onMenuKeyDown {
+                        tagViewModel.topVideos.getOrNull(currentIndex)?.let(openVideoMenu)
+                    },
                 columns = GridCells.Fixed(4),
                 contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -142,11 +155,7 @@ fun TagScreen(
                                 VideoInfoActivity.actionStart(context, video.avid)
                             },
                             onLongClick = {
-                                menuAid = video.avid
-                                menuUpId = video.upId
-                                menuUpName = video.upName
-                                menuUpFace = video.upFace
-                                showVideoActionMenu = true
+                                openVideoMenu(video)
                             },
                             onFocus = {
                                 currentIndex = index

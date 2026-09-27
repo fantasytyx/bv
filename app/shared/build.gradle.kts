@@ -5,6 +5,7 @@ plugins {
     alias(gradleLibs.plugins.compose.compiler)
     alias(gradleLibs.plugins.google.ksp)
     alias(gradleLibs.plugins.google.protobuf)
+    alias(gradleLibs.plugins.koin.compiler)
     alias(gradleLibs.plugins.kotlin.serialization)
 }
 
@@ -93,7 +94,6 @@ java {
 dependencies {
     annotationProcessor(androidx.room.compiler)
     ksp(androidx.room.compiler)
-    ksp(libs.koin.ksp.compiler)
     api(androidx.activity.compose)
     api(androidx.core.ktx)
     api(androidx.core.splashscreen)

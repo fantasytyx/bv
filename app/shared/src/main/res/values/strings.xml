@@ -57,8 +57,9 @@
     <string name="favorite_button_text">收藏</string>
     <string name="favorite_dialog_title">选择收藏夹</string>
 
-    <string name="filter_dialog_open_tip">在列表区域长按确认键更改筛选</string>
+    <string name="filter_dialog_open_tip">长按确认键或按菜单键更改筛选</string>
     <string name="filter_dialog_open_tip_click">点击打开筛选</string>
+    <string name="search_video_card_menu_open_tip">长按确认键或按菜单键打开视频卡片菜单</string>
     <string name="filter_dialog_reset">重置筛选</string>
     <string name="filter_dialog_title">筛选</string>
 
@@ -354,9 +355,9 @@
     <string name="following_season_delete_confirm_dialog_dismiss">取消</string>
     <string name="following_season_delete_success">取消追番成功</string>
     <string name="following_season_delete_failed">取消追番失败</string>
-    <string name="delete_mode_hint">在列表区域按菜单键进入删除模式</string>
+    <string name="delete_mode_hint">长按确认键或按菜单键打开菜单，选择批量删除</string>
     <string name="delete_mode_action_hint">长按（或短按）确认键删除当前选中项，按返回键退出删除模式</string>
-    <string name="following_season_hint">在列表区域长按确认键更改筛选，按菜单键进入删除模式</string>
+    <string name="following_season_hint">长按确认键或按菜单键打开菜单，可选择筛选或批量删除</string>
     <string name="title_activity_user_info">用户信息</string>
     <string name="title_activity_user_lock_settings">用户锁设置</string>
     <string name="title_activity_user_switch">用户切换</string>

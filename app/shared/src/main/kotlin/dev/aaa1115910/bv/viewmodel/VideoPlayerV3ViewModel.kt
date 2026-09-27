@@ -63,13 +63,12 @@ import dev.aaa1115910.bv.util.fException
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.fWarn
 import dev.aaa1115910.bv.util.reserveFreshVVoucher
+import dev.aaa1115910.bv.network.AppHttpClient
 import dev.aaa1115910.bv.util.LiveStreamUrlFetcher
 import dev.aaa1115910.bv.util.fDebug
 import dev.aaa1115910.bv.util.swapList
 import dev.aaa1115910.bv.util.swapListWithMainContext
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +80,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.koin.android.annotation.KoinViewModel
+import org.koin.core.annotation.KoinViewModel
 import dev.aaa1115910.biliapi.repositories.AuthRepository
 import dev.aaa1115910.bv.player.entity.NextVideoStrategy
 import java.net.URI
@@ -1488,8 +1487,7 @@ class VideoPlayerV3ViewModel(
                 subtitleName = subtitle.langDoc
                 val isAI = subtitle.type == SubtitleType.AI
                 logger.info { "Subtitle url: ${subtitle.url}, isAI: $isAI" }
-                val client = HttpClient(OkHttp)
-                val responseText = client.get(subtitle.url).bodyAsText()
+                val responseText = AppHttpClient.client.get(subtitle.url).bodyAsText()
                 val subtitleData = SubtitleParser.fromBccString(responseText, isAI)
                 withContext(Dispatchers.Main) {
                     currentSubtitleId = id

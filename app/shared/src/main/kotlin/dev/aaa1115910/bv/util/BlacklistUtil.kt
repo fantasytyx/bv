@@ -5,10 +5,9 @@ import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.Blacklist.BlacklistNano
 import dev.aaa1115910.bv.BuildConfig
 import dev.aaa1115910.bv.R
+import dev.aaa1115910.bv.network.AppHttpClient
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.get
 import java.io.File
 import kotlin.system.exitProcess
@@ -19,7 +18,7 @@ object BlacklistUtil {
     private val logger = KotlinLogging.logger {}
 
     private suspend fun downloadBlacklist(): ByteArray {
-        return HttpClient(OkHttp).get(BuildConfig.BLACKLIST_URL).body()
+        return AppHttpClient.client.get(BuildConfig.BLACKLIST_URL).body()
     }
 
     suspend fun updateBlacklist(context: Context = BVApp.context) {

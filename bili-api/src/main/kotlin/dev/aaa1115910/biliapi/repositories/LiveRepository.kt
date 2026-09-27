@@ -5,20 +5,14 @@ import dev.aaa1115910.biliapi.entity.live.LiveFollowingResponse
 import dev.aaa1115910.biliapi.entity.live.LiveRecommendResponse
 import dev.aaa1115910.biliapi.entity.live.LiveRoomListResponse
 import dev.aaa1115910.biliapi.entity.live.LiveRoomPlayInfoResponse
-import dev.aaa1115910.biliapi.http.plugins.BiliUserAgent
-import dev.aaa1115910.biliapi.http.util.BiliDns
+import dev.aaa1115910.biliapi.http.BiliHttpClient
 import dev.aaa1115910.biliapi.http.util.encAppGet
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
 
 @Single
@@ -28,21 +22,7 @@ class LiveRepository(
     /** 暴露登录状态供 ViewModel 判断 */
     val sessionData: String? get() = authRepository.sessionData
 
-    private val client = HttpClient(OkHttp) {
-        engine {
-            config {
-                dns(BiliDns)
-            }
-        }
-        BiliUserAgent()
-        install(ContentNegotiation) {
-            json(Json {
-                coerceInputValues = true
-                ignoreUnknownKeys = true
-                prettyPrint = true
-            })
-        }
-    }
+    private val client = BiliHttpClient.create()
 
     /**
      * 获取直播分区列表

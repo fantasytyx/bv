@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.stableItemKey
 
 @Composable
@@ -55,6 +57,7 @@ fun VideosRow(
         )
     )
     var rowHeight by remember { mutableStateOf(0.dp) }
+    var currentIndex by remember { mutableIntStateOf(0) }
 
     // 长按菜单状态
     var showVideoActionMenu by remember { mutableStateOf(false) }
@@ -88,7 +91,10 @@ fun VideosRow(
                         it.size.height.toDp()
                     }
                 }
-                .focusRestorer(),
+                .focusRestorer()
+                .onMenuKeyDown {
+                    videos.getOrNull(currentIndex)?.let(onLongClickVideo)
+                },
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
             contentPadding = PaddingValues(horizontal = 36.dp)
@@ -96,7 +102,7 @@ fun VideosRow(
             itemsIndexed(
                 items = videos,
                 key = { index, videoData -> "$index-${videoData.stableItemKey()}" }
-            ) { _, videoData ->
+            ) { index, videoData ->
                 SmallVideoCard(
                     modifier = Modifier.width(200.dp),
                     data = videoData,
@@ -107,7 +113,8 @@ fun VideosRow(
                             onOpenVideoInfo(videoData)
                         }
                     },
-                    onLongClick = { onLongClickVideo(videoData) }
+                    onLongClick = { onLongClickVideo(videoData) },
+                    onFocus = { currentIndex = index }
                 )
             }
             if (!hideShowMore) {

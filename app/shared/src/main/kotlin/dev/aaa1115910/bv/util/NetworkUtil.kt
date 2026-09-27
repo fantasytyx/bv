@@ -1,9 +1,7 @@
 package dev.aaa1115910.bv.util
 
+import dev.aaa1115910.bv.network.AppHttpClient
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
@@ -12,24 +10,12 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 
 object NetworkUtil {
-    private lateinit var client: HttpClient
+    private val client = AppHttpClient.client
     private val locCheckUrls = listOf(
         "https://www.cloudflare.com/cdn-cgi/trace",
         "https://1.1.1.1/cdn-cgi/trace"
     )
     private val logger = KotlinLogging.logger { }
-
-    init {
-        createClient()
-    }
-
-    private fun createClient() {
-        client = HttpClient(OkHttp) {
-            install(HttpRequestRetry) {
-                retryOnException(maxRetries = 3)
-            }
-        }
-    }
 
     suspend fun isMainlandChina() = withContext(Dispatchers.IO) {
         val deferreds = locCheckUrls.map { locCheckUrl ->

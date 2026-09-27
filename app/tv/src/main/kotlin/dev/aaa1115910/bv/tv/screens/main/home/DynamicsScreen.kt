@@ -1,7 +1,6 @@
 package dev.aaa1115910.bv.tv.screens.main.home
 
 import android.content.Intent
-import android.view.KeyEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +13,8 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -48,8 +48,10 @@ import dev.aaa1115910.bv.tv.activities.user.FollowActivity
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
+import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
@@ -154,15 +156,10 @@ fun DynamicsScreen(
                             currentFocusedIndex = -1
                         }
                     }
-                    .onPreviewKeyEvent { keyEvent ->
-                        if (
-                            keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                            keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU
-                        ) {
-                            context.startActivity(Intent(context, FollowActivity::class.java))
-                            return@onPreviewKeyEvent true
+                    .onMenuKeyDown {
+                        dynamicViewModel.dynamicVideoList.getOrNull(currentFocusedIndex)?.let { video ->
+                            onLongClickVideo(video)
                         }
-                        false
                     },
                 columns = GridCells.Fixed(4),
                 state = lazyGridState,
@@ -242,7 +239,12 @@ fun DynamicsScreen(
             upId = menuUpId,
             upName = menuUpName,
             upFace = menuUpFace,
-            onDismiss = { showVideoActionMenu = false }
+            onDismiss = { showVideoActionMenu = false },
+            extraItems = listOf(
+                CardActionMenuItem(icon = Icons.Rounded.People, text = "已关注 UP 列表") {
+                    context.startActivity(Intent(context, FollowActivity::class.java))
+                }
+            )
         )
     } else {
         Box(

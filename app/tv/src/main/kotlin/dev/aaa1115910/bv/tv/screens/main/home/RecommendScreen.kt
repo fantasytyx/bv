@@ -35,6 +35,7 @@ import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.viewmodel.home.RecommendViewModel
@@ -112,7 +113,10 @@ fun RecommendScreen(
                     currentIndexProvider = { currentFocusedIndex },
                     itemCount = recommendViewModel.recommendVideoList.size,
                     columnCount = 4
-                ),
+                )
+                .onMenuKeyDown {
+                    recommendViewModel.recommendVideoList.getOrNull(currentFocusedIndex)?.let(onLongClickVideo)
+                },
             columns = GridCells.Fixed(4),
             state = lazyGridState,
             contentPadding = PaddingValues(padding),

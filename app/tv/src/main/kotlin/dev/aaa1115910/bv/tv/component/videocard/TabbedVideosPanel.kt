@@ -39,6 +39,7 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.stableItemKey
 
 @Composable
@@ -61,6 +62,7 @@ fun TabbedVideosPanel(
         animationSpec = tween(durationMillis = 120)
     )
     var rowHeight by remember { mutableStateOf(0.dp) }
+    var currentIndex by remember { mutableIntStateOf(0) }
 
     // Build tabs: always show "推荐视频", show "视频列表" only when preloaded is not empty
     val tabs = remember(relatedVideos.size, preloadedVideos.size) {
@@ -158,7 +160,10 @@ fun TabbedVideosPanel(
                 .onGloballyPositioned {
                     rowHeight = with(density) { it.size.height.toDp() }
                 }
-                .focusRestorer(),
+                .focusRestorer()
+                .onMenuKeyDown {
+                    currentVideos.getOrNull(currentIndex)?.let(onLongClickVideo)
+                },
             state = lazyListState,
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -183,7 +188,8 @@ fun TabbedVideosPanel(
                             onOpenVideoInfo(videoData, fromUGCList)
                         }
                     },
-                    onLongClick = { onLongClickVideo(videoData) }
+                    onLongClick = { onLongClickVideo(videoData) },
+                    onFocus = { currentIndex = index }
                 )
             }
         }

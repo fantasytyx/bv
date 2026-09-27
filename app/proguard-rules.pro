@@ -73,9 +73,9 @@
 #    static <1>$$serializer INSTANCE;
 #}
 
-# ktor 混淆后，请求参数会莫名其妙消失
--keep class io.ktor.**
-# 这部分是加上不混淆 ktor 后冒出来的 missing rules
+# ktor 3 自带 META-INF/proguard/ktor.pro（R8 会自动应用，见 build/outputs/mapping/*/configuration.txt），
+# 已覆盖 AtomicFU 需要的 volatile 字段和 ServiceLoader 加载的 client engine，不再需要整包 -keep。
+# 这里只留下 ktor-utils 引用 JMX 造成的 missing class。
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 

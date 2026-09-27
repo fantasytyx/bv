@@ -35,6 +35,7 @@ import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.viewmodel.home.PopularViewModel
@@ -111,7 +112,10 @@ fun PopularScreen(
                     currentIndexProvider = { currentFocusedIndex },
                     itemCount = popularViewModel.popularVideoList.size,
                     columnCount = 4
-                ),
+                )
+                .onMenuKeyDown {
+                    popularViewModel.popularVideoList.getOrNull(currentFocusedIndex)?.let(onLongClickVideo)
+                },
             columns = GridCells.Fixed(4),
             state = lazyGridState,
             contentPadding = PaddingValues(padding),

@@ -1,6 +1,5 @@
 package dev.aaa1115910.biliapi.http
 
-import com.tfowl.ktor.client.plugins.JsoupPlugin
 import dev.aaa1115910.biliapi.entity.pgc.PgcType
 import dev.aaa1115910.biliapi.http.BiliHttpApi.getRegionDynamic
 import dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_WEB
@@ -77,18 +76,10 @@ import dev.aaa1115910.biliapi.http.entity.video.VideoOnlineTotal
 import dev.aaa1115910.biliapi.http.entity.video.VideoPlayerInfo
 import dev.aaa1115910.biliapi.http.entity.video.VideoShot
 import dev.aaa1115910.biliapi.http.entity.web.NavResponseData
-import dev.aaa1115910.biliapi.http.plugins.BiliUserAgent
 import dev.aaa1115910.biliapi.http.util.BiliAppConf
-import dev.aaa1115910.biliapi.http.util.BiliDns
-import dev.aaa1115910.biliapi.http.util.encApiSign
 import dev.aaa1115910.biliapi.http.util.skipAddBuvid3Cookie
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpRequestRetry
-import io.ktor.client.plugins.compression.ContentEncoding
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
@@ -100,8 +91,6 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.Parameters
-import io.ktor.http.URLProtocol
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.InternalAPI
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CoroutineScope
@@ -130,11 +119,7 @@ object BiliHttpApi {
     // 自定义 User-Agent 提供者（优先于插件默认 Web/App UA），由应用层设置
     var userAgentProvider: () -> String? = { null }
 
-    private val json = Json {
-        coerceInputValues = true
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private val json = BiliHttpClient.json
 
     var wbiImgKey: String? = null
     var wbiSubKey: String? = null
@@ -157,33 +142,12 @@ object BiliHttpApi {
     }
 
     private fun createClient() {
-        client = HttpClient(OkHttp) {
-            engine {
-                config {
-                    dns(BiliDns)
-                }
-            }
-            BiliUserAgent()
-            install(ContentNegotiation) {
-                json(json)
-            }
-            install(ContentEncoding) {
-                deflate(1.0F)
-                gzip(0.9F)
-            }
-            install(HttpRequestRetry) {
-                retryOnException(maxRetries = 2)
-            }
-            install(JsoupPlugin)
-            defaultRequest {
-                url {
-                    host = endPoint
-                    protocol = URLProtocol.HTTPS
-                }
-            }
-        }.apply {
-            encApiSign()
-        }
+        client = BiliHttpClient.create(
+            host = endPoint,
+            addApiSign = true,
+            addJsoup = true,
+            retryOnException = 2,
+        )
     }
 
     private fun HttpRequestBuilder.appendWebCookie(

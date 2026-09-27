@@ -75,7 +75,7 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
 
 1. **JDK 21**（强制，`AppConfiguration.jdk`）
 2. **Android SDK**：`local.properties` 中设置 `sdk.dir`
-3. **compileSdk = 36**、**minSdk = 23**、**targetSdk = 36**（见 `AppConfiguration`）
+3. **compileSdk = 37**、**minSdk = 23**、**targetSdk = 36**（见 `AppConfiguration`）
 4. **Release/Alpha/R8Test 构建**：根目录需 `signing.properties`（含 `keystore.path`、`keystore.pwd`、`keystore.alias`、`keystore.alias_pwd`）
 5. **blacklist.bin**：preBuild 任务从 `blacklistUrl` 自动下载到 `app/shared/src/main/res/raw/`
 
@@ -89,7 +89,7 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
 
 ## 技术栈
 
-- **DI**：Koin（KSP 注解处理器）
+- **DI**：Koin 4.2.2（**Compiler Plugin** `io.insert-koin.compiler.plugin`；旧的 `koin-ksp-compiler` 已移除，注解统一用 `org.koin.core.annotation.*`）
 - **数据库**：Room（KSP）
 - **网络**：Ktor Client + OkHttp
 - **序列化**：Kotlinx Serialization
@@ -134,6 +134,8 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
 ## 常见坑
 
 - 修改 `AppConfiguration` 的版本号常量会立即影响所有变体，无需同步其他文件
+- 升级 AndroidX 前先确认 minSdk 上限：Compose 1.12+、Navigation 2.10+、WebKit 1.16+、Material3 alpha19+ 都要求 **minSdk 24**，本项目 minSdk 23 只能停在 Compose 1.11.x / Material3 1.5.0-alpha18；Compose 1.13+ 还需要预览版 `android-37.1`（本机只有 `android-37.0`）
 - 调整 protobuf 后必须确认 `ProtobufConfiguration.usedProtoFiles` 同步更新，否则会被静默排除
+- Koin：新增 `@Module` 类要一并加 `@Configuration`，否则 `@KoinApplication`（`BVKoinApp`）不会跨 Gradle 模块发现它；`@KoinViewModel` 的包是 `org.koin.core.annotation`
 - 弹幕引擎改动需同时关注 `player/mobile` 和 `player/tv` 两端的 `BvPlayer.kt`（分别集成 `DanmakuView` 和 `DanmakuLayer`）
 - 依赖的 AAR 在 `libs/`，不是从 Maven 拉取的；版本变动需重新打包并替换

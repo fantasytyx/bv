@@ -48,6 +48,7 @@ fun LiveRoomCard(
     modifier: Modifier = Modifier,
     data: LiveRoomItem,
     onClick: () -> Unit = {},
+    onLongClick: () -> Unit = {},
     onFocus: () -> Unit = {}
 ) {
     var hasFocus by remember { mutableStateOf(false) }
@@ -68,6 +69,7 @@ fun LiveRoomCard(
                 )
             ),
         onClick = onClick,
+        onLongClick = onLongClick,
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = if (hasFocus) MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f) else Color.Transparent,

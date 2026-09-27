@@ -1,9 +1,6 @@
 package dev.aaa1115910.biliapi.http.util
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.compression.ContentEncoding
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import dev.aaa1115910.biliapi.http.BiliHttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -14,10 +11,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.content.TextContent
 import io.ktor.http.setCookie
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -90,21 +85,11 @@ object WebCookieManager {
     private val fingerprintMutex = Mutex()
     private val cookieRefreshMutex = Mutex()
 
-    private val json = Json {
-        coerceInputValues = true
-        ignoreUnknownKeys = true
-    }
+    private val json = BiliHttpClient.json
 
+    // 只用来抓 Set-Cookie 和指纹接口，不参与 B 站 API 的 UA/签名逻辑
     private val client by lazy {
-        HttpClient(OkHttp) {
-            install(ContentNegotiation) {
-                json(this@WebCookieManager.json)
-            }
-            install(ContentEncoding) {
-                deflate(1.0F)
-                gzip(0.9F)
-            }
-        }
+        BiliHttpClient.create(userAgent = null)
     }
 
     /** 汇总所有 web cookie，供 API 层附加到请求头 */

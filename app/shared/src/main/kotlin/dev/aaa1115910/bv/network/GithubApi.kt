@@ -1,17 +1,13 @@
 package dev.aaa1115910.bv.network
 
+import dev.aaa1115910.biliapi.BiliApiConstants
+import dev.aaa1115910.biliapi.http.BiliHttpClient
 import dev.aaa1115910.bv.BuildConfig
 import dev.aaa1115910.bv.network.entity.Release
 import dev.aaa1115910.bv.util.NetworkUtil
 import dev.aaa1115910.bv.util.Prefs
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.HttpClient
 import io.ktor.client.content.ProgressListener
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.UserAgent
-import io.ktor.client.plugins.compression.ContentEncoding
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.onDownload
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -19,66 +15,25 @@ import io.ktor.client.request.prepareRequest
 import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.URLProtocol
-import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.cio.writeChannel
 import io.ktor.utils.io.copyAndClose
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 object GithubApi {
-    private var endPoint = "api.github.com"
     private const val OWNER = "fantasytyx"
     private const val REPO = "bv"
     private const val PROXY_URL = "https://ghfast.top/"
-    private lateinit var client: HttpClient
-    private val json = Json {
-        coerceInputValues = true
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
+    private const val API_URL = "https://api.github.com"
+    private val client = AppHttpClient.client
+    private val json = BiliHttpClient.json
     private val isDebug get() = BuildConfig.DEBUG
     private val isAlpha get() = Prefs.updateAlpha
     private val logger = KotlinLogging.logger("GithubApi")
-
-    init {
-        createClient()
-    }
-
-    private fun createClient() {
-        val okHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        client = HttpClient(OkHttp) {
-            engine {
-                this.preconfigured = okHttpClient
-            }
-            install(UserAgent) {
-                agent = dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_WEB
-            }
-            install(ContentNegotiation) {
-                json(json)
-            }
-            install(ContentEncoding) {
-                deflate(1.0F)
-                gzip(0.9F)
-            }
-            defaultRequest {
-                url {
-                    protocol = URLProtocol.HTTPS
-                    host = endPoint
-                }
-            }
-        }
-    }
 
     private suspend fun getReleases(
         owner: String = OWNER,
@@ -86,7 +41,7 @@ object GithubApi {
         pageSize: Int = 30,
         page: Int = 1
     ): List<Release> {
-        val response = client.get("repos/$owner/$repo/releases") {
+        val response = client.get("$API_URL/repos/$owner/$repo/releases") {
             parameter("per_page", pageSize)
             parameter("page", page)
         }.bodyAsText()
@@ -98,7 +53,7 @@ object GithubApi {
         owner: String = OWNER,
         repo: String = REPO
     ): Release {
-        val response = client.get("repos/$owner/$repo/releases/latest").bodyAsText()
+        val response = client.get("$API_URL/repos/$owner/$repo/releases/latest").bodyAsText()
         checkErrorMessage(response)
         return json.decodeFromString<Release>(response)
     }
@@ -282,29 +237,25 @@ object GithubApi {
                 val proxyUrl = PROXY_URL + downloadUrl
                 results.appendLine("   代理链接: $proxyUrl")
                 
-                val tempClient = HttpClient(OkHttp) {
-                    engine {
-                        val okHttp = OkHttpClient.Builder()
-                            .connectTimeout(5, TimeUnit.SECONDS)
-                            .readTimeout(10, TimeUnit.SECONDS)
-                            .build()
-                        this.preconfigured = okHttp
+                // HEAD 请求探测代理可用性，不下载整个文件；newBuilder 复用共享连接池
+                val probeClient = AppHttpClient.okHttpClient.newBuilder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(10, TimeUnit.SECONDS)
+                    .build()
+                val response = probeClient.newCall(
+                    Request.Builder()
+                        .url(proxyUrl)
+                        .head()
+                        .header("User-Agent", BiliApiConstants.USER_AGENT_WEB)
+                        .build()
+                ).execute()
+
+                response.use {
+                    if (it.code in 200..399) {
+                        results.appendLine("   代理可用 ✓ (状态码: ${it.code})")
+                    } else {
+                        results.appendLine("   代理响应异常 ✗ (状态码: ${it.code})")
                     }
-                    install(UserAgent) {
-                        agent = dev.aaa1115910.biliapi.BiliApiConstants.USER_AGENT_WEB
-                    }
-                }
-                // 使用 HEAD 请求测试代理是否可用（不下载整个文件）
-                val response = tempClient.prepareRequest {
-                    url(proxyUrl)
-                    method = io.ktor.http.HttpMethod.Head
-                }.execute { it }
-                tempClient.close()
-                
-                if (response.status.value in 200..399) {
-                    results.appendLine("   代理可用 ✓ (状态码: ${response.status.value})")
-                } else {
-                    results.appendLine("   代理响应异常 ✗ (状态码: ${response.status.value})")
                 }
             }
         } catch (e: Exception) {

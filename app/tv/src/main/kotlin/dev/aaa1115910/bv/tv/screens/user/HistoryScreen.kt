@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,8 +52,10 @@ import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
+import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.tv.util.stableItemKey
 import dev.aaa1115910.bv.util.requestFocus
@@ -98,6 +102,16 @@ fun HistoryScreen(
     val focusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     fun getFocusRequester(index: Int): FocusRequester {
         return focusRequesters.getOrPut(index) { FocusRequester() }
+    }
+
+    val openVideoMenu: (VideoCardData) -> Unit = { video ->
+        menuAid = video.avid
+        menuUpId = video.upId
+        menuUpName = video.upName
+        menuUpFace = video.upFace
+        menuHistoryBusiness = video.historyBusiness
+        menuHistoryKid = video.historyKid ?: 0L
+        showVideoActionMenu = true
     }
 
     LaunchedEffect(Unit) {
@@ -176,14 +190,12 @@ fun HistoryScreen(
                             itemCount = historyViewModel.histories.size,
                             columnCount = 4
                         )
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                                (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU ||
-                                 keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DEL)
-                            ) {
-                                deleteMode = !deleteMode
-                                return@onPreviewKeyEvent true
+                        .onMenuKeyDown {
+                            if (!deleteMode) {
+                                historyViewModel.histories.getOrNull(currentIndex)?.let(openVideoMenu)
                             }
+                        }
+                        .onPreviewKeyEvent { keyEvent ->
                             if (deleteMode && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
                                 if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
                                     deleteMode = false
@@ -241,13 +253,7 @@ fun HistoryScreen(
                                         selectedIndex = index
                                         showClearConfirmDialog = true
                                     } else {
-                                        menuAid = history.avid
-                                        menuUpId = history.upId
-                                        menuUpName = history.upName
-                                        menuUpFace = history.upFace
-                                        menuHistoryBusiness = history.historyBusiness
-                                        menuHistoryKid = history.historyKid ?: 0L
-                                        showVideoActionMenu = true
+                                        openVideoMenu(history)
                                     }
                                 },
                                 onFocus = {
@@ -333,6 +339,9 @@ fun HistoryScreen(
         upName = menuUpName,
         upFace = menuUpFace,
         onDismiss = { showVideoActionMenu = false },
+        extraItems = listOf(
+            CardActionMenuItem(icon = Icons.Rounded.DeleteSweep, text = "批量删除") { deleteMode = true }
+        ),
         onDelete = {
             val nextIndex = if (currentIndex < historyViewModel.histories.size - 1) currentIndex + 1 else currentIndex - 1
             if (nextIndex >= 0) runCatching { getFocusRequester(nextIndex).requestFocus() }

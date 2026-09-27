@@ -50,6 +50,7 @@ import dev.aaa1115910.bv.tv.R
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.util.fInfo
@@ -111,6 +112,9 @@ fun UgcRegionScaffold(
                         itemCount = ugcViewModel.ugcItems.size,
                         columnCount = 4
                     )
+                    .onMenuKeyDown {
+                        ugcViewModel.ugcItems.getOrNull(currentFocusedIndex)?.let(onLongClickVideo)
+                    }
             } else {
                 modifier
                     .fillMaxSize()
@@ -120,6 +124,9 @@ fun UgcRegionScaffold(
                         itemCount = ugcViewModel.ugcItems.size,
                         columnCount = 4
                     )
+                    .onMenuKeyDown {
+                        ugcViewModel.ugcItems.getOrNull(currentFocusedIndex)?.let(onLongClickVideo)
+                    }
             },
             columns = GridCells.Fixed(4),
             state = lazyGridState,

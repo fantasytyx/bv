@@ -1,9 +1,10 @@
 [versions]
 agp = "9.4.1"
 kotlin = "2.4.10"
-ksp = "2.3.9"
+ksp = "2.3.12"
+koin-compiler = "1.2.1"
 protobuf = "0.10.0"
-versions = "0.59.0"
+versions = "0.64.0"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -15,6 +16,9 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 
 # https://github.com/google/ksp
 google-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+
+# https://insert-koin.io - 取代已废弃的 koin-ksp-compiler
+koin-compiler = { id = "io.insert-koin.compiler.plugin", version.ref = "koin-compiler" }
 
 # https://github.com/google/protobuf-gradle-plugin
 google-protobuf = { id = "com.google.protobuf", version.ref = "protobuf" }

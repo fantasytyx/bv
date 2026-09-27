@@ -1,5 +1,6 @@
 plugins {
     alias(gradleLibs.plugins.google.ksp)
+    alias(gradleLibs.plugins.koin.compiler)
     alias(gradleLibs.plugins.kotlin.jvm)
     alias(gradleLibs.plugins.kotlin.serialization)
 }
@@ -7,7 +8,6 @@ plugins {
 group = "dev.aaa1115910"
 
 dependencies {
-    ksp(libs.koin.ksp.compiler)
     implementation(project(":bili-api:grpc"))
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)

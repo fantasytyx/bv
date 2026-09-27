@@ -15,6 +15,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -45,12 +48,15 @@ import dev.aaa1115910.biliapi.entity.season.FollowingSeason
 import dev.aaa1115910.biliapi.entity.season.FollowingSeasonStatus
 import dev.aaa1115910.biliapi.entity.season.FollowingSeasonType
 import dev.aaa1115910.bv.R
+import dev.aaa1115910.bv.tv.component.CardActionMenu
+import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.videocard.SeasonCard
 import dev.aaa1115910.bv.entity.carddata.SeasonCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.util.ImageSize
 import dev.aaa1115910.bv.util.fInfo
@@ -87,6 +93,7 @@ fun FollowingSeasonScreen(
     )
 
     var showFilter by remember { mutableStateOf(false) }
+    var showActionMenu by remember { mutableStateOf(false) }
 
     var deleteMode by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -121,7 +128,7 @@ fun FollowingSeasonScreen(
             if (nextIndex >= 0) runCatching { getFocusRequester(nextIndex).requestFocus() }
             followingSeasonViewModel.unfollowSeason(seasonId = season.seasonId)
         } else {
-            showFilter = true
+            showActionMenu = true
         }
     }
 
@@ -233,14 +240,10 @@ fun FollowingSeasonScreen(
                         itemCount = followingSeasons.size,
                         columnCount = 6
                     )
+                    .onMenuKeyDown {
+                        if (!deleteMode) showActionMenu = true
+                    }
                     .onPreviewKeyEvent { keyEvent ->
-                        if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                            (keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_MENU ||
-                             keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DEL)
-                        ) {
-                            deleteMode = !deleteMode
-                            return@onPreviewKeyEvent true
-                        }
                         if (deleteMode && keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) {
                             if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_UP) {
                                 deleteMode = false
@@ -318,6 +321,16 @@ fun FollowingSeasonScreen(
         onHideFilter = { showFilter = false },
         selectedStatus = followingSeasonStatus,
         onSelectedStatusChange = updateStatus
+    )
+
+    // 卡片操作菜单：长按确认键或按菜单键打开
+    CardActionMenu(
+        show = showActionMenu,
+        onDismiss = { showActionMenu = false },
+        items = listOf(
+            CardActionMenuItem(icon = Icons.Rounded.Tune, text = "筛选") { showFilter = true },
+            CardActionMenuItem(icon = Icons.Rounded.DeleteSweep, text = "批量删除") { deleteMode = true }
+        )
     )
 
     if (showDeleteConfirmDialog && selectedSeason != null) {

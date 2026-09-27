@@ -42,6 +42,7 @@ import dev.aaa1115910.bv.entity.carddata.SeasonCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.getDisplayName
@@ -141,7 +142,10 @@ fun PgcIndexScreen(
                         currentIndexProvider = { currentSeasonIndex },
                         itemCount = pgcItems.size,
                         columnCount = 6
-                    ),
+                    )
+                    .onMenuKeyDown {
+                        if (filterReady) showFilter = true
+                    },
                 columns = GridCells.Fixed(6),
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),

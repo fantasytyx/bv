@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -25,9 +28,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -58,9 +63,12 @@ import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoPlayerV3Activity
 import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.component.TopNavItem
+import dev.aaa1115910.bv.tv.component.VideoActionMenu
+import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.live.LiveRoomCard
 import dev.aaa1115910.bv.tv.screens.user.UpCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.collectAsStateLazily
@@ -70,6 +78,8 @@ import dev.aaa1115910.bv.util.removeHtmlTags
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.viewmodel.search.SearchResultViewModel
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.getKoin
@@ -89,6 +99,8 @@ fun SearchResultScreen(
 
     var rowSize by remember { mutableIntStateOf(4) }
     var currentIndex by remember { mutableIntStateOf(0) }
+    val lazyGridState = rememberLazyGridState()
+    val firstItemFocusRequester = remember { FocusRequester() }
     val showLargeTitle by remember { derivedStateOf { currentIndex < rowSize } }
     val titleFontSize by animateFloatAsState(
         targetValue = if (showLargeTitle) 48f else 24f,
@@ -106,6 +118,12 @@ fun SearchResultScreen(
     }
 
     var showFilter by remember { mutableStateOf(false) }
+
+    // 视频卡片操作菜单
+    var menuVideo by remember { mutableStateOf<SearchTypeResult.Video?>(null) }
+
+    // 筛选数据重新加载后需要把焦点放回第一张卡片
+    var pendingFocusFirstItem by remember { mutableStateOf(false) }
 
     val selectedOrder = searchResultViewModel.selectedOrder
     val selectedDuration = searchResultViewModel.selectedDuration
@@ -172,10 +190,11 @@ fun SearchResultScreen(
         tabRowFocusRequester.requestFocus(scope)
     }
 
-    val onLongClickSearchResultItem = {
-        if (searchResultViewModel.searchType == SearchType.Video) {
-            if (Prefs.apiType == ApiType.Web) showFilter = true
-        }
+    // 视频筛选只在 Web API 下可用
+    val filterAvailable = Prefs.apiType == ApiType.Web
+
+    val onLongClickSearchResultItem: (SearchTypeResult.SearchTypeResultItem) -> Unit = { resultItem ->
+        if (resultItem is SearchTypeResult.Video) menuVideo = resultItem
     }
 
     LaunchedEffect(Unit) {
@@ -200,11 +219,38 @@ fun SearchResultScreen(
         }
     }
 
+    // 首次进入时这个 effect 也会执行一次，此时不需要回顶
+    var filterEffectInited by remember { mutableStateOf(false) }
+
     LaunchedEffect(
         selectedOrder, selectedDuration, selectedPartition, selectedChildPartition
     ) {
         logger.fInfo { "Start update search result because filter updated" }
+        val previousVideos =
+            if (filterEffectInited) searchResultViewModel.videoSearchResult.videos else null
+        filterEffectInited = true
+        if (previousVideos != null) currentIndex = 0
         searchResultViewModel.update()
+        if (previousVideos != null) {
+            // 等新数据替换掉旧列表后再回顶，否则焦点会停留在已移除的卡片上
+            snapshotFlow { searchResultViewModel.videoSearchResult.videos }
+                .first { it !== previousVideos && it.isNotEmpty() }
+            lazyGridState.scrollToItem(0)
+            pendingFocusFirstItem = true
+        }
+    }
+
+    // 筛选对话框关闭、窗口重新拿到焦点后再聚焦第一张卡片（对话框打开时 requestFocus 会被拒绝）
+    LaunchedEffect(pendingFocusFirstItem, showFilter) {
+        if (!pendingFocusFirstItem || showFilter) return@LaunchedEffect
+        repeat(10) {
+            if (runCatching { firstItemFocusRequester.requestFocus() }.getOrDefault(false)) {
+                pendingFocusFirstItem = false
+                return@LaunchedEffect
+            }
+            delay(50)
+        }
+        pendingFocusFirstItem = false
     }
 
     LaunchedEffect(currentIndex) {
@@ -236,7 +282,7 @@ fun SearchResultScreen(
                     ) {
                         if (searchResultViewModel.searchType == SearchType.Video) {
                             Text(
-                                text = stringResource(R.string.filter_dialog_open_tip),
+                                text = stringResource(R.string.search_video_card_menu_open_tip),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
@@ -285,15 +331,21 @@ fun SearchResultScreen(
                             columnCount = rowSize
                         )
                         .onPreviewKeyEvent {
-                            when (it.key) {
-                                Key.Back -> {
-                                    if (it.type == KeyEventType.KeyUp) backToTabRow()
-                                    return@onPreviewKeyEvent true
-                                }
+                            if (it.key == Key.Back) {
+                                if (it.type == KeyEventType.KeyUp) backToTabRow()
+                                return@onPreviewKeyEvent true
                             }
                             false
+                        }
+                        .onMenuKeyDown {
+                            if (searchResultViewModel.searchType == SearchType.Video) {
+                                searchResult.videos.getOrNull(currentIndex)?.let { video ->
+                                    menuVideo = video
+                                }
+                            }
                         },
                     columns = GridCells.Fixed(rowSize),
+                    state = lazyGridState,
                     contentPadding = PaddingValues(24.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                     horizontalArrangement = Arrangement.spacedBy(24.dp)
@@ -309,9 +361,14 @@ fun SearchResultScreen(
                         key = { index, item -> "$index-${searchResultItemKey(item)}" }
                     ) { index, searchResultItem ->
                         SearchResultListItem(
+                            modifier = if (index == 0) {
+                                Modifier.focusRequester(firstItemFocusRequester)
+                            } else {
+                                Modifier
+                            },
                             searchResult = searchResultItem,
                             onClick = { onClickResult(searchResultItem) },
-                            onLongClick = onLongClickSearchResultItem,
+                            onLongClick = { onLongClickSearchResultItem(searchResultItem) },
                             onFocus = { currentIndex = index }
                         )
                     }
@@ -331,6 +388,23 @@ fun SearchResultScreen(
         onSelectedDurationChange = { searchResultViewModel.selectedDuration = it },
         onSelectedPartitionChange = { searchResultViewModel.selectedPartition = it },
         onSelectedChildPartitionChange = { searchResultViewModel.selectedChildPartition = it }
+    )
+
+    // 视频卡片操作菜单：长按确认键或按菜单键打开
+    VideoActionMenu(
+        show = menuVideo != null,
+        aid = menuVideo?.aid ?: 0L,
+        upId = menuVideo?.mid ?: 0L,
+        upName = menuVideo?.author ?: "",
+        upFace = menuVideo?.face ?: "",
+        onDismiss = { menuVideo = null },
+        extraItems = if (filterAvailable) {
+            listOf(
+                CardActionMenuItem(icon = Icons.Rounded.Tune, text = "筛选") { showFilter = true }
+            )
+        } else {
+            emptyList()
+        }
     )
 }
 

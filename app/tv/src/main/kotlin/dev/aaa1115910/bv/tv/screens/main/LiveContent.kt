@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,10 +35,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.aaa1115910.biliapi.entity.live.LiveAreaItem
+import dev.aaa1115910.biliapi.entity.live.LiveRoomItem
 import dev.aaa1115910.bv.tv.activities.video.VideoPlayerV3Activity
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.component.TopNavItem
+import dev.aaa1115910.bv.tv.component.live.LiveRoomActionMenu
 import dev.aaa1115910.bv.tv.component.live.LiveRoomCard
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.getLiveNavItemAreaGroup
@@ -45,6 +48,7 @@ import dev.aaa1115910.bv.tv.util.isLiveAreaItem
 import dev.aaa1115910.bv.tv.util.isLiveFollowingItem
 import dev.aaa1115910.bv.tv.util.isLiveRecommendItem
 import dev.aaa1115910.bv.tv.util.liveNavItemsOrderFlow
+import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.parseLiveNavItemsOrder
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.collectAsStateLazily
@@ -88,6 +92,19 @@ fun LiveContent(
         derivedStateOf {
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
+    }
+
+    // 长按/菜单键操作菜单
+    var showLiveRoomActionMenu by remember { mutableStateOf(false) }
+    var menuUpId by remember { mutableLongStateOf(0L) }
+    var menuUpName by remember { mutableStateOf("") }
+    var menuUpFace by remember { mutableStateOf("") }
+
+    val onLongClickLiveRoom: (LiveRoomItem) -> Unit = { room ->
+        menuUpId = room.uid
+        menuUpName = room.uname
+        menuUpFace = room.face
+        showLiveRoomActionMenu = true
     }
 
     // 监听焦点位置，触发分页加载
@@ -287,7 +304,11 @@ fun LiveContent(
                                 currentIndexProvider = { focusedIndex },
                                 itemCount = totalItems,
                                 columnCount = 4
-                            ),
+                            )
+                            .onMenuKeyDown {
+                                liveViewModel.roomList.getOrNull(focusedIndex)
+                                    ?.let(onLongClickLiveRoom)
+                            },
                         state = gridState,
                         columns = GridCells.Fixed(4),
                         contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp),
@@ -330,7 +351,8 @@ fun LiveContent(
                                 onFocus = {
                                     liveViewModel.lastFocusedRoomIndex = index
                                     logger.debug { "Focus on room ${room.roomId}" }
-                                }
+                                },
+                                onLongClick = { onLongClickLiveRoom(room) }
                             )
                         }
 
@@ -361,6 +383,15 @@ fun LiveContent(
             }
         }
     }
+
+    // 长按/菜单键操作菜单
+    LiveRoomActionMenu(
+        show = showLiveRoomActionMenu,
+        upId = menuUpId,
+        upName = menuUpName,
+        upFace = menuUpFace,
+        onDismiss = { showLiveRoomActionMenu = false }
+    )
 }
 
 private fun TopNavItem.matchesLiveMode(mode: LiveMode, parentGroupId: Int?): Boolean = when {
