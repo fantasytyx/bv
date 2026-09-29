@@ -42,6 +42,9 @@ private data class BufferConfig(
     val prioritizeTime: Boolean // 是否优先考虑时间阈值
 )
 
+/** 低于该倍速不启用跳过静音：压缩音频时间轴会让作为主时钟的音频位置快进，画面跟着跳帧 */
+private const val SKIP_SILENCE_MIN_SPEED = 2.5f
+
 @OptIn(UnstableApi::class)
 class ExoMediaPlayer(
     private val context: Context,
@@ -107,7 +110,6 @@ class ExoMediaPlayer(
             .Builder(context)
             .setRenderersFactory(renderersFactory)
             .setLoadControl(loadControl)
-            .setSkipSilenceEnabled(options.enableSkipSilence)
             .setSeekForwardIncrementMs(1000 * 10)
             .setSeekBackIncrementMs(1000 * 10)
             .setVideoChangeFrameRateStrategy(
@@ -253,6 +255,9 @@ class ExoMediaPlayer(
         get() = mPlayer?.playbackParameters?.speed ?: 1f
         set(value) {
             mPlayer?.setPlaybackSpeed(value)
+            mPlayer?.setSkipSilenceEnabled(
+                options.enableSkipSilence && value >= SKIP_SILENCE_MIN_SPEED
+            )
         }
 
     override fun setAudioBalanceLevel(level: AudioBalanceLevel) {

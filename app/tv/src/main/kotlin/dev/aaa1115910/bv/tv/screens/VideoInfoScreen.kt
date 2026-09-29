@@ -218,6 +218,10 @@ fun VideoInfoScreen(
     var paused by remember { mutableStateOf(false) }
     var proxyArea by remember { mutableStateOf(ProxyArea.MainLand) }
     var intentAid by remember { mutableLongStateOf(0L) }
+    var intentCid by remember { mutableLongStateOf(0L) }
+
+    // 首次详情加载被风控拦截时置为 true，验证通过后 VM 重试 loadDetail 时补跑收尾与自动起播
+    var pendingDetailPostLoad by remember { mutableStateOf(false) }
 
     val containsVerticalScreenVideo by remember {
         derivedStateOf {
@@ -406,11 +410,90 @@ fun VideoInfoScreen(
         return VideoUserActionManager.addCoin(configAid, Prefs.uid)
     }
 
+    // 详情加载成功后应做的事：同步用户操作/历史/仓库数据，并按设置自动起播。
+    // 抽成可复用逻辑，使首次加载与风控验证通过后的重试都能走同一套流程。
+    val onVideoDetailLoaded: suspend () -> Unit = onLoaded@{
+        val detail = videoDetailViewModel.videoDetail ?: return@onLoaded
+
+        updateVideoUserActionData()
+        withContext(Dispatchers.Main) {
+            setHistory()
+        }
+
+        videoInfoRepository.relatedVideos.clear()
+        videoInfoRepository.description = detail.description
+        videoInfoRepository.tags = detail.tags
+        if (!fromSeason) {
+            if (Prefs.isLogin) updateFollowingState()
+
+            videoInfoRepository.relatedVideos.addAll(
+                videoDetailViewModel.relatedVideos.subList(
+                    0,
+                    videoDetailViewModel.relatedVideos.size))
+        }
+        // 从播放器推荐视频打开时 fromPlayer=true 并显示loading。300m后 fromPlayer改成false，此后从播放器返回详情页，正常显示详情内容
+        //如果是从剧集跳转过来的或设置不显示视频详情，就直接播放 P1
+        // forceShowDetail 时强制显示详情页，用于播放器控制条"详情"按钮
+        if (forceShowDetail || !(fromSeason || !showUGCVideoInfo || fromPlayer)) return@onLoaded
+
+        val shouldFinishAfterAutoLaunch = fromPlayer && !Prefs.videoInfoHistoryIncludeFromPlayer
+        val playPart = detail.pages.first()
+        val targetCid = intentCid.takeIf { it > 0L } ?: playPart.cid
+
+        if (detail.ugcSeason !== null) {
+            val sectionIndex = detail.ugcSeason!!.sections.indexOfFirst { section ->
+                section.episodes.any { it.cid == targetCid || it.pages.any { it.cid == targetCid } }
+            }
+            updateUgcSeasonSectionVideoList(sectionIndex)
+        }
+
+        // 检查Activity是否已经finish，如果已关闭则不启动播放器
+        if (!context.isFinishing && !context.isDestroyed) {
+            launchPlayerActivity(
+                context = context,
+                avid = detail.aid,
+                cid = targetCid,
+                title = detail.title,
+                partTitle = detail.pages.find { it.cid == targetCid }!!.title,
+                played = if (targetCid == lastPlayedCid) lastPlayedTime * 1000 else 0,
+                fromSeason = fromSeason,
+                isVerticalVideo = detail.pages.find { it.cid == targetCid }!!.dimension.isVertical,
+                playerIconIdle = detail.playerIcon?.idle ?: "",
+                playerIconMoving = detail.playerIcon?.moving ?: "",
+                play = detail.stat.view,
+                danmaku = detail.stat.danmaku,
+                like = detail.stat.like,
+                coin = detail.stat.coin,
+                favorite = detail.stat.favorite,
+                upName = detail.author.name,
+                upId = detail.author.mid,
+                upFace = detail.author.face,
+                pubTime = detail.publishDate.formatPubTimeString()
+            )
+        }
+        if (shouldFinishAfterAutoLaunch) {
+            context.finish()
+        } else if (fromPlayer) {
+            // 清除标记, 以便从播放器返回过来的可以进入详情页
+            scope.launch {
+                delay(1200)
+                fromPlayer = false
+                intent.removeExtra("fromPlayer")
+                if (!showUGCVideoInfo) {
+                    context.finish()
+                }
+            }
+        }
+        if (!fromPlayer) {
+            context.finish()
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (intent.hasExtra("aid")) {
             val aid = intent.getLongExtra("aid", 170001)
             intentAid = aid
-            var cid = intent.getLongExtra("cid", 0)
+            intentCid = intent.getLongExtra("cid", 0)
             fromSeason = intent.getBooleanExtra("fromSeason", false)
             fromPlayer = intent.getBooleanExtra("fromPlayer", false)
             forceShowDetail = intent.getBooleanExtra("forceShowDetail", false)
@@ -437,80 +520,14 @@ fun VideoInfoScreen(
 
                 runCatching {
                     videoDetailViewModel.loadDetail(aid, fromSeason)
-                    updateVideoUserActionData()
-                    withContext(Dispatchers.Main) {
-                        setHistory()
+                    // 首次加载被风控拦截时 loadDetail 会静默返回并弹出验证弹窗，
+                    // videoDetail 仍为 null，此时不能继续，收尾与自动起播由验证通过后的重试补跑
+                    if (videoDetailViewModel.videoDetail == null) {
+                        pendingDetailPostLoad = true
+                        return@runCatching
                     }
-
-                    videoInfoRepository.relatedVideos.clear()
-                    videoInfoRepository.description = videoDetailViewModel.videoDetail?.description ?: ""
-                    videoInfoRepository.tags = videoDetailViewModel.videoDetail?.tags ?: emptyList()
-                    if (!fromSeason) {
-                        if (Prefs.isLogin) updateFollowingState()
-
-                        videoInfoRepository.relatedVideos.addAll(
-                            videoDetailViewModel.relatedVideos.subList(
-                                0,
-                                videoDetailViewModel.relatedVideos.size))
-                    }
-                    // 从播放器推荐视频打开时 fromPlayer=true 并显示loading。300m后 fromPlayer改成false，此后从播放器返回详情页，正常显示详情内容
-                    //如果是从剧集跳转过来的或设置不显示视频详情，就直接播放 P1
-                    // forceShowDetail 时强制显示详情页，用于播放器控制条"详情"按钮
-                    if (!forceShowDetail && (fromSeason || !showUGCVideoInfo || fromPlayer)) {
-                        val shouldFinishAfterAutoLaunch = fromPlayer && !Prefs.videoInfoHistoryIncludeFromPlayer
-                        val playPart = videoDetailViewModel.videoDetail!!.pages.first()
-                        cid = cid.takeIf { it > 0L } ?: playPart.cid
-
-                        if (videoDetailViewModel.videoDetail!!.ugcSeason !== null) {
-                            val sectionIndex =
-                                videoDetailViewModel.videoDetail!!.ugcSeason!!.sections
-                                    .indexOfFirst { section -> section.episodes.any { it.cid == cid || it.pages.any { it.cid == cid } } }
-                            updateUgcSeasonSectionVideoList(sectionIndex)
-                        }
-
-                        // 检查Activity是否已经finish，如果已关闭则不启动播放器
-                        if (!context.isFinishing && !context.isDestroyed) {
-                            launchPlayerActivity(
-                                context = context,
-                                avid = videoDetailViewModel.videoDetail!!.aid,
-                                cid = cid,
-                                title = videoDetailViewModel.videoDetail!!.title,
-                                partTitle = videoDetailViewModel.videoDetail!!.pages.find { it.cid == cid }!!.title,
-                                played = if (cid == lastPlayedCid) lastPlayedTime * 1000 else 0,
-                                fromSeason = fromSeason,
-                                isVerticalVideo = videoDetailViewModel.videoDetail!!.pages.find { it.cid == cid }!!.dimension.isVertical,
-                                playerIconIdle = videoDetailViewModel.videoDetail!!.playerIcon?.idle
-                                    ?: "",
-                                playerIconMoving = videoDetailViewModel.videoDetail!!.playerIcon?.moving
-                                    ?: "",
-                                play = videoDetailViewModel.videoDetail!!.stat.view,
-                                danmaku = videoDetailViewModel.videoDetail!!.stat.danmaku,
-                                like = videoDetailViewModel.videoDetail!!.stat.like,
-                                coin = videoDetailViewModel.videoDetail!!.stat.coin,
-                                favorite = videoDetailViewModel.videoDetail!!.stat.favorite,
-                                upName = videoDetailViewModel.videoDetail!!.author.name,
-                                upId = videoDetailViewModel.videoDetail!!.author.mid,
-                                upFace = videoDetailViewModel.videoDetail!!.author.face,
-                                pubTime = videoDetailViewModel.videoDetail!!.publishDate.formatPubTimeString()
-                            )
-                        }
-                        if (shouldFinishAfterAutoLaunch) {
-                            context.finish()
-                        } else if (fromPlayer) {
-                            // 清除标记, 以便从播放器返回过来的可以进入详情页
-                            scope.launch {
-                                delay(1200)
-                                fromPlayer = false
-                                intent.removeExtra("fromPlayer")
-                                if (!showUGCVideoInfo) {
-                                    context.finish()
-                                }
-                            }
-                        }
-                        if (!fromPlayer) {
-                            context.finish()
-                        }
-                    }
+                    pendingDetailPostLoad = false
+                    onVideoDetailLoaded()
                 }.onFailure {
                     val errorMessage = it.localizedMessage
                     val isVideoNotFound = when (Prefs.apiType) {
@@ -556,6 +573,21 @@ fun VideoInfoScreen(
                     }
                 }
             }
+        }
+    }
+
+    // 首次加载被风控拦截后，VM 在验证通过时会重试 loadDetail；
+    // 这里在 state 变为 Success 时补跑被中断的收尾与自动起播
+    LaunchedEffect(videoDetailViewModel.state) {
+        if (!pendingDetailPostLoad) return@LaunchedEffect
+        when (videoDetailViewModel.state) {
+            VideoInfoState.Success -> {
+                pendingDetailPostLoad = false
+                onVideoDetailLoaded()
+            }
+
+            VideoInfoState.Error -> pendingDetailPostLoad = false
+            else -> {}
         }
     }
 

@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
@@ -235,7 +236,7 @@ class BVApp : Application() {
             runCatching {
                 if (GithubApi.checkUpdateAvailable()) {
                     withContext(Dispatchers.Main) {
-                        "发现新版本，可前往\"设置→关于\"完成更新".toast(context)
+                        "发现新版本，可前往\"设置→关于\"完成更新".toast(context, Toast.LENGTH_LONG)
                     }
                 }
             }

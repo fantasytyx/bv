@@ -1,8 +1,8 @@
 package dev.aaa1115910.bv.tv.component.videocard
 
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -51,7 +52,6 @@ import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.UpIcon
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.ImageSize
-import dev.aaa1115910.bv.util.ifElse
 import dev.aaa1115910.bv.util.resizedImageUrl
 
 @Composable
@@ -72,26 +72,7 @@ fun SmallVideoCard(
             .onFocusChanged {
                 hasFocus = it.isFocused
                 if (hasFocus) onFocus()
-            }
-            .ifElse(
-                hasFocus,
-                Modifier.border(
-                    width = 2.dp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.medium
-                )
-            )
-            .then(
-                if (!hasFocus && unfocusedBorderColor != null) {
-                    Modifier.border(
-                        width = 2.dp,
-                        color = unfocusedBorderColor,
-                        shape = MaterialTheme.shapes.medium
-                    )
-                } else {
-                    Modifier
-                }
-            ),
+            },
         onClick = onClick,
         onLongClick = onLongClick,
         colors = ClickableSurfaceDefaults.colors(
@@ -100,7 +81,23 @@ fun SmallVideoCard(
             pressedContainerColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
         ),
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1f)
+        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1.04f),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(
+                    width = 2.dp,
+                    color = unfocusedBorderColor ?: Color.Transparent
+                ),
+                shape = MaterialTheme.shapes.medium
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                ),
+                shape = MaterialTheme.shapes.medium
+            )
+        )
     ) {
         Column(
             modifier = modifier

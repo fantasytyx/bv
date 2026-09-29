@@ -4,6 +4,7 @@ import android.content.Context
 import dev.aaa1115910.bv.player.shared.R
 
 enum class VideoPlayerDanmakuMenuItem(private val strRes: Int) {
+    Enable(R.string.video_player_menu_danmaku_enable),
     Switch(R.string.video_player_menu_danmaku_switch),
     RollingDurationFactor(R.string.video_player_menu_danmaku_rolling_duration_factor),
     Density(R.string.video_player_menu_danmaku_density),

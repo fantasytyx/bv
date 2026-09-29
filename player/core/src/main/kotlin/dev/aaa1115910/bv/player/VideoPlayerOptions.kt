@@ -9,8 +9,8 @@ data class VideoPlayerOptions(
     val enableFfmpegAudioRenderer: Boolean = false,
     val enableAsyncQueueing: Boolean = true,
     val enableScreenRefreshRateMatching: Boolean = false,
-    /** 跳过音频中的静音段，交给 Sonic 压缩的内容更少，高速播放时更易听清 */
-    val enableSkipSilence: Boolean = true,
+    /** 跳过音频中的静音段，只在 2.5 倍速及以上生效（低倍速会压缩时间轴导致画面快进） */
+    val enableSkipSilence: Boolean = false,
     /** 音量均衡挡位，播放中可通过 AbstractVideoPlayer.setAudioBalanceLevel 动态调整 */
     val audioBalanceLevel: AudioBalanceLevel = AudioBalanceLevel.Off,
     /** CDN 吞吐样本上报入口，为空时不上报 */

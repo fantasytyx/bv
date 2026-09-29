@@ -44,6 +44,7 @@ import kotlin.math.roundToInt
 @Composable
 fun DanmakuMenuList(
     modifier: Modifier = Modifier,
+    onDanmakuEnableChange: (Boolean) -> Unit,
     onDanmakuSwitchChange: (List<DanmakuType>) -> Unit,
     onDanmakuSizeChange: (Float) -> Unit,
     onDanmakuOpacityChange: (Float) -> Unit,
@@ -59,7 +60,9 @@ fun DanmakuMenuList(
     val focusState = LocalMenuFocusStateData.current
     val parentMenuFocusRequester = remember { FocusRequester() }
     val parentMenuPositionFocusRequester = remember { FocusRequester() }
-    var selectedDanmakuMenuItem by remember { mutableStateOf(VideoPlayerDanmakuMenuItem.Switch) }
+    var selectedDanmakuMenuItem by remember { mutableStateOf(VideoPlayerDanmakuMenuItem.Enable) }
+    // showDanmaku 是普通字段，改它不会触发重组，这里单独维护开关的显示状态
+    var danmakuEnabled by remember { mutableStateOf(videoPlayerConfigData.showDanmaku) }
 
     Row(
         modifier = modifier.fillMaxHeight(),
@@ -70,6 +73,23 @@ fun DanmakuMenuList(
             .padding(horizontal = 8.dp)
         AnimatedVisibility(visible = focusState.focusState != MenuFocusState.MenuNav) {
             when (selectedDanmakuMenuItem) {
+                VideoPlayerDanmakuMenuItem.Enable -> RadioMenuList(
+                    modifier = menuItemsModifier,
+                    items = listOf(
+                        context.getString(R.string.video_player_menu_danmaku_enable_off),
+                        context.getString(R.string.video_player_menu_danmaku_enable_on)
+                    ),
+                    selected = if (danmakuEnabled) 1 else 0,
+                    onSelectedChanged = {
+                        danmakuEnabled = it == 1
+                        onDanmakuEnableChange(it == 1)
+                    },
+                    onFocusBackToParent = {
+                        onFocusStateChange(MenuFocusState.Menu)
+                        parentMenuFocusRequester.requestFocus()
+                    }
+                )
+
                 VideoPlayerDanmakuMenuItem.RollingDurationFactor -> StepLessMenuItem(
                     modifier = menuItemsModifier,
                     value = videoPlayerConfigData.currentDanmakuRollingDurationFactor,

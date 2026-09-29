@@ -76,6 +76,7 @@ fun MenuController(
     onLiveQualityChange: (Int) -> Unit = {},
     onLiveCodecChange: (LiveCodec) -> Unit = {},
     onLiveLineChange: (Int) -> Unit = {},
+    onDanmakuEnableChange: (Boolean) -> Unit = {},
     onDanmakuSwitchChange: (List<DanmakuType>) -> Unit,
     onDanmakuSizeChange: (Float) -> Unit,
     onDanmakuOpacityChange: (Float) -> Unit,
@@ -119,6 +120,7 @@ fun MenuController(
                 onLiveQualityChange = onLiveQualityChange,
                 onLiveCodecChange = onLiveCodecChange,
                 onLiveLineChange = onLiveLineChange,
+                onDanmakuEnableChange = onDanmakuEnableChange,
                 onDanmakuSwitchChange = onDanmakuSwitchChange,
                 onDanmakuSizeChange = onDanmakuSizeChange,
                 onDanmakuOpacityChange = onDanmakuOpacityChange,
@@ -152,6 +154,7 @@ fun MenuController(
     onLiveQualityChange: (Int) -> Unit = {},
     onLiveCodecChange: (LiveCodec) -> Unit = {},
     onLiveLineChange: (Int) -> Unit = {},
+    onDanmakuEnableChange: (Boolean) -> Unit = {},
     onDanmakuSwitchChange: (List<DanmakuType>) -> Unit,
     onDanmakuSizeChange: (Float) -> Unit,
     onDanmakuOpacityChange: (Float) -> Unit,
@@ -198,6 +201,7 @@ fun MenuController(
                     onLiveQualityChange = onLiveQualityChange,
                     onLiveCodecChange = onLiveCodecChange,
                     onLiveLineChange = onLiveLineChange,
+                    onDanmakuEnableChange = onDanmakuEnableChange,
                     onDanmakuSwitchChange = onDanmakuSwitchChange,
                     onDanmakuSizeChange = onDanmakuSizeChange,
                     onDanmakuOpacityChange = onDanmakuOpacityChange,
@@ -250,6 +254,7 @@ private fun MenuList(
     onLiveQualityChange: (Int) -> Unit = {},
     onLiveCodecChange: (LiveCodec) -> Unit = {},
     onLiveLineChange: (Int) -> Unit = {},
+    onDanmakuEnableChange: (Boolean) -> Unit = {},
     onDanmakuSwitchChange: (List<DanmakuType>) -> Unit,
     onDanmakuSizeChange: (Float) -> Unit,
     onDanmakuOpacityChange: (Float) -> Unit,
@@ -289,6 +294,7 @@ private fun MenuList(
 
             VideoPlayerMenuNavItem.Danmaku -> {
                 DanmakuMenuList(
+                    onDanmakuEnableChange = onDanmakuEnableChange,
                     onDanmakuSwitchChange = onDanmakuSwitchChange,
                     onDanmakuSizeChange = onDanmakuSizeChange,
                     onDanmakuOpacityChange = onDanmakuOpacityChange,

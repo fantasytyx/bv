@@ -102,17 +102,19 @@ fun VideoShotImage(
 
     Image(
         modifier = modifier
-            .height(100.dp)
-            .shadow(4.dp, MaterialTheme.shapes.medium)
-            .clip(MaterialTheme.shapes.medium)
+            // 旋转放在最外层，让阴影与圆角裁剪（缩略图容器）一起旋转，而不是只有画面内容旋转
             .graphicsLayer {
                 rotationZ = rotation.degrees
-                if (rotation.shouldSwapDimensions && size.maxDimension > 0) {
-                    val s = size.minDimension / size.maxDimension
+                // 旋转后缩略图的高为原宽，按容器高度等比缩小，使其完整显示在进度条上方
+                if (rotation.shouldSwapDimensions && size.width > 0f) {
+                    val s = (size.height / size.width).coerceAtMost(1f)
                     scaleX = s
                     scaleY = s
                 }
             }
+            .height(100.dp)
+            .shadow(4.dp, MaterialTheme.shapes.medium)
+            .clip(MaterialTheme.shapes.medium)
             .drawBehind {
                 if (view.isInEditMode) {
                     drawLine(Color.White, Offset(center.x, 0f), Offset(center.x, size.height), 2f)

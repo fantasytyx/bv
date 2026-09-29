@@ -56,7 +56,10 @@ class VideoDetailRepository(
      * Subsequent [getVideoDetail] calls for the same [aid] will read from cache instead of re-fetching.
      */
     fun setCachedUserActions(aid: Long, liked: Boolean, favored: Boolean, coined: Boolean) {
-        userActionsCache.putIfAbsent(aid, Triple(liked, favored, coined))
+        // putIfAbsent 需 API 24，minSdk 23 上会 NoSuchMethodError
+        synchronized(userActionsCache) {
+            if (!userActionsCache.containsKey(aid)) userActionsCache[aid] = Triple(liked, favored, coined)
+        }
     }
 
     private suspend fun fillInteractiveInfo(

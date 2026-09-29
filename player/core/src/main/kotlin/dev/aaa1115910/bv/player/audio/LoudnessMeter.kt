@@ -146,24 +146,6 @@ internal class LoudnessMeter(
         blockFrameCount = 0
     }
 
-    /**
-     * 当前窗口内最响的一个统计块（LUFS）。
-     *
-     * 起始阶段用它代替门控综合响度：宁可估得更响（多衰减一点），
-     * 也不要因为开头几块偏安静而先把音量抬上去。
-     */
-    fun peakBlockLufs(): Double? {
-        var peak = Double.NEGATIVE_INFINITY
-        for (i in 0 until validBlockCount) {
-            val meanSquare = blockMeanSquares[i]
-            if (meanSquare <= 0.0) continue
-            val lufs = toLufs(meanSquare)
-            if (lufs <= ABSOLUTE_GATE_LUFS) continue
-            if (lufs > peak) peak = lufs
-        }
-        return if (peak.isFinite()) peak else null
-    }
-
     private fun toLufs(meanSquare: Double) = LOUDNESS_OFFSET + 10.0 * log10(meanSquare)
 
     private companion object {

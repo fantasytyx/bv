@@ -18,9 +18,9 @@ enum class AudioBalanceLevel(
     private val strRes: Int
 ) {
     Off(0.0, 0.0, R.string.video_player_menu_audio_balance_off),
-    Low(-22.0, 6.0, R.string.video_player_menu_audio_balance_low),
+    Low(-19.0, 6.0, R.string.video_player_menu_audio_balance_low),
     Medium(-16.0, 10.0, R.string.video_player_menu_audio_balance_medium),
-    High(-12.0, 12.0, R.string.video_player_menu_audio_balance_high);
+    High(-12.0, 14.0, R.string.video_player_menu_audio_balance_high);
 
     fun getDisplayName(context: Context) = context.getString(strRes)
 

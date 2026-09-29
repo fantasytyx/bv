@@ -216,6 +216,7 @@ fun VideoPlayerV3Screen(
     var autoActionCountdownJob by remember { mutableStateOf<Job?>(null) }
     var autoActionTipVisible by remember { mutableStateOf(false) }
     var autoActionTipText by remember { mutableStateOf("") }
+    // 长按下键会立即触发“播放下一个”，标记跳过它自己的 KeyUp 取消逻辑
     var skipNextKeyUpCancel by remember { mutableStateOf(false) }
     var showDebugInfo by remember { mutableStateOf(Prefs.playerShowDebugInfo) }
     var audioBalanceLevel by remember { mutableStateOf(Prefs.playerAudioBalanceLevel) }
@@ -454,12 +455,19 @@ fun VideoPlayerV3Screen(
         Box(
             modifier = Modifier
                 .onPreviewKeyEvent { keyEvent ->
-                    // 检测长按下键，标记跳过对应的 KeyUp 取消
+                    // 长按下键会立即触发“播放下一个”，其 KeyUp 会立刻取消刚显示的倒计时，需要跳过
                     if (keyEvent.type == KeyEventType.KeyDown
+                        && keyEvent.key == Key.DirectionDown
                         && keyEvent.nativeKeyEvent.isLongPress) {
                         skipNextKeyUpCancel = true
                     }
-                    if (!skipNextKeyUpCancel && keyEvent.type == KeyEventType.KeyUp && listOf(Key.Enter, Key.DirectionCenter).contains(keyEvent.key) && autoActionCountdownJob != null && nextTipCardData != null) {
+                    if (keyEvent.type == KeyEventType.KeyUp
+                        && keyEvent.key == Key.DirectionDown
+                        && skipNextKeyUpCancel) {
+                        skipNextKeyUpCancel = false
+                        return@onPreviewKeyEvent false
+                    }
+                    if (keyEvent.type == KeyEventType.KeyUp && listOf(Key.Enter, Key.DirectionCenter).contains(keyEvent.key) && autoActionCountdownJob != null && nextTipCardData != null) {
                         // 确认键：立即播放下一个，跳过倒计时
                         logger.debug { "按下确认键，立即播放下一个" }
                         autoActionCountdownJob?.cancel()
@@ -470,11 +478,6 @@ fun VideoPlayerV3Screen(
                         return@onPreviewKeyEvent true
                     }
                     if (keyEvent.type == KeyEventType.KeyUp && autoActionCountdownJob != null) {
-                        // 跳过长按下键触发的那次 KeyUp（长按下键释放）
-                        if (skipNextKeyUpCancel) {
-                            skipNextKeyUpCancel = false
-                            return@onPreviewKeyEvent false
-                        }
                         // 任何按键都可以取消倒计时
                         logger.debug { "按下按键: ${keyEvent.key}, 取消播放下一个（或自动退出）" }
                         autoActionCountdownJob?.cancel()

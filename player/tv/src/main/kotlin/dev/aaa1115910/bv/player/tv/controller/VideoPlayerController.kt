@@ -729,6 +729,7 @@ fun VideoPlayerController(
             onLiveQualityChange = onLiveQualityChange,
             onLiveCodecChange = onLiveCodecChange,
             onLiveLineChange = onLiveLineChange,
+            onDanmakuEnableChange = { if (it) onOpenDanmaku() else onHideDanmaku() },
             onDanmakuSwitchChange = onDanmakuSwitchChange,
             onDanmakuSizeChange = onDanmakuSizeChange,
             onDanmakuOpacityChange = onDanmakuOpacityChange,

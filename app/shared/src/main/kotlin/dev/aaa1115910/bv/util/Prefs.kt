@@ -818,7 +818,7 @@ object PrefKeys {
     val prefCachedLiveAreaGroupsRequest = PreferenceRequest(prefCachedLiveAreaGroupsKey, "")
     val prefEnableAsyncQueueingRequest = PreferenceRequest(prefEnableAsyncQueueing, false)
     val prefEnableScreenRefreshRateMatchingRequest = PreferenceRequest(prefEnableScreenRefreshRateMatching, false)
-    val prefPlayerSkipSilenceRequest = PreferenceRequest(prefPlayerSkipSilenceKey, true)
+    val prefPlayerSkipSilenceRequest = PreferenceRequest(prefPlayerSkipSilenceKey, false)
     val prefPlayerAudioBalanceLevelRequest =
         PreferenceRequest(prefPlayerAudioBalanceLevelKey, AudioBalanceLevel.Off.ordinal)
     val prefSkipPgcIntroOutroRequest = PreferenceRequest(prefSkipPgcIntroOutroKey, false)

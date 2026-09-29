@@ -671,7 +671,8 @@ fun BvPlayer(
                     if (autoOpenPlayListOnVideoEnd) {
                         openPlayListRequestToken = System.currentTimeMillis()
                     } else {
-                        onLoadNextVideo(true)
+                        // 快进到末尾同样显示播放下一个的提示，而不是直接切换
+                        onLoadNextVideo(false)
                     }
                 }
             },
@@ -891,12 +892,14 @@ fun BvPlayer(
                         setPlaybackSpeedProvider { videoPlayer.speed }
                         setMaskEnabled(videoPlayerConfigData.currentDanmakuMask)
                         setMaskSegments(videoPlayerDanmakuMaskData.danmakuMasks.toList())
+                        setVideoRotation(currentVideoRotation.degrees)
                         setConfig(danmakuConfig)
                     }
                 },
                 update = { view ->
                     view.setVideoAspectRatio(aspectRatioValue)
                     view.setVideoAspectRatioType(currentVideoAspectRatio)
+                    view.setVideoRotation(currentVideoRotation.degrees)
                 }
             )
 

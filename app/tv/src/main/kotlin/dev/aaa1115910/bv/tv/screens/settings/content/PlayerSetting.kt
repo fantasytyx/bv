@@ -191,7 +191,7 @@ fun PlayerSetting(
             item {
                 SettingSwitchListItem(
                     title = "跳过静音",
-                    supportText = "自动跳过音频中的静音段，高倍速播放（2 倍以上）时减少语音失真；对连续说话或无静音的视频无效",
+                    supportText = "自动跳过音频中的静音段，2.5 倍速及以上时减少语音失真；对连续说话或无静音的视频无效",
                     checked = playerSkipSilence,
                     onCheckedChange = {
                         playerSkipSilence = it

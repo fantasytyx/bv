@@ -48,8 +48,10 @@ object VideoUserActionManager {
     private fun ensure(aid: Long, uid: Long = Prefs.uid): MutableStateFlow<VideoActionState> {
         val k = key(uid, aid)
         stateMap[k]?.let { return it }
-        val newFlow = MutableStateFlow(VideoActionState())
-        return stateMap.putIfAbsent(k, newFlow) ?: newFlow
+        // putIfAbsent 需 API 24，minSdk 23 上会 NoSuchMethodError
+        return synchronized(stateMap) {
+            stateMap.getOrPut(k) { MutableStateFlow(VideoActionState()) }
+        }
     }
 
     fun getStateFlow(aid: Long, uid: Long = Prefs.uid): StateFlow<VideoActionState> = ensure(aid, uid)

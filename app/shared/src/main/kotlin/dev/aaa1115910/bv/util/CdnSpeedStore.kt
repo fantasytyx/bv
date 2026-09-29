@@ -231,7 +231,9 @@ object CdnSpeedStore : CdnSpeedRecorder {
                         val loaded = parse(raw)
                         synchronized(lock) {
                             // 加载期间可能已经采到样本，以内存里的为准
-                            loaded.forEach { (family, entry) -> entries.putIfAbsent(family, entry) }
+                            loaded.forEach { (family, entry) ->
+                                if (family !in entries) entries[family] = entry
+                            }
                             trimLocked(System.currentTimeMillis())
                         }
                     }.also { loadDeferred = it }

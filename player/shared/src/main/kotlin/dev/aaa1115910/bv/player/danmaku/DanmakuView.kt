@@ -64,6 +64,7 @@ class DanmakuView @JvmOverloads constructor(
 
     @Volatile private var videoAspectRatio: Float = 0f
     @Volatile private var videoAspectRatioType: VideoAspectRatio = VideoAspectRatio.Default
+    @Volatile private var videoRotationDegrees: Float = 0f
 
     private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
@@ -139,6 +140,13 @@ class DanmakuView @JvmOverloads constructor(
 
     fun setVideoAspectRatio(ratio: Float) { videoAspectRatio = ratio }
     fun setVideoAspectRatioType(type: VideoAspectRatio) { videoAspectRatioType = type }
+
+    /** 画面旋转角度，蒙版需跟随画面一起旋转（弹幕本身仍保持水平）。 */
+    fun setVideoRotation(degrees: Float) {
+        if (videoRotationDegrees == degrees) return
+        videoRotationDegrees = degrees
+        postInvalidate()
+    }
 
     // ---- Mask 内部逻辑 ----
 
@@ -344,7 +352,24 @@ class DanmakuView @JvmOverloads constructor(
         }
 
         maskDstRect.set(offsetX.toInt(), offsetY.toInt(), (offsetX + dstW).toInt(), (offsetY + dstH).toInt())
+
+        val rotation = videoRotationDegrees
+        if (rotation == 0f) {
+            canvas.drawBitmap(bitmap, null, maskDstRect, maskPaint)
+            return
+        }
+
+        // 与 BvVideoPlayer 中 TextureView 的矩阵保持一致：±90° 时按同一比例缩放后，再绕视频中心旋转
+        val centerX = screenW / 2f
+        val centerY = screenH / 2f
+        canvas.save()
+        canvas.rotate(rotation, centerX, centerY)
+        if (rotation == 90f || rotation == -90f) {
+            val scale = minOf(screenH / dstW, screenW / dstH)
+            canvas.scale(scale, scale, centerX, centerY)
+        }
         canvas.drawBitmap(bitmap, null, maskDstRect, maskPaint)
+        canvas.restore()
     }
 
     // ---- 生命周期 ----
