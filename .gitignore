@@ -20,3 +20,4 @@ signing.properties
 *.log
 /app/default/
 .opencode
+.superpowers

@@ -29,6 +29,7 @@ import dev.aaa1115910.bv.player.VideoPlayerOptions
 import dev.aaa1115910.bv.player.audio.VolumeBalanceAudioProcessor
 import dev.aaa1115910.bv.player.cdn.CdnFailoverDataSourceFactory
 import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
+import dev.aaa1115910.bv.player.entity.AudioLoudness
 import dev.aaa1115910.bv.util.formatHourMinSec
 
 /**
@@ -262,6 +263,10 @@ class ExoMediaPlayer(
 
     override fun setAudioBalanceLevel(level: AudioBalanceLevel) {
         volumeBalanceProcessor.setLevel(level)
+    }
+
+    override fun setAudioLoudness(loudness: AudioLoudness?) {
+        volumeBalanceProcessor.setLoudness(loudness)
     }
 
     override val tcpSpeed: Long

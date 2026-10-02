@@ -1,5 +1,6 @@
 package dev.aaa1115910.biliapi.http.entity.proxy
 
+import dev.aaa1115910.biliapi.entity.VolumeInfo
 import dev.aaa1115910.biliapi.http.entity.video.ClipInfo
 import dev.aaa1115910.biliapi.http.entity.video.DashData
 import dev.aaa1115910.biliapi.http.entity.video.DashFlac
@@ -62,7 +63,8 @@ data class ProxyWebPlayUrlData(
     @SerialName("clip_info_list")
     val clipInfoList: List<ClipInfo> = emptyList(),
     @SerialName("record_info")
-    val recordInfo: RecordInfo? = null
+    val recordInfo: RecordInfo? = null,
+    val volume: VolumeInfo? = null
 )
 
 @Serializable
@@ -117,7 +119,8 @@ data class ProxyAppPlayUrlData(
     @SerialName("clip_info_list")
     val clipInfoList: List<ClipInfo> = emptyList(),
     @SerialName("record_info")
-    val recordInfo: RecordInfo? = null
+    val recordInfo: RecordInfo? = null,
+    val volume: VolumeInfo? = null
 )
 
 @Serializable

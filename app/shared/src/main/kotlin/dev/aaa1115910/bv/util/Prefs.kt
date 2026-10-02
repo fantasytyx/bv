@@ -718,7 +718,7 @@ object PrefKeys {
     val prefEnableAsyncQueueing = booleanPreferencesKey("enable_async_queueing")
     val prefEnableScreenRefreshRateMatching = booleanPreferencesKey("enable_screen_refresh_rate_matching")
     val prefPlayerSkipSilenceKey = booleanPreferencesKey("player_skip_silence")
-    val prefPlayerAudioBalanceLevelKey = intPreferencesKey("player_audio_balance_level")
+    val prefPlayerAudioBalanceLevelKey = intPreferencesKey("player_audio_balance_level_v2")
     val prefSkipPgcIntroOutroKey = booleanPreferencesKey("skip_pgc_intro_outro")
     val prefPlayerControllerButtonsOrderKey = stringPreferencesKey("player_controller_buttons_order")
     val prefUgcVideoInfoHistoryCountKey = intPreferencesKey("ugc_video_info_history_count")

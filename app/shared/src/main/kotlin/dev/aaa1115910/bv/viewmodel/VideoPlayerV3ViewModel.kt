@@ -53,6 +53,7 @@ import dev.aaa1115910.bv.player.entity.VideoCodec
 import dev.aaa1115910.bv.player.entity.VideoListInteractiveNode
 import dev.aaa1115910.bv.player.entity.VideoListItemData
 import dev.aaa1115910.bv.player.entity.VideoRotation
+import dev.aaa1115910.bv.player.entity.toAudioLoudness
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.util.CdnSpeedStore
 import dev.aaa1115910.bv.util.GeetestSession
@@ -98,9 +99,20 @@ class VideoPlayerV3ViewModel(
             value?.onSeek = ::onVideoSeeked
             value?.onDecoderError = ::fallbackToLowerQuality
             videoPlayerState = value
+            // 播放器实例可能是新建的，处理器随之是空的，这里必须补推一次
+            pushAudioLoudness(playData)
         }
     var danmakuView: DanmakuView? by mutableStateOf(null)
     var show by mutableStateOf(false)
+
+    /**
+     * 把 [data] 的响度元数据推给播放器，null 表示让处理器旁路。
+     *
+     * 换集与播放器重建后都要推：否则处理器要么拿不到元数据，要么仍按上一集的元数据算增益。
+     */
+    private fun pushAudioLoudness(data: PlayData?) {
+        videoPlayer?.setAudioLoudness(data?.volume?.toAudioLoudness())
+    }
 
     override fun onCleared() {
         super.onCleared()
@@ -573,6 +585,7 @@ class VideoPlayerV3ViewModel(
 
             withContext(Dispatchers.Main) { this@VideoPlayerV3ViewModel.playData = playData }
             withContext(Dispatchers.Main) { this@VideoPlayerV3ViewModel.clipInfoList = playData.clipInfoList }
+            withContext(Dispatchers.Main) { pushAudioLoudness(playData) }
             logger.fInfo { "Load play data response success" }
             //logger.info { "Play data: $playData" }
 
@@ -1212,6 +1225,7 @@ class VideoPlayerV3ViewModel(
             }
 
             withContext(Dispatchers.Main) { this@VideoPlayerV3ViewModel.playData = playData }
+            withContext(Dispatchers.Main) { pushAudioLoudness(playData) }
 
             // 使用当前清晰度和编码重新播放
             val qn = currentQuality
@@ -1694,6 +1708,8 @@ class VideoPlayerV3ViewModel(
         consecutiveRefreshFailures = 0
         // 标记播放器为直播模式
         videoPlayer?.isLive = true
+        // 直播没有响度元数据，明确旁路，避免沿用上一条点播的增益
+        pushAudioLoudness(null)
 
         viewModelScope.launch(Dispatchers.IO) {
             logger.fInfo { "Load live stream with quality: roomId=$roomId, qn=$qn" }

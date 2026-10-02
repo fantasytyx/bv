@@ -73,7 +73,7 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
 
 ## 构建前置
 
-1. **JDK 21**（强制，`AppConfiguration.jdk`）。跑 gradle 前先设好 `JAVA_HOME`，否则报 `Cannot find a Java installation ... matching: {languageVersion=21}`
+1. **JDK 21**（强制，`AppConfiguration.jdk`）。跑 gradle 前先设好 `JAVA_HOME`，否则报 `Cannot find a Java installation ... matching: {languageVersion=21}`。**`JAVA_HOME` 必须指向 JDK 21 本体，不能指向更新的 JDK**（例如 Android Studio 自带 jbr 现在已是 Java 25）：`bili-api` 没有 `java.toolchain` 块，会用守护进程的 JVM 编译，而 `player/*` 声明了 `toolchain = 21`，两者 bytecode 版本不一致时，任何 `player` 模块的测试只要加载 `bili-api` 的类就报 `UnsupportedClassVersionError`。换过 `JAVA_HOME` 后先 `./gradlew --stop` 让守护进程换 JVM
 2. **Android SDK**：`local.properties` 中设置 `sdk.dir`
 3. **compileSdk = 37**、**minSdk = 23**、**targetSdk = 36**（见 `AppConfiguration`）
 4. **Release/Alpha/R8Test 构建**：根目录需 `signing.properties`（含 `keystore.path`、`keystore.pwd`、`keystore.alias`、`keystore.alias_pwd`）
@@ -154,7 +154,7 @@ B 站对**未登录 Web 请求**风控最严。改 `bili-api` 的请求形态或
 - `nonTransitiveRClass=true` 已启用
 - Compose Compiler Reports 输出到 `build/compose_build_reports`
 - ProGuard 规则集中在各模块 `proguard-rules.pro` / `consumer-rules.pro`
-- **音频均衡改动的验收标准是真机试听**（`player/core/src/main/kotlin/dev/aaa1115910/bv/player/audio/`）。离线仿真和单测只能算辅助证据，汇报时把「仿真结论 / 单测结论 / 真机结论」分开写。`VolumeBalanceAudioProcessor` 的三段增益（窗口填满前只压不抬 → `GAIN_SETTLE_STEP_DB` 限速定档 → 6/12s 维持）与限制器软拐点参数都是定稿值，"指数逼近"和"给包络加 ms 级起音"已被量化否定，不要改回。另有三道防止「把安静前奏/安静段落当成整段偏轻」的约束，同样是定稿值：提升天花板（节目级参照 `anchorLufs`，需连续 `ANCHOR_RISE_BLOCKS` 块才采纳，避免单块爆点把参照钉死）、提升下限 `MIN_BOOST_LUFS`、快速收回 `GAIN_REVOKE_STEP_DB`。参照下移只能用固定慢速率 + 死区（`ANCHOR_FALL_DB_PER_BLOCK` / `ANCHOR_FALL_DEADBAND_LU`）——改回「按当前水平指数逼近」时，20 秒的安静段就足以让天花板打开约 2 dB，安静段落重新被抬起来（已回归，见 `VolumeBalanceAudioProcessorTest`）。`WINDOW_BLOCKS`（5 秒 = 50 块）必须与 `LoudnessMeter` 的 `windowSeconds` 同步
+- **音量均衡是「服务端响度元数据驱动的静态增益」**（`player/core/src/main/kotlin/dev/aaa1115910/bv/player/audio/`）。增益只由 `AudioBalanceGain.gainDb()` 一处决定（纯函数、有单测），公式固定为「档位目标 − `measured_i`」；**不要改去读服务端的 `target_offset`**——它是单值、不随档位变化，读它会让标准/影音算出同一增益、三挡失效（`AudioLoudness` 已刻意不带该字段，`VolumeInfo` 仍留档）。处理器只做「乘增益 + 50ms 线性斜坡」——没有响度测量、没有统计窗口、没有限幅器，所以不会抽吸也不改音色。**没有元数据就整体旁路**：gRPC UGC 会映射 `playershared.VodInfo.volume`（只是没有 `multi_scene_args`，两挡会退化成同一个目标），而 gRPC PGC 的 proto 里根本没有 `volume` 字段，所以走 App(gRPC) 接口的 PGC 稿件拿不到元数据、均衡不生效。挡位三挡「关闭 / 标准模式（`normal_target_i`）/ 影音模式（`high_dynamic_target_i`）」，挡位自身不带目标响度。元数据来自 `playurl` 的 `video_info.volume`（`bili-api` 的 `VolumeInfo` → `player/shared` 的 `AudioLoudness`），由 `VideoPlayerV3ViewModel` 在换集与播放器重建时推送（漏推会让下一集沿用上一集的增益）。**验收标准仍是真机试听**，汇报时把「单测结论 / 真机结论」分开写；单测只覆盖增益判定与处理器算术
 - 偏好设置统一在 [app/shared/.../util/Prefs.kt](app/shared/src/main/kotlin/dev/aaa1115910/bv/util/Prefs.kt)
 
 ## 常见坑

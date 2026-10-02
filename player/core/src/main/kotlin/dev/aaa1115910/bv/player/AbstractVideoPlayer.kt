@@ -1,6 +1,7 @@
 package dev.aaa1115910.bv.player
 
 import dev.aaa1115910.bv.player.entity.AudioBalanceLevel
+import dev.aaa1115910.bv.player.entity.AudioLoudness
 
 abstract class AbstractVideoPlayer {
     /** 播放器事件回调 */
@@ -85,6 +86,14 @@ abstract class AbstractVideoPlayer {
 
     /** 设置音量均衡挡位，可播放中动态切换 */
     open fun setAudioBalanceLevel(level: AudioBalanceLevel) {}
+
+    /**
+     * 推入本集的响度元数据，null 表示没有元数据（旁路）。
+     *
+     * 换集与播放器重建后都必须重新推一次：处理器实例是新建的，不推就沿用不了元数据，
+     * 或者会沿用上一集的值。
+     */
+    open fun setAudioLoudness(loudness: AudioLoudness?) {}
 
     /** 当前缓冲的网速 */
     abstract val tcpSpeed: Long
