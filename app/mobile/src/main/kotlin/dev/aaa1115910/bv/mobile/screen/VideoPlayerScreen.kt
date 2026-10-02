@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -132,6 +133,83 @@ import kotlinx.serialization.json.Json
 import org.json.JSONObject
 import org.koin.androidx.compose.koinViewModel
 
+/**
+ * 极验 GT3 弹窗宿主：驱动一次完整的自定义验证流程。
+ * 播放与详情各持有一个实例，避免详情页被风控时无人渲染弹窗而静默卡住。
+ */
+@Composable
+private fun GeetestDialogHost(
+    show: Boolean,
+    gt: String,
+    challenge: String,
+    onResult: (challenge: String, validate: String, seccode: String) -> Unit,
+    onCancelled: () -> Unit,
+) {
+    val context = LocalContext.current
+    val currentOnResult by rememberUpdatedState(onResult)
+    val currentOnCancelled by rememberUpdatedState(onCancelled)
+    var gt3GeetestUtils: GT3GeetestUtils? by remember { mutableStateOf(null) }
+    val gt3ConfigBean by remember { mutableStateOf(GT3ConfigBean()) }
+
+    DisposableEffect(Unit) {
+        gt3GeetestUtils = GT3GeetestUtils(context)
+        gt3ConfigBean.apply {
+            pattern = 1
+            isCanceledOnTouchOutside = false
+            lang = null
+            timeout = 10000
+            webviewTimeout = 10000
+            corners = 24
+            listener = object : GT3Listener() {
+                override fun onReceiveCaptchaCode(p0: Int) {}
+                override fun onStatistics(p0: String?) {}
+                override fun onSuccess(p0: String?) {}
+                override fun onButtonClick() {}
+
+                override fun onClosed(p0: Int) {
+                    currentOnCancelled()
+                }
+
+                override fun onFailed(p0: GT3ErrorBean?) {
+                    currentOnCancelled()
+                }
+
+                override fun onDialogResult(result: String) {
+                    runCatching {
+                        val geetestResult = Json.decodeFromString<GeetestResult>(result)
+                        gt3GeetestUtils?.showSuccessDialog()
+                        currentOnResult(
+                            geetestResult.geetestChallenge,
+                            geetestResult.geetestValidate,
+                            geetestResult.geetestSeccode
+                        )
+                    }.onFailure {
+                        gt3GeetestUtils?.showFailedDialog()
+                        currentOnCancelled()
+                    }
+                }
+            }
+        }
+        gt3GeetestUtils!!.init(gt3ConfigBean)
+
+        onDispose {
+            gt3GeetestUtils?.destory()
+        }
+    }
+
+    LaunchedEffect(show) {
+        if (show) {
+            gt3GeetestUtils?.startCustomFlow()
+            gt3ConfigBean.api1Json = JSONObject().apply {
+                put("success", 1)
+                put("gt", gt)
+                put("challenge", challenge)
+            }
+            gt3GeetestUtils?.getGeetest()
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoPlayerScreen(
@@ -168,67 +246,21 @@ fun VideoPlayerScreen(
     )
     val replySheetState = rememberBottomSheetScaffoldState()
 
-    // 风控 Geetest 验证
-    var gt3GeetestUtils: GT3GeetestUtils? by remember { mutableStateOf(null) }
-    val gt3ConfigBean by remember { mutableStateOf(GT3ConfigBean()) }
-
-    DisposableEffect(Unit) {
-        gt3GeetestUtils = GT3GeetestUtils(context)
-        gt3ConfigBean.apply {
-            pattern = 1
-            isCanceledOnTouchOutside = false
-            lang = null
-            timeout = 10000
-            webviewTimeout = 10000
-            corners = 24
-            listener = object : GT3Listener() {
-                override fun onReceiveCaptchaCode(p0: Int) {}
-                override fun onStatistics(p0: String?) {}
-                override fun onSuccess(p0: String?) {}
-                override fun onButtonClick() {}
-
-                override fun onClosed(p0: Int) {
-                    playerViewModel.onGeetestCancelled()
-                }
-
-                override fun onFailed(p0: GT3ErrorBean?) {
-                    playerViewModel.onGeetestCancelled()
-                }
-
-                override fun onDialogResult(result: String) {
-                    runCatching {
-                        val geetestResult = Json.decodeFromString<GeetestResult>(result)
-                        gt3GeetestUtils?.showSuccessDialog()
-                        playerViewModel.onGeetestResult(
-                            challenge = geetestResult.geetestChallenge,
-                            validate = geetestResult.geetestValidate,
-                            seccode = geetestResult.geetestSeccode
-                        )
-                    }.onFailure {
-                        gt3GeetestUtils?.showFailedDialog()
-                        playerViewModel.onGeetestCancelled()
-                    }
-                }
-            }
-        }
-        gt3GeetestUtils!!.init(gt3ConfigBean)
-
-        onDispose {
-            gt3GeetestUtils?.destory()
-        }
-    }
-
-    LaunchedEffect(playerViewModel.showGeetestDialog) {
-        if (playerViewModel.showGeetestDialog) {
-            gt3GeetestUtils?.startCustomFlow()
-            gt3ConfigBean.api1Json = JSONObject().apply {
-                put("success", 1)
-                put("gt", playerViewModel.geetestGt)
-                put("challenge", playerViewModel.geetestChallenge)
-            }
-            gt3GeetestUtils?.getGeetest()
-        }
-    }
+    // 风控 Geetest 验证：播放与详情各一个独立宿主
+    GeetestDialogHost(
+        show = playerViewModel.showGeetestDialog,
+        gt = playerViewModel.geetestGt,
+        challenge = playerViewModel.geetestChallenge,
+        onResult = playerViewModel::onGeetestResult,
+        onCancelled = playerViewModel::onGeetestCancelled,
+    )
+    GeetestDialogHost(
+        show = videoDetailViewModel.showGeetestDialog,
+        gt = videoDetailViewModel.geetestGt,
+        challenge = videoDetailViewModel.geetestChallenge,
+        onResult = videoDetailViewModel::onGeetestResult,
+        onCancelled = videoDetailViewModel::onGeetestCancelled,
+    )
 
     val setPreviewerPictures: (List<Picture>, () -> Unit) -> Unit =
         { newPictures, afterSetPictures ->

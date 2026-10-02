@@ -2,7 +2,6 @@ package dev.aaa1115910.biliapi.http
 
 import dev.aaa1115910.biliapi.BiliApiConstants
 import dev.aaa1115910.biliapi.http.entity.BiliResponse
-import dev.aaa1115910.biliapi.http.entity.BiliResponseWithoutData
 import dev.aaa1115910.biliapi.http.entity.login.CaptchaData
 import dev.aaa1115910.biliapi.http.entity.login.LoginWebKeyData
 import dev.aaa1115910.biliapi.http.entity.login.PreCaptureData
@@ -253,33 +252,6 @@ object BiliPassportHttpApi {
                 statistics?.let { append("statistics", it) }
                 append("tel", "$tel")
                 ts?.let { append("ts", "$it") }
-            }
-        ))
-    }.body()
-
-    /**
-     * 退出登录，和 PiliPlus 一样只提交 biliCSRF，账号凭证通过 Cookie 传递。
-     */
-    suspend fun logout(
-        biliCSRF: String,
-        sessData: String,
-        dedeUserID: Long? = null,
-        dedeUserIDCkMd5: String? = null,
-        sid: String? = null
-    ): BiliResponseWithoutData = client.post("/login/exit/v2") {
-        val cookieParts = buildList {
-            sessData.takeIf { it.isNotBlank() }?.let { add("SESSDATA=$it") }
-            dedeUserID?.takeIf { it > 0 }?.let { add("DedeUserID=$it") }
-            dedeUserIDCkMd5?.takeIf { it.isNotBlank() }?.let { add("DedeUserID__ckMd5=$it") }
-            biliCSRF.takeIf { it.isNotBlank() }?.let { add("bili_jct=$it") }
-            sid?.takeIf { it.isNotBlank() }?.let { add("sid=$it") }
-        }
-        if (cookieParts.isNotEmpty()) {
-            header(HttpHeaders.Cookie, cookieParts.joinToString("; ") + ";")
-        }
-        setBody(FormDataContent(
-            Parameters.build {
-                append("biliCSRF", biliCSRF)
             }
         ))
     }.body()

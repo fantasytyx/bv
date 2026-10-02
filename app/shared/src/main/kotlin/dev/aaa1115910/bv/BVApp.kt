@@ -129,6 +129,8 @@ class BVApp : Application() {
             WebViewCompat.getCurrentLoadedWebViewPackage()!!.versionName!!
                 .substringBefore(".").toInt()
         }.getOrDefault(144)
+        // provider 与失效回调都就绪后再预热 WBI keys，避免启动时发出匿名 nav 请求
+        BiliHttpApi.preloadWbi()
     }
 
     private fun initWebCookieManager() {
@@ -136,12 +138,20 @@ class BVApp : Application() {
         WebCookieManager.biliJctProvider = { Prefs.biliJct }
         WebCookieManager.refreshTokenProvider = { Prefs.refreshToken }
         WebCookieManager.midProvider = { Prefs.uid }
+        WebCookieManager.uidCkMd5Provider = { Prefs.uidCkMd5 }
+        WebCookieManager.sidProvider = { Prefs.sid }
         WebCookieManager.cookieGetter = { name -> Prefs.getWebCookie(name) }
+        WebCookieManager.appBuvid3Provider = { Prefs.buvid3 }
         WebCookieManager.onCookiesUpdated = { updated ->
-            Prefs.setWebCookies(updated)
-            val authUpdated = updated.filterKeys {
-                it in setOf("SESSDATA", "bili_jct", "refresh_token", "DedeUserID__ckMd5", "sid")
+            // 账号级 cookie 只走 applyWebCookieRefresh，落进 webExtraCookies 会让登出后
+            // 仍被 ApiSign 注入旧凭证
+            Prefs.setWebCookies(updated.filterKeys { it !in UserRepository.AUTH_COOKIE_NAMES })
+            // 请求头里用的是 Prefs.buvid3，必须与 finger/spi 成对的 buvid4 同源
+            updated["buvid3"]?.takeIf { it.isNotBlank() }?.let { buvid3 ->
+                Prefs.buvid3 = buvid3
+                runCatching { koinApplication.koin.get<AuthRepository>().buvid3 = buvid3 }
             }
+            val authUpdated = updated.filterKeys { it in UserRepository.AUTH_COOKIE_NAMES }
             if (authUpdated.isNotEmpty()) {
                 webCookieScope.launch {
                     runCatching {

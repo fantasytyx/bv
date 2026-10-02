@@ -257,7 +257,7 @@ fun FavoriteScreen(
                 )
             }
 
-            ProvideListBringIntoViewSpec(padding = 24.dp) {
+            ProvideListBringIntoViewSpec {
                 LazyVerticalGrid(
                     modifier = Modifier
                         .focusRestorer()

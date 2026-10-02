@@ -15,11 +15,14 @@ import kotlin.math.tan
  *
  * 与直接统计 RMS 相比，K 加权不会把低频能量当成响度，因此对低频重的素材不会过度衰减。
  * 滤波系数用双线性变换按实际采样率生成，不依赖 48 kHz 常量表。
+ *
+ * 窗口默认 5 秒：调用方据此判断测量是否已足以代表整段响度，窗口越长越不容易被开头的一小段
+ * 安静内容带偏；代价是整段偏轻的素材要等窗口填满才开始正常化。
  */
 internal class LoudnessMeter(
     sampleRateHz: Int,
     private val channelCount: Int,
-    windowSeconds: Double = 4.0,
+    windowSeconds: Double = 5.0,
 ) {
     private val shelfB0: Double
     private val shelfB1: Double
@@ -34,7 +37,9 @@ internal class LoudnessMeter(
     private val shelfState = Array(channelCount) { DoubleArray(4) }
     private val hpState = Array(channelCount) { DoubleArray(4) }
 
-    private val framesPerBlock: Int
+    /** 一个统计块的帧数；调用方需要按同样的块长做插值，直接暴露以免重复推导采样率 */
+    val framesPerBlock: Int
+
     private val blockMeanSquares: DoubleArray
     private var blockWriteIndex = 0
     private var validBlockCount = 0
@@ -134,6 +139,19 @@ internal class LoudnessMeter(
             finalCount++
         }
         return if (finalCount == 0) toLufs(gatedMeanSquare) else toLufs(finalSum / finalCount)
+    }
+
+    /**
+     * 最近一个完整统计块的响度（LUFS），不足一块或该块为静音时返回 null。
+     *
+     * 与 [loudnessLufs] 的区别是不做窗口平均：窗口会把单个爆点摊成持续数秒的高读数，
+     * 这里只看最后 100 ms，适合做逐块的事件判定（例如追踪本节目出现过的持续最响水平）。
+     */
+    fun latestBlockLufs(): Double? {
+        if (validBlockCount == 0) return null
+        val index = (blockWriteIndex - 1 + blockMeanSquares.size) % blockMeanSquares.size
+        val meanSquare = blockMeanSquares[index]
+        return if (meanSquare > 0.0) toLufs(meanSquare) else null
     }
 
     fun reset() {

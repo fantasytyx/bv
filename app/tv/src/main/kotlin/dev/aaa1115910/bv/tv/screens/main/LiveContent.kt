@@ -295,7 +295,7 @@ fun LiveContent(
                     LoadingTip()
                 }
             } else {
-                ProvideListBringIntoViewSpec(topPadding = 12.dp, bottomPadding = 28.dp) {
+                ProvideListBringIntoViewSpec {
                     LazyVerticalGrid(
                         modifier = Modifier
                             .fillMaxSize()
@@ -311,7 +311,7 @@ fun LiveContent(
                             },
                         state = gridState,
                         columns = GridCells.Fixed(4),
-                        contentPadding = PaddingValues(20.dp, 0.dp, 20.dp, 20.dp),
+                        contentPadding = PaddingValues(20.dp),
                         verticalArrangement = Arrangement.spacedBy(13.dp),
                         horizontalArrangement = Arrangement.spacedBy(13.dp)
                     ) {

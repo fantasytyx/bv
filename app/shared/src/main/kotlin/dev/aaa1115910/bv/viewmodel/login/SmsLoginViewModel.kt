@@ -15,7 +15,6 @@ import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fDebug
 import dev.aaa1115910.bv.util.toast
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -162,72 +161,6 @@ class SmsLoginViewModel(
         recaptchaToken?.isNotBlank() == true &&
                 geetestGt?.isNotBlank() == true &&
                 geetestChallenge?.isNotBlank() == true
-
-    /**
-     * 本机 WebView 与手机浏览器不能重复初始化同一个 challenge。切换设备前重新请求短信接口，
-     * 从同一短信风控流程取得新的 challenge，避免通用 preCapture 把滑块题替换成点击题。
-     * 若本次请求直接发送短信成功，则返回 null，并将 [sendSmsState] 更新为 Success。
-     */
-    suspend fun refreshCaptchaChallenge(): Captcha? {
-        return try {
-            check(phone > 0) { "手机号无效" }
-            val result = withContext(Dispatchers.IO) {
-                loginRepository.requestSms(
-                    phone = phone,
-                    buvid = buvid,
-                )
-            }
-            when (result.state) {
-                SendSmsState.RecaptchaRequire -> {
-                    val captcha = parseSmsCaptchaUrl(result.recaptchaUrl)
-                        ?: error("短信接口未返回有效的极验参数")
-                    applyCaptcha(captcha)
-                    sendSmsState = SendSmsState.RecaptchaRequire
-                    captcha
-                }
-
-                SendSmsState.Success -> {
-                    captchaKey = result.captchaKey
-                        ?: error("短信接口未返回 captcha_key")
-                    recaptchaToken = null
-                    geetestGt = null
-                    geetestChallenge = null
-                    geetestValidate = null
-                    geetestSeccode = null
-                    withContext(Dispatchers.Main) {
-                        sendSmsState = SendSmsState.Success
-                        "验证码已发送".toast(BVApp.context)
-                    }
-                    null
-                }
-
-                SendSmsState.Error -> error(
-                    result.message.ifBlank { "短信接口刷新验证码失败" }
-                )
-
-                SendSmsState.Ready -> error("短信接口返回了无效状态")
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            logger.warn { "Refresh login captcha failed: ${e.stackTraceToString()}" }
-            withContext(Dispatchers.Main) {
-                "刷新验证码失败：${e.message}".toast(BVApp.context)
-            }
-            null
-        }
-    }
-
-    fun applyGeetestResult(
-        challenge: String,
-        validate: String,
-        seccode: String
-    ) {
-        geetestChallenge = challenge
-        geetestValidate = validate
-        geetestSeccode = seccode
-        sendSmsState = SendSmsState.Ready
-    }
 
     private fun applyCaptcha(captcha: Captcha) {
         recaptchaToken = captcha.token

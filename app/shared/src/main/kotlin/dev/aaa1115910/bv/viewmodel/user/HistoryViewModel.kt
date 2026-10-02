@@ -11,7 +11,6 @@ import dev.aaa1115910.biliapi.entity.user.HistoryItemType
 import dev.aaa1115910.biliapi.http.entity.AuthFailureException
 import dev.aaa1115910.biliapi.repositories.HistoryRepository
 import dev.aaa1115910.bv.BVApp
-import dev.aaa1115910.bv.BuildConfig
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.repository.UserRepository
@@ -103,14 +102,8 @@ class HistoryViewModel(
         }.onFailure {
             logger.fWarn { "Update histories failed: ${it.stackTraceToString()}" }
             when (it) {
-                is AuthFailureException -> {
-                    withContext(Dispatchers.Main) {
-                        BVApp.context.getString(R.string.exception_auth_failure)
-                            .toast(BVApp.context)
-                    }
-                    logger.fInfo { "User auth failure" }
-                    if (!BuildConfig.DEBUG) userRepository.logout()
-                }
+                // 会话失效的 toast 与登出由 AuthFailureDetection 全局回调统一处理
+                is AuthFailureException -> logger.fInfo { "User auth failure" }
 
                 else -> {}
             }

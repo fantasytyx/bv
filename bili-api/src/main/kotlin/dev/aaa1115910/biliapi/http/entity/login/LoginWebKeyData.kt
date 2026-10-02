@@ -4,6 +4,5 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class LoginWebKeyData(
-    val hash: String = "",
     val key: String = ""
 )

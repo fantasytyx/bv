@@ -3,6 +3,7 @@ package dev.aaa1115910.biliapi.http
 import com.tfowl.ktor.client.plugins.JsoupPlugin
 import dev.aaa1115910.biliapi.http.plugins.BiliUserAgent
 import dev.aaa1115910.biliapi.http.plugins.BiliUserAgentConfig
+import dev.aaa1115910.biliapi.http.plugins.installAuthFailureDetection
 import dev.aaa1115910.biliapi.http.util.BiliDns
 import dev.aaa1115910.biliapi.http.util.encApiSign
 import io.ktor.client.HttpClient
@@ -49,6 +50,7 @@ object BiliHttpClient {
      * @param retryOnException 异常重试次数；null 表示不装 HttpRequestRetry
      * @param compression 是否处理 gzip/deflate 响应
      * @param defaultHeaders 额外默认请求头
+     * @param detectAuthFailure 是否把「带凭证请求返回 -101」判定为会话失效并回调 App 层自动登出
      */
     fun create(
         host: String? = null,
@@ -61,6 +63,7 @@ object BiliHttpClient {
         retryOnException: Int? = null,
         compression: Boolean = true,
         defaultHeaders: Map<String, String> = emptyMap(),
+        detectAuthFailure: Boolean = true,
     ): HttpClient {
         // 下面 defaultRequest 的作用域里 url { } 的接收者是 URLBuilder，同名的 host/port/protocol 会被遮蔽，
         // 所以先落到局部变量再引用。
@@ -101,6 +104,8 @@ object BiliHttpClient {
                 }
             }
         }.apply {
+            // 先注册，保证它在 encApiSign 外层：判定看到的是最终请求（含 encApiSign 补的指纹 cookie）
+            if (detectAuthFailure) installAuthFailureDetection()
             if (addApiSign) encApiSign()
         }
     }

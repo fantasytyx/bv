@@ -84,7 +84,8 @@ object BiliHttpProxyApi {
         drmTechType: Int? = null,
         fromClient: String? = null,
         sessData: String? = null,
-        buvid3: String? = null
+        buvid3: String? = null,
+        gaiaVtoken: String? = null
     ): BiliResponse<PlayUrlV2Data> = client?.get("/pgc/player/web/v2/playurl") {
         require(av != null || bv != null) { "av and bv cannot be null at the same time" }
         require(epid != null || cid != null) { "epid and cid cannot be null at the same time" }
@@ -100,9 +101,11 @@ object BiliHttpProxyApi {
         supportMultiAudio?.let { parameter("support_multi_audio", it) }
         drmTechType?.let { parameter("drm_tech_type", it) }
         fromClient?.let { parameter("from_client", it) }
+        gaiaVtoken?.let { parameter("gaia_vtoken", it) }
         val cookieParts = mutableListOf<String>()
         sessData?.let { cookieParts.add("SESSDATA=$it") }
         buvid3?.let { cookieParts.add("buvid3=$it") }
+        gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
         if (cookieParts.isNotEmpty()) header("Cookie", cookieParts.joinToString(";"))
         //必须得加上 referer 才能通过账号身份验证
         header("referer", "https://www.bilibili.com")

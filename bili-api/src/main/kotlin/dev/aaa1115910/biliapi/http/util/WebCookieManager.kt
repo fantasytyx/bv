@@ -1,6 +1,7 @@
 package dev.aaa1115910.biliapi.http.util
 
 import dev.aaa1115910.biliapi.http.BiliHttpClient
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -25,12 +26,12 @@ import java.security.KeyFactory
 import java.security.SecureRandom
 import java.security.spec.MGF1ParameterSpec
 import java.security.spec.X509EncodedKeySpec
-import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.OAEPParameterSpec
 import javax.crypto.spec.PSource
 import javax.crypto.spec.SecretKeySpec
+import kotlin.io.encoding.Base64
 
 /**
  * Web Cookie 维护器（移植自 blbl 的 WebCookieMaintainer）：
@@ -58,7 +59,7 @@ object WebCookieManager {
                 "Uc/prcajMKXvkCKFCWhJYJcLkcM2DKKcSeFpD/j6Boy538YXnR6VhcuUJOhH2x71" +
                 "nzPjfdTcqMz7djHum0qSZA0AyCBDABUqCrfNgCiJ00Ra7GmRj+YCK1NJEuewlb40" +
                 "JNrRuoEUXpabUzGB8QIDAQAB"
-        val keyBytes = Base64.getDecoder().decode(derBase64)
+        val keyBytes = Base64.decode(derBase64)
         val spec = X509EncodedKeySpec(keyBytes)
         KeyFactory.getInstance("RSA").generatePublic(spec)
     }
@@ -69,9 +70,13 @@ object WebCookieManager {
     var biliJctProvider: () -> String = { "" }
     var refreshTokenProvider: () -> String = { "" }
     var midProvider: () -> Long = { 0 }
+    var uidCkMd5Provider: () -> String = { "" }
+    var sidProvider: () -> String = { "" }
 
     /** 读取指定 cookie 值（如 buvid3、b_nut），由应用层提供 Prefs 存储 */
     var cookieGetter: (name: String) -> String? = { null }
+    /** 应用层（请求头实际使用的）buvid3，用于保证它与 buvid4 由同一次 finger/spi 签发 */
+    var appBuvid3Provider: () -> String? = { null }
     /** 落盘回调，应用层负责写 Prefs */
     var onCookiesUpdated: (Map<String, String>) -> Unit = {}
 
@@ -87,9 +92,10 @@ object WebCookieManager {
 
     private val json = BiliHttpClient.json
 
-    // 只用来抓 Set-Cookie 和指纹接口，不参与 B 站 API 的 UA/签名逻辑
+    // 只用来抓 Set-Cookie 和指纹接口，不参与 B 站 API 的 UA/签名逻辑；
+    // 后台维护失败不做会话失效判定，避免风控接口的 -101 把用户登出
     private val client by lazy {
-        BiliHttpClient.create(userAgent = null)
+        BiliHttpClient.create(userAgent = null, detectAuthFailure = false)
     }
 
     /** 汇总所有 web cookie，供 API 层附加到请求头 */
@@ -109,25 +115,59 @@ object WebCookieManager {
     }
 
     /**
+     * 登录凭证 + web 指纹 cookie 拼成的完整 Cookie 头。
+     *
+     * passport / 风控接口都靠 Cookie 识别用户（csrf 参数只有配合会话 cookie 才有意义），
+     * 缺了它这些接口只会返回 -101。web 侧 cookie（buvid3/buvid4/b_nut/bili_ticket）一并带上，
+     * 与正常 API 请求保持同一指纹。[overrides] 里的同名 cookie 优先，
+     * 用于 cookie/refresh 之后拿新签发的 cookie 去 confirm。
+     */
+    private fun fullCookieHeader(overrides: Map<String, String> = emptyMap()): String? {
+        val parts = mutableListOf<String>()
+        fun add(name: String, value: String?) {
+            value?.takeIf { it.isNotBlank() }?.let { parts += "$name=$it" }
+        }
+        add("SESSDATA", overrides["SESSDATA"] ?: sessDataProvider())
+        add("bili_jct", overrides["bili_jct"] ?: biliJctProvider())
+        add("DedeUserID", overrides["DedeUserID"] ?: midProvider().takeIf { it > 0 }?.toString())
+        add("DedeUserID__ckMd5", overrides["DedeUserID__ckMd5"] ?: uidCkMd5Provider())
+        add("sid", overrides["sid"] ?: sidProvider())
+        cookieHeader()?.split(";")?.map { it.trim() }?.filter { it.isNotBlank() }?.forEach { part ->
+            val name = part.substringBefore("=")
+            if (parts.none { it.startsWith("$name=") }) parts += part
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString("; ")
+    }
+
+    private fun HttpRequestBuilder.withAuthCookies(overrides: Map<String, String> = emptyMap()) {
+        fullCookieHeader(overrides)?.let { header(HttpHeaders.Cookie, it) }
+    }
+
+    /**
      * 确保 buvid3/buvid4/b_nut 等指纹 cookie 就绪：
      * 先访问首页拿 b_nut（顺带 buvid3），再走 finger/spi 拿 b_3/b_4。
+     *
+     * buvid3 与 buvid4 必须是同一次 finger/spi 签发的**一对**，否则等于告诉风控
+     * "buvid3 和 buvid4 来自两台设备"。请求头里实际用的是 [appBuvid3Provider] 的值，
+     * 所以只有它与 web 侧 buvid3 一致时才认为指纹就绪。
      */
     suspend fun ensureWebFingerprintCookies() = fingerprintMutex.withLock {
-        val hasBuvid3 = !cookieGetter("buvid3").isNullOrBlank()
-        val hasBNut = !cookieGetter("b_nut").isNullOrBlank()
-        val needHomepage = !hasBuvid3 || !hasBNut
-        val hasBuvid4 = !cookieGetter("buvid4").isNullOrBlank()
-        val needSpi = !hasBuvid4
+        val webBuvid3 = cookieGetter("buvid3")?.takeIf { it.isNotBlank() }
+        val appBuvid3 = appBuvid3Provider()?.trim().orEmpty()
+        val needHomepage = webBuvid3 == null || cookieGetter("b_nut").isNullOrBlank()
+        val needSpi = cookieGetter("buvid4").isNullOrBlank() || webBuvid3 != appBuvid3
         if (!needHomepage && !needSpi) return
 
         if (needHomepage) {
             runCatching {
                 val setCookies = client.get("https://www.bilibili.com/").setCookie()
                 val updated = mutableMapOf<String, String>()
-                setCookies.filter { it.name in setOf("buvid3", "b_nut") }
-                    .forEach { cookie ->
-                        cookie.value.takeIf { it.isNotBlank() }?.let { updated[cookie.name] = it }
-                    }
+                for (cookie in setCookies) {
+                    if (cookie.name != "buvid3" && cookie.name != "b_nut") continue
+                    // web 侧已有 buvid3 时不用首页值覆盖，否则会破坏 finger/spi 的成对指纹
+                    if (cookie.name == "buvid3" && webBuvid3 != null) continue
+                    cookie.value.takeIf { it.isNotBlank() }?.let { updated[cookie.name] = it }
+                }
                 if (updated.isNotEmpty()) {
                     onCookiesUpdated(updated)
                 }
@@ -145,7 +185,8 @@ object WebCookieManager {
                 val b3 = data["b_3"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val b4 = data["b_4"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val updated = mutableMapOf<String, String>()
-                if (b3.isNotBlank() && cookieGetter("buvid3").isNullOrBlank()) {
+                // b_3/b_4 成对签发，buvid3 一律以它为权威值
+                if (b3.isNotBlank()) {
                     updated["buvid3"] = b3
                 }
                 if (b4.isNotBlank()) {
@@ -185,6 +226,7 @@ object WebCookieManager {
                     parameter("hexsign", hexsign)
                     parameter("context[ts]", ts)
                     csrf?.let { parameter("csrf", it) }
+                    withAuthCookies()
                 }.bodyAsText()
                 val data = json.parseToJsonElement(raw).jsonObject
                     .get("data")?.jsonObject ?: return@runCatching
@@ -223,7 +265,7 @@ object WebCookieManager {
             SecureRandom().nextBytes(tail)
             tail.copyInto(rand, 40)
 
-            val randPngEnd = Base64.getEncoder().encodeToString(rand)
+            val randPngEnd = Base64.encode(rand)
             val jsonData =
                 buildJsonObject {
                     put("3064", 1)
@@ -237,14 +279,6 @@ object WebCookieManager {
                     )
                 }
 
-            val cookie = buildList {
-                listOf("SESSDATA", "bili_jct", "DedeUserID", "DedeUserID__ckMd5", "sid", "buvid3")
-                    .forEach { name ->
-                        val v = cookieGetter(name)?.takeIf { it.isNotBlank() } ?: return@forEach
-                        add("$name=$v")
-                    }
-            }.joinToString("; ")
-
             val body = buildJsonObject {
                 put("payload", jsonData)
             }.toString()
@@ -257,7 +291,7 @@ object WebCookieManager {
                 header("x-bili-mid", mid.toString())
                 genAuroraEid(mid)?.let { header("x-bili-aurora-eid", it) }
                 header("Referer", "https://www.bilibili.com")
-                if (cookie.isNotBlank()) header(HttpHeaders.Cookie, cookie)
+                withAuthCookies()
                 setBody(TextContent(body, io.ktor.http.ContentType.Application.Json))
             }
             buvidActiveEpochDay = epochDay
@@ -272,7 +306,7 @@ object WebCookieManager {
         val input = mid.toString().toByteArray()
         val out = ByteArray(input.size)
         for (i in input.indices) out[i] = (input[i].toInt() xor key[i % key.size].toInt()).toByte()
-        return Base64.getEncoder().withoutPadding().encodeToString(out)
+        return Base64.encode(out).trimEnd('=')
     }
 
     /**
@@ -288,6 +322,7 @@ object WebCookieManager {
             if (cookieRefreshCheckedEpochDay == epochDay) return
             runCatching {
                 val info = client.get("https://passport.bilibili.com/x/passport-login/web/cookie/info") {
+                    withAuthCookies()
                     url {
                         parameters.append("csrf", biliJctProvider())
                     }
@@ -301,13 +336,15 @@ object WebCookieManager {
                 val timestamp = infoData["timestamp"]?.jsonPrimitive?.contentOrNull
                     ?.toLongOrNull() ?: System.currentTimeMillis()
                 val correspondPath = getCorrespondPath(timestamp)
-                val html = client.get("https://www.bilibili.com/correspond/1/$correspondPath")
-                    .bodyAsText()
+                val html = client.get("https://www.bilibili.com/correspond/1/$correspondPath") {
+                    withAuthCookies()
+                }.bodyAsText()
                 val refreshCsrf = refreshCsrfRegex.find(html)?.groupValues?.getOrNull(1).orEmpty()
                 if (refreshCsrf.isBlank()) error("refresh_csrf not found")
 
                 val refreshUrl = "https://passport.bilibili.com/x/passport-login/web/cookie/refresh"
                 val raw = client.get(refreshUrl) {
+                    withAuthCookies()
                     parameter("csrf", biliJctProvider())
                     parameter("refresh_csrf", refreshCsrf)
                     parameter("source", REFRESH_SOURCE)
@@ -336,6 +373,8 @@ object WebCookieManager {
                     ?: biliJctProvider()
                 runCatching {
                     client.get("https://passport.bilibili.com/x/passport-login/web/confirm/refresh") {
+                        // 应用层是异步把新 cookie 写回 Prefs 的，这里直接用刚拿到的值
+                        withAuthCookies(refreshed)
                         parameter("csrf", newBiliJct)
                         parameter("refresh_token", refreshToken)
                     }

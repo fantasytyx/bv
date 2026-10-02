@@ -106,6 +106,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jsoup.nodes.Document
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.parsers.DocumentBuilderFactory
+import kotlin.io.encoding.Base64
+import kotlin.random.Random
 
 @Suppress("SpellCheckingInspection")
 object BiliHttpApi {
@@ -133,9 +135,19 @@ object BiliHttpApi {
 
     private val videoMoreInfoCache = ConcurrentHashMap<String, CacheEntry<BiliResponse<VideoMoreInfo>>>()
     private const val VIDEO_MORE_INFO_CACHE_TTL_MILLIS = 30_000L
+    private const val WBI_REFRESH_INTERVAL_MILLIS = 2 * 60 * 60 * 1000L
 
     init {
         createClient()
+    }
+
+    /**
+     * 预热 WBI keys。
+     *
+     * 必须由应用层在 [sessDataProvider]/[buvid3Provider] 注入完成之后再调用：这两个 provider
+     * 的默认值是空实现，如果在 init 里自行触发，冷启动时可能读到空 provider 而发出匿名 nav 请求。
+     */
+    fun preloadWbi() {
         CoroutineScope(Dispatchers.IO).launch {
             updateWbi()
         }
@@ -262,7 +274,7 @@ object BiliHttpApi {
             sessData?.let { cookieParts.add("SESSDATA=$it") }
             gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
             if (cookieParts.isNotEmpty()) header("Cookie", cookieParts.joinToString(";"))
-            skipAddBuvid3Cookie()
+            header("Referer", "https://www.bilibili.com/")
         }
         val bodyText = response.bodyAsText()
         checkForVVoucher(bodyText)
@@ -289,9 +301,9 @@ object BiliHttpApi {
         gaiaVtoken: String? = null,
         tryLook: Boolean = false
     ): BiliResponse<PlayUrlData> {
-        // 游客态必须走非 wbi 端点：try_look=1 只在非 wbi 端点生效，wbi 端点会忽略它并把 dash 压到 480P
-        val isGuest = tryLook || sessData.isNullOrEmpty()
-        val response = client.get(if (isGuest) "/x/player/playurl" else "/x/player/wbi/playurl") {
+        // try_look 只在非 wbi 端点生效，所以仅"试看兜底"这类显式请求才走老端点；
+        // 普通游客播放保持官方 web 播放器的 wbi 端点，避免每次未登录播放都带上绕过参数。
+        val response = client.get(if (tryLook) "/x/player/playurl" else "/x/player/wbi/playurl") {
             require(av != null || bv != null) { "av and bv cannot be null at the same time" }
             parameter("avid", av)
             parameter("bvid", bv)
@@ -304,21 +316,20 @@ object BiliHttpApi {
             parameter("otype", otype)
             parameter("type", type)
             parameter("platform", platform)
+            // 官方 web 播放器固定带的环境参数，缺了这几项更容易被判定成非 web 播放器
+            parameter("voice_balance", 0)
+            parameter("gaia_source", "pre-load")
+            parameter("isGaiaAvoided", "true")
+            parameter("web_location", "1315873")
+            parameter("dm_img_list", "[]")
+            parameter("dm_img_str", randomWbiDmString(minLength = 16, maxLength = 64))
+            parameter("dm_cover_img_str", randomWbiDmString(minLength = 32, maxLength = 128))
+            parameter("dm_img_inter", """{"ds":[],"wh":[0,0,0],"of":[0,0,0]}""")
             if (tryLook) {
                 // 试看兜底：按游客视角请求，不注入账号态与风控 token
-                parameter("web_location", "1315873")
-                parameter("gaia_source", "pre-load")
-                parameter("isGaiaAvoided", "true")
                 parameter("try_look", "1")
             } else {
                 gaiaVtoken?.let { parameter("gaia_vtoken", it) }
-                if (sessData.isNullOrEmpty()) {
-                    // parameter("voice_balance", 1)
-                    parameter("web_location", "1315873")
-                    parameter("gaia_source", "pre-load")
-                    parameter("isGaiaAvoided", "true")
-                    parameter("try_look", "1")
-                }
             }
             val cookieParts = mutableListOf<String>()
             if (!tryLook) {
@@ -332,6 +343,12 @@ object BiliHttpApi {
         // println(bodyText)
         checkForVVoucher(bodyText)
         return json.decodeFromString(bodyText)
+    }
+
+    private fun randomWbiDmString(minLength: Int, maxLength: Int): String {
+        val length = Random.nextInt(from = minLength, until = maxLength + 1)
+        val bytes = ByteArray(length) { (0x26 + Random.nextInt(0x59)).toByte() }
+        return Base64.encode(bytes).dropLast(2)
     }
 
     /**
@@ -1904,7 +1921,8 @@ object BiliHttpApi {
         buvid3: String? = buvid3Provider()
     ) {
         val needToUpdate =
-            wbiImgKey == null || wbiSubKey == null || System.currentTimeMillis() - wbiLastRefreshDate < 2 * 60 * 60 * 1000L
+            wbiImgKey == null || wbiSubKey == null ||
+                System.currentTimeMillis() - wbiLastRefreshDate > WBI_REFRESH_INTERVAL_MILLIS
         if (!needToUpdate) {
             println("Skip update wbi keys")
             return

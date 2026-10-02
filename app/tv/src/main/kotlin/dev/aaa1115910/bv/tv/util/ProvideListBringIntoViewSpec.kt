@@ -32,7 +32,7 @@ import kotlin.math.abs
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ProvideListBringIntoViewSpec(
-    padding: Dp = 24.dp,
+    padding: Dp = 22.dp,
     topPadding: Dp = padding,
     bottomPadding: Dp = padding,
     content: @Composable () -> Unit,

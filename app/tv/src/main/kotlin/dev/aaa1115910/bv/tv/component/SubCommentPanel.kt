@@ -15,7 +15,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -158,6 +160,10 @@ fun SubCommentPanel(
         }
     }
 
+    // 面板宽度：屏宽的 30%，夹在 350~450dp
+    // （fillMaxWidth(fraction) 与外层 widthIn 组合会被约束顺序吃掉上下限，实际恒为 min）
+    val panelWidth = (LocalConfiguration.current.screenWidthDp * 0.3f).coerceIn(350f, 450f).dp
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -172,8 +178,7 @@ fun SubCommentPanel(
             Surface(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .widthIn(min = 320.dp, max = 420.dp)
-                    .fillMaxWidth(0.3f)
+                    .width(panelWidth)
                     .clickable(enabled = true, onClick = {})
                     .onBackPressed { onHide() },
                 colors = SurfaceDefaults.colors(

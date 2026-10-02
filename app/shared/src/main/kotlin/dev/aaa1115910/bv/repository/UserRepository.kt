@@ -5,7 +5,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.aaa1115910.biliapi.http.BiliHttpApi
-import dev.aaa1115910.biliapi.http.BiliPassportHttpApi
 import dev.aaa1115910.biliapi.repositories.AuthRepository
 import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.R
@@ -36,6 +35,10 @@ class UserRepository(
 ) {
     companion object {
         private val logger = KotlinLogging.logger { }
+
+        /** cookie 续期下发的账号级 cookie，只走 [applyWebCookieRefresh]，不得写入 webExtraCookies */
+        val AUTH_COOKIE_NAMES =
+            setOf("SESSDATA", "bili_jct", "refresh_token", "DedeUserID__ckMd5", "sid")
     }
 
     private val authFailureLogoutMutex = Mutex()
@@ -111,20 +114,6 @@ class UserRepository(
         clearAuth()
     }
 
-    suspend fun logoutFromServer() {
-        val logoutUid = uid
-        BiliPassportHttpApi.logout(
-            biliCSRF = biliJct,
-            sessData = sessData,
-            dedeUserID = uid,
-            dedeUserIDCkMd5 = uidCkMd5,
-            sid = sid
-        ).requireSuccess()
-        if (uid == logoutUid) {
-            logout()
-        }
-    }
-
     suspend fun logoutOnAuthFailure(reason: String) {
         authFailureLogoutMutex.withLock {
             // 未登录状态或已完成登出时忽略，避免并发 -101 重复弹窗/清数据
@@ -149,6 +138,8 @@ class UserRepository(
         expiredDate = Date(0)
         accessToken = ""
         refreshToken = ""
+        // 清掉历史版本残留在 webExtraCookies 里的账号级 cookie
+        Prefs.removeWebCookies(AUTH_COOKIE_NAMES)
         saveToPrefs()
     }
 
@@ -284,7 +275,7 @@ class UserRepository(
         updated["refresh_token"]?.takeIf { it.isNotBlank() }?.let { refreshToken = it }
         updated["DedeUserID__ckMd5"]?.takeIf { it.isNotBlank() }?.let { uidCkMd5 = it }
         updated["sid"]?.takeIf { it.isNotBlank() }?.let { sid = it }
-        if (updated.keys.any { it in setOf("SESSDATA", "bili_jct", "refresh_token", "DedeUserID__ckMd5", "sid") }) {
+        if (updated.keys.any { it in AUTH_COOKIE_NAMES }) {
             saveToPrefs()
         }
     }

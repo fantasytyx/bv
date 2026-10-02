@@ -123,7 +123,7 @@ fun TagScreen(
             }
         }
     ) { innerPadding ->
-        ProvideListBringIntoViewSpec(padding = 26.dp) {
+        ProvideListBringIntoViewSpec(padding = 24.dp) {
             LazyVerticalGrid(
                 modifier = Modifier
                     .padding(innerPadding)

@@ -23,7 +23,13 @@ import kotlin.math.pow
  * 增益分三段推进：窗口填满前只压不抬（见 [WINDOW_BLOCKS]），填满后按 [GAIN_SETTLE_STEP_DB] 限速定档，
  * 之后才转入慢速维持。这样「不同视频音量不一」在起播几秒内就解决，
  * 播放过程中增益基本不动，而不是全程匀速跟随、听着忽大忽小。
- * 填满前不提升是因为开头几百毫秒可能只是一段安静前奏，据此定档会先抬上去再压回来。
+ *
+ * 三道约束用来区分「这一段本来就轻」和「整个视频都轻」，避免安静前奏被当成整段偏轻：
+ * - 提升天花板：以本节目出现过的最响水平（[anchorLufs]）与目标响度之差为上界。内容低于已听到的
+ *   最响水平就不给提升量，因此响节目里的安静段落自然只压不抬，不需要单独分支。
+ * - 绝对下限 [MIN_BOOST_LUFS]：测量值低于它时一律不提升。
+ * - 快速收回 [GAIN_REVOKE_STEP_DB]：万一已经抬上去（前奏比下限响），一旦测到更响的内容就快速退回。
+ *   收回只由「天花板因测到更响内容而收紧」触发，正常播放时不会与三段推进打架。
  *
  * 全程只有标量增益与峰值包络，没有频谱处理、没有时间伸缩，因此不会改变音调与音色。
  * 限制器用指数软拐点逼近上限，而不是像常见做法那样硬削波，避免削波谐波造成的音色发硬。
@@ -51,6 +57,16 @@ internal class VolumeBalanceAudioProcessor(
 
     /** 首次定档阶段剩余的统计块数 */
     private var settleBlocksRemaining: Int = 0
+
+    /** 本节目已观察到的持续最响水平（LUFS），null 表示还没测出来 */
+    private var anchorLufs: Double? = null
+
+    /** 连续高于 [anchorLufs] 的统计块数，用于过滤单个爆点 */
+    private var anchorRiseBlocks: Int = 0
+
+    /** 块内插值起点与已走过的帧数：增益每块才更新一次，逐块直接施加会留下台阶 */
+    private var gainRampFrom: Double = 1.0
+    private var framesIntoBlock: Int = 0
 
     /** 峰值限制器包络（线性），各声道联动以免立体声声像漂移 */
     private var limiterEnvelope: Double = 0.0
@@ -92,7 +108,13 @@ internal class VolumeBalanceAudioProcessor(
         val frameCount = (inputLimit - input.position()) / frameBytes
         val isFloat = encoding == C.ENCODING_PCM_FLOAT
 
+        val blockFrames = loudnessMeter.framesPerBlock
         for (frame in 0 until frameCount) {
+            // 块内线性插值：增益每块才更新一次，直接施加会留下台阶
+            val progress =
+                if (blockFrames <= 1) 1.0 else (framesIntoBlock + 1).toDouble() / blockFrames
+            val appliedGain = gainRampFrom + (gain - gainRampFrom) * progress
+
             var frameSumSquares = 0.0
             for (channel in 0 until channels) {
                 val sample =
@@ -107,16 +129,10 @@ internal class VolumeBalanceAudioProcessor(
             }
 
             // 每凑满一个统计块才重新估算目标增益，避免逐帧做窗口运算
-            if (loudnessMeter.endFrame(frameSumSquares)) {
-                if (measuredBlocks < WINDOW_BLOCKS) {
-                    measuredBlocks++
-                    if (measuredBlocks == WINDOW_BLOCKS) settleBlocksRemaining = SETTLE_BLOCKS
-                }
-                updateGain(currentLevel)
-            }
+            val blockCompleted = loudnessMeter.endFrame(frameSumSquares)
 
             for (channel in 0 until channels) {
-                val amplified = frameSamples[channel] * gain
+                val amplified = frameSamples[channel] * appliedGain
                 // 包络瞬时起音：平滑起音会让窄尖峰直接穿过限制器，只能由后面的硬削兜底
                 limiterEnvelope = max(abs(amplified), limiterEnvelope * limiterReleaseCoef)
                 val limited = amplified * softLimitGain(limiterEnvelope)
@@ -130,6 +146,19 @@ internal class VolumeBalanceAudioProcessor(
                             .toShort()
                     )
                 }
+            }
+
+            // 本帧先按上一块的增益写出，再更新增益并把插值起点挪过去，下一块内走过去
+            if (blockCompleted) {
+                if (measuredBlocks < WINDOW_BLOCKS) {
+                    measuredBlocks++
+                    if (measuredBlocks == WINDOW_BLOCKS) settleBlocksRemaining = SETTLE_BLOCKS
+                }
+                gainRampFrom = gain
+                updateGain(currentLevel)
+                framesIntoBlock = 0
+            } else {
+                framesIntoBlock++
             }
         }
 
@@ -168,12 +197,30 @@ internal class VolumeBalanceAudioProcessor(
     }
 
     private fun updateGain(currentLevel: AudioBalanceLevel) {
-        val target = meter?.loudnessLufs() ?: return
+        val loudnessMeter = meter ?: return
+        updateAnchor(loudnessMeter.latestBlockLufs())
+
+        val target = loudnessMeter.loudnessLufs() ?: return
+        val anchor = anchorLufs ?: return
         val warmingUp = measuredBlocks < WINDOW_BLOCKS
 
-        val desiredGainDb =
-            (currentLevel.targetLufs - target).coerceIn(-MAX_CUT_DB, currentLevel.maxGainDb)
+        // 提升天花板：内容比本节目已听到的持续最响水平还低，就不给提升量
+        val anchorCeilingDb = max(0.0, currentLevel.targetLufs - anchor)
+        var desiredGainDb =
+            (currentLevel.targetLufs - target)
+                .coerceIn(-MAX_CUT_DB, minOf(anchorCeilingDb, currentLevel.maxGainDb))
+        // 测量值低到不可信时同样不提升：安静前奏刚填满窗口时，窗口里没有更响的内容可供
+        // 相对门限参照，会把「前奏很轻」读成「整段很轻」
+        if (target < MIN_BOOST_LUFS) desiredGainDb = minOf(desiredGainDb, 0.0)
         val desiredGain = 10.0.pow(desiredGainDb / 20.0)
+
+        // 只有「天花板因测到更响内容而收紧」才会让增益超到天花板之上，此时要快速退回，
+        // 否则抬上去的这几秒一直是过放状态
+        val ceilingGain = 10.0.pow(anchorCeilingDb / 20.0)
+        if (gain > ceilingGain) {
+            gain = max(ceilingGain, gain * 10.0.pow(-GAIN_REVOKE_STEP_DB / 20.0))
+            return
+        }
 
         if (warmingUp) {
             // 窗口未填满就提升，等于按开头几百毫秒的音量给整段定档；只压不抬则最多是
@@ -206,6 +253,34 @@ internal class VolumeBalanceAudioProcessor(
     }
 
     /**
+     * 追踪本节目已观察到的「持续最响」水平。
+     *
+     * 单个统计块不算数（一记鼓点就能把天花板钉死，之后整段都抬不起来），必须连续
+     * [ANCHOR_RISE_BLOCKS] 块都更高才采纳；只有持续安静足够久才允许参照缓慢下移，
+     * 且按固定速率（[ANCHOR_FALL_DB_PER_BLOCK]）走，并有 [ANCHOR_FALL_DEADBAND_LU] 的死区。
+     */
+    private fun updateAnchor(blockLufs: Double?) {
+        if (blockLufs == null) return
+        val anchor = anchorLufs
+        if (anchor == null) {
+            anchorLufs = blockLufs
+            return
+        }
+        if (blockLufs > anchor + ANCHOR_RISE_LU) {
+            anchorRiseBlocks++
+            if (anchorRiseBlocks >= ANCHOR_RISE_BLOCKS) {
+                anchorLufs = blockLufs
+                anchorRiseBlocks = 0
+            }
+            return
+        }
+        anchorRiseBlocks = 0
+        if (blockLufs < anchor - ANCHOR_FALL_DEADBAND_LU) {
+            anchorLufs = anchor - ANCHOR_FALL_DB_PER_BLOCK
+        }
+    }
+
+    /**
      * 指数软拐点：拐点以上渐进逼近上限，曲线在拐点处连续，
      * 因此不会像硬削波那样产生高次谐波。
      */
@@ -224,11 +299,17 @@ internal class VolumeBalanceAudioProcessor(
         limiterEnvelope = 0.0
         measuredBlocks = 0
         settleBlocksRemaining = 0
+        // 参照属于「本节目」，换集/seek 后必须重新学：否则先看一个响的、再看整体偏轻的会一直抬不起来
+        anchorLufs = null
+        anchorRiseBlocks = 0
+        gainRampFrom = gain
+        framesIntoBlock = 0
     }
 
     private fun resetState() {
-        resetMeasurementState()
+        // 先归位增益，再让插值起点与之对齐
         gain = 1.0
+        resetMeasurementState()
     }
 
     private companion object {
@@ -238,8 +319,13 @@ internal class VolumeBalanceAudioProcessor(
         /** 统计块长度，需与 [LoudnessMeter] 保持一致 */
         const val LOUDNESS_BLOCK_SEC = 0.1
 
-        /** 测量窗口长度（统计块数），需与 [LoudnessMeter] 的窗口一致 */
-        const val WINDOW_BLOCKS = 40
+        /**
+         * 测量窗口长度（统计块数，5 秒），需与 [LoudnessMeter] 的窗口一致。
+         *
+         * 窗口越长，越不容易被开头的一小段安静内容带偏；代价是整段偏轻的素材要等窗口填满
+         * 才开始正常化（窗口填满前只压不抬）。
+         */
+        const val WINDOW_BLOCKS = 50
 
         /**
          * 窗口填满前的压缩时间常数。
@@ -277,6 +363,43 @@ internal class VolumeBalanceAudioProcessor(
 
         /** 允许的最大衰减，避免本身很响的素材被压得过闷 */
         const val MAX_CUT_DB = 12.0
+
+        /**
+         * 低于该测量值一律不提升。
+         *
+         * 安静前奏填满窗口后，窗口内没有更响的内容可供相对门限参照，会把「前奏很轻」读成
+         * 「整段很轻」，于是刚定档就先抬上去、等响的内容出现再慢慢退回。这里设一道绝对下限
+         * 直接不给提升量。取值偏保守是为了不牺牲「整段偏轻的素材需要被抬起来」这一主要目的，
+         * 下限之上的安静前奏交给 [ANCHOR_RISE_BLOCKS] 与 [GAIN_REVOKE_STEP_DB] 兜。
+         */
+        const val MIN_BOOST_LUFS = -30.0
+
+        /** 比参照高多少 dB 才认为出现了更响的持续内容，用于过滤单个爆点 */
+        const val ANCHOR_RISE_LU = 3.0
+
+        /** 采纳新参照所需的连续统计块数（0.3 秒） */
+        const val ANCHOR_RISE_BLOCKS = 3
+
+        /**
+         * 参照下移速率（每个统计块下降多少 dB）：0.01 dB/s，即 0.6 dB/min。
+         *
+         * 取得很慢是因为安静段落在这类内容里很常见（对白间隙、安静桥段、歌曲主歌、安静前奏）：
+         * 参照一快就跟着安静段落掉下来，天花板随之打开，安静段落又被抬起来——正是要避免的事。
+         * 用固定速率而不是「按当前水平指数逼近」，是为了不让「比参照低得越多、参照掉得越快」，
+         * 那与安全阀的目的正好相反。它只在安静持续数分钟后才明显打开提升空间。
+         */
+        const val ANCHOR_FALL_DB_PER_BLOCK = 0.001
+
+        /** 低于参照这么多才认为出现了持续更安静的段落，避免正常强弱起伏让参照一直往下漂 */
+        const val ANCHOR_FALL_DEADBAND_LU = 3.0
+
+        /**
+         * 收回速率（每个统计块最多下降多少 dB）。
+         *
+         * 定档速率是为了「听着像音量自己走稳」，而收回是纠错：已抬上去的增益每多待一秒
+         * 就多一秒过放，因此取定档速率的 10 倍。
+         */
+        const val GAIN_REVOKE_STEP_DB = 1.2
 
         /**
          * 软拐点起点 -3 dBFS，拐点宽度 2.5 dB，渐近上限约 -0.5 dBFS。

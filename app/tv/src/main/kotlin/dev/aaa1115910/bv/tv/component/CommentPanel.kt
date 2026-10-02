@@ -121,6 +121,11 @@ fun CommentPanel(
     var selectedCommentIndex by remember { mutableStateOf(0) }
     var focusedCommentIndex by remember { mutableStateOf(0) }
 
+    // 进入子评论面板前的列表滚动位置，以及之前点击的评论项的焦点请求器
+    var savedScrollIndex by remember { mutableIntStateOf(0) }
+    var savedScrollOffset by remember { mutableIntStateOf(0) }
+    val selectedCommentFocusRequester = remember { FocusRequester() }
+
     val context = LocalContext.current
 
     // 全屏图片查看器状态
@@ -260,12 +265,21 @@ fun CommentPanel(
     // 显示后请求焦点（初次显示时或子评论浮窗关闭后）
     LaunchedEffect(show, showSubCommentPanel, comments.isNotEmpty(), loading) {
         if (show && !showSubCommentPanel) {
-            // 子评论浮窗刚关闭，需要恢复焦点到之前点击的评论
+            // 子评论浮窗刚关闭，恢复进入前的滚动位置并聚焦到之前点击的评论
             if (wasSubCommentPanelShown) {
                 delay(300) // 等待动画完成
-                listState.scrollToItem(selectedCommentIndex)
-                delay(100)
-                focusRequester.requestFocus(scope)
+                // 子面板打开期间评论可能已被清空/替换，索引越界时不做恢复
+                if (selectedCommentIndex in comments.indices) {
+                    // 位置未变化时此调用不产生滚动
+                    listState.scrollToItem(
+                        savedScrollIndex.coerceIn(0, comments.lastIndex),
+                        savedScrollOffset,
+                    )
+                    delay(100)
+                    selectedCommentFocusRequester.requestFocus(scope)
+                } else {
+                    focusRequester.requestFocus(scope)
+                }
                 wasSubCommentPanelShown = false
             }
             // 切换剧集后评论加载完成，请求焦点到评论列表
@@ -540,6 +554,11 @@ fun CommentPanel(
                                     comment = comment,
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .then(
+                                            if (index == selectedCommentIndex) {
+                                                Modifier.focusRequester(selectedCommentFocusRequester)
+                                            } else Modifier
+                                        )
                                         .onFocusChanged { focusState ->
                                             if (focusState.hasFocus) {
                                                 focusedCommentIndex = index
@@ -549,6 +568,9 @@ fun CommentPanel(
                                         // 只有有子评论时才能点击打开子评论浮窗
                                         if (comment.repliesCount > 0) {
                                             selectedCommentIndex = index
+                                            // 记住当前滚动位置，返回时恢复
+                                            savedScrollIndex = listState.firstVisibleItemIndex
+                                            savedScrollOffset = listState.firstVisibleItemScrollOffset
                                             selectedRootComment = comment
                                             showSubCommentPanel = true
                                         }

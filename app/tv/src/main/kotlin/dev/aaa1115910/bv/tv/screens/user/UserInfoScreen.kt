@@ -72,7 +72,6 @@ import dev.aaa1115910.biliapi.repositories.FavoriteRepository
 import dev.aaa1115910.biliapi.repositories.HistoryRepository
 import dev.aaa1115910.biliapi.repositories.SeasonRepository
 import dev.aaa1115910.biliapi.repositories.UserRepository
-import dev.aaa1115910.bv.BuildConfig
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.SeasonCardData
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
@@ -161,13 +160,8 @@ fun UserInfoScreen(
             }.onFailure {
                 logger.fWarn { "Load recent videos failed: ${it.stackTraceToString()}" }
                 when (it) {
-                    is AuthFailureException -> {
-                        withContext(Dispatchers.Main) {
-                            context.getString(R.string.exception_auth_failure).toast(context)
-                        }
-                        logger.fInfo { "User auth failure" }
-                        if (!BuildConfig.DEBUG) userViewModel.logout()
-                    }
+                    // 会话失效的 toast 与登出由 AuthFailureDetection 全局回调统一处理
+                    is AuthFailureException -> logger.fInfo { "User auth failure" }
 
                     else -> {}
                 }
@@ -199,13 +193,8 @@ fun UserInfoScreen(
             }.onFailure {
                 logger.fWarn { "Load followed animes failed: ${it.stackTraceToString()}" }
                 when (it) {
-                    is AuthFailureException -> {
-                        withContext(Dispatchers.Main) {
-                            context.getString(R.string.exception_auth_failure).toast(context)
-                        }
-                        logger.fInfo { "User auth failure" }
-                        if (!BuildConfig.DEBUG) userViewModel.logout()
-                    }
+                    // 会话失效的 toast 与登出由 AuthFailureDetection 全局回调统一处理
+                    is AuthFailureException -> logger.fInfo { "User auth failure" }
 
                     else -> {}
                 }
@@ -252,13 +241,8 @@ fun UserInfoScreen(
             }.onFailure {
                 logger.fWarn { "Load favorite items failed: ${it.stackTraceToString()}" }
                 when (it) {
-                    is AuthFailureException -> {
-                        withContext(Dispatchers.Main) {
-                            context.getString(R.string.exception_auth_failure).toast(context)
-                        }
-                        logger.fInfo { "User auth failure" }
-                        if (!BuildConfig.DEBUG) userViewModel.logout()
-                    }
+                    // 会话失效的 toast 与登出由 AuthFailureDetection 全局回调统一处理
+                    is AuthFailureException -> logger.fInfo { "User auth failure" }
 
                     else -> {}
                 }

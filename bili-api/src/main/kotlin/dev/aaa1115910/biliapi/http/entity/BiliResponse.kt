@@ -21,11 +21,9 @@ data class BiliResponse<T>(
     init {
         when (code) {
             0 -> {}
-            -101 -> {
-                logger.error { "请求失败，账号未登录: $message (code: $code)" }
-                // 会话失效时统一回调，由 App 层执行自动登出
-                BiliAuthFailureHandler.notify(message)
-            }
+            // -101 只是「账号未登录」，匿名请求也会返回，是否算会话失效由 HTTP 层按
+            // 请求是否携带凭证判定（见 installAuthFailureDetection）
+            -101 -> logger.error { "请求失败，账号未登录: $message (code: $code)" }
             -352 -> logger.error { "请求失败，风控异常: $message (code: $code)" }
             else -> logger.error { "请求失败: $message (code: $code)" }
         }
@@ -75,23 +73,9 @@ data class BiliResponseWithoutData(
     init {
         when (code) {
             0 -> {}
-            -101 -> {
-                logger.error { "请求失败，账号未登录: $message (code: $code)" }
-                // 会话失效时统一回调，由 App 层执行自动登出
-                BiliAuthFailureHandler.notify(message)
-            }
+            -101 -> logger.error { "请求失败，账号未登录: $message (code: $code)" }
             -352 -> logger.error { "请求失败，风控异常: $message (code: $code)" }
             else -> logger.error { "请求失败: $message (code: $code)" }
-        }
-    }
-
-    @Throws()
-    fun requireSuccess() {
-        when (code) {
-            0 -> {}
-            -101 -> throw AuthFailureException(message)
-            -352 -> throw RiskControlException(message)
-            else -> throw IllegalStateException(message)
         }
     }
 }

@@ -1,5 +1,8 @@
 package dev.aaa1115910.bv.util
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 /**
  * 播放/详情接口返回的 v_voucher 是"一次性"凭证，同一个 voucher 只能用于一次
  * gaia_vgate register。若服务端重复返回同一个 v_voucher（例如 register 已消耗、
@@ -23,3 +26,35 @@ internal fun reserveFreshVVoucher(
     }
     return normalized
 }
+
+/**
+ * 校验极验结果是否属于当前这次注册。极验面板在失败重试后可能回传另一个
+ * challenge，这类结果对应的 token 已被服务端丢弃，提交必然失败，直接丢弃。
+ */
+internal fun validatedGeetestResultChallengeOrNull(
+    expectedChallenge: String,
+    resultChallenge: String,
+): String? {
+    val normalizedResult = resultChallenge.trim()
+    if (normalizedResult.isEmpty()) return null
+    if (normalizedResult != expectedChallenge.trim()) return null
+    return normalizedResult
+}
+
+/**
+ * v_voucher → gaia register 的串行注册器：同一 voucher 只允许注册一次，
+ * 并保证注册请求不会并发发出。播放页与详情页各持有一个实例。
+ */
+internal class GeetestVoucherRegistry {
+    private val mutex = Mutex()
+    private val attemptedVVouchers = mutableSetOf<String>()
+
+    /** 持锁跨越 register 网络调用：同一 registry 的注册请求串行发出 */
+    suspend fun <T> registerOnce(
+        candidate: String,
+        register: suspend (vVoucher: String) -> T,
+    ): T = mutex.withLock {
+        register(reserveFreshVVoucher(attemptedVVouchers, candidate))
+    }
+}
+

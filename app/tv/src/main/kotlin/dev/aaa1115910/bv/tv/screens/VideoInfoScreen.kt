@@ -51,6 +51,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -1150,20 +1151,26 @@ fun VideoInfoScreen(
 
     // 风控 Geetest 验证弹窗（TV 遥控器十字光标 + WebView）
     if (videoDetailViewModel.showGeetestDialog) {
-        GeetestTvVerifyDialog(
-            gt = videoDetailViewModel.geetestGt,
-            challenge = videoDetailViewModel.geetestChallenge,
-            onResult = { result ->
-                videoDetailViewModel.onGeetestResult(
-                    challenge = result.challenge,
-                    validate = result.validate,
-                    seccode = result.seccode,
-                )
-            },
-            onDismiss = {
-                videoDetailViewModel.onGeetestCancelled()
-            },
-        )
+        // WebView 只在首次组合时创建，challenge 变化时必须重建，否则用户解的是旧题
+        key(
+            videoDetailViewModel.geetestGt,
+            videoDetailViewModel.geetestChallenge,
+        ) {
+            GeetestTvVerifyDialog(
+                gt = videoDetailViewModel.geetestGt,
+                challenge = videoDetailViewModel.geetestChallenge,
+                onResult = { result ->
+                    videoDetailViewModel.onGeetestResult(
+                        challenge = result.challenge,
+                        validate = result.validate,
+                        seccode = result.seccode,
+                    )
+                },
+                onDismiss = {
+                    videoDetailViewModel.onGeetestCancelled()
+                },
+            )
+        }
     }
 
     // 详情加载失败（含风控申请失败/取消）时，同步错误信息到 tip

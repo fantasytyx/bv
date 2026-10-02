@@ -138,7 +138,8 @@ class VideoPlayRepository(
                         qn = 127,
                         fnver = 0,
                         fourk = 1,
-                        sessData = authRepository.sessionData
+                        sessData = authRepository.sessionData,
+                        gaiaVtoken = authRepository.gaiaVtoken
 //                        buvid3 = authRepository.buvid3
                     )
                 } else {

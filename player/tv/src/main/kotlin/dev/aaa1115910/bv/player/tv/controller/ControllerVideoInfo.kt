@@ -573,7 +573,7 @@ fun ControllerVideoInfoBottom(
         mutableStateOf(
             when {
                 upName.isNotEmpty() -> {
-                    val base = if (isLive) "$upName  ·  $liveTimeFormatted 开播" else {
+                    val base = if (isLive) "$upName  ·  已直播 ${liveElapsed.formatHourMinSec()}  ·  $liveTimeFormatted 开播" else {
                         "$upName  ·  ${formatStat(play)}播放  ·  ${formatStat(danmaku.toLong())}弹幕  ·  ${formatStat(like.toLong())}点赞  ·  ${formatStat(favorite.toLong())}收藏  ·  ${formatStat(coin.toLong())}投币  ·  $pubTime 发布"
                     }
                     if (viewerCountText.isNotEmpty()) "$base  ·  $viewerCountText" else base
@@ -661,8 +661,8 @@ fun ControllerVideoInfoBottom(
                 style = MaterialTheme.typography.bodyMedium
             )
         }
-        // 当前注入的是：点赞、收藏、投币、稍后再看
         if (!isLive) {
+            // 当前注入的是：点赞、收藏、投币、稍后再看
             userActionContent(
                 Modifier.focusProperties {
                     down = seekbarFocusRequester
@@ -677,44 +677,46 @@ fun ControllerVideoInfoBottom(
                     if (pause) cancelHideJob() else scheduleHideJob()
                 }
             )
-        }
-        VideoSeekBar(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 30.dp, end = 30.dp, bottom = 2.dp)
-                .focusRequester(seekbarFocusRequester)
-                .onFocusChanged {
-                    scheduleHideJob()
-                    seekbarHasFocus = it.isFocused
-                }
-                .focusProperties {
-                    up = userActionFocusRequesters.value[UserActionKey.Like] ?: FocusRequester()
-                    down = defaultFocusButtonId?.let { focusRequesters[it] } ?: FocusRequester()
-                }
-                .ifElse(!isLive, Modifier.focusable())
-                .onPreviewKeyEvent {
-                    if (seekbarHasFocus && it.type == KeyEventType.KeyDown) {
-                        when (it.key) {
-                            Key.DirectionLeft -> onSeekBack()
-                            Key.DirectionRight -> onSeekForward()
-                            Key.Enter -> if (isPlaying) onPause() else onPlay()
-                            Key.DirectionCenter -> if (isPlaying) onPause() else onPlay()
-                        }
+
+            // 进度条
+            VideoSeekBar(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 30.dp, end = 30.dp, bottom = 2.dp)
+                    .focusRequester(seekbarFocusRequester)
+                    .onFocusChanged {
+                        scheduleHideJob()
+                        seekbarHasFocus = it.isFocused
                     }
-                    false
-                },
-            duration = seekData.duration,
-            position = seekData.position,
-            bufferedPercentage = seekData.bufferedPercentage,
-            moveState = SeekMoveState.Idle,
-            idleIcon = idleIcon,
-            movingIcon = movingIcon,
-            isFocused = seekbarHasFocus
-        )
+                    .focusProperties {
+                        up = userActionFocusRequesters.value[UserActionKey.Like] ?: FocusRequester()
+                        down = defaultFocusButtonId?.let { focusRequesters[it] } ?: FocusRequester()
+                    }
+                    .focusable()
+                    .onPreviewKeyEvent {
+                        if (seekbarHasFocus && it.type == KeyEventType.KeyDown) {
+                            when (it.key) {
+                                Key.DirectionLeft -> onSeekBack()
+                                Key.DirectionRight -> onSeekForward()
+                                Key.Enter -> if (isPlaying) onPause() else onPlay()
+                                Key.DirectionCenter -> if (isPlaying) onPause() else onPlay()
+                            }
+                        }
+                        false
+                    },
+                duration = seekData.duration,
+                position = seekData.position,
+                bufferedPercentage = seekData.bufferedPercentage,
+                moveState = SeekMoveState.Idle,
+                idleIcon = idleIcon,
+                movingIcon = movingIcon,
+                isFocused = seekbarHasFocus
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 32.dp, end = 32.dp, top = 0.dp, bottom = 10.dp)
+                .padding(start = 32.dp, end = 32.dp, top = if (isLive) 15.dp else 0.dp, bottom = 10.dp)
                 .ifElse(
                     !isLive,
                     Modifier.focusProperties {
@@ -800,14 +802,16 @@ fun ControllerVideoInfoBottom(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            if (!isLive) {
+                Spacer(Modifier.weight(1f))
 
-            Text(
-                modifier = Modifier
-                    .padding(top = 8.dp, bottom = 0.dp),
-                text = if (isLive) liveElapsed.formatHourMinSec() else "${seekData.position.formatHourMinSec()} / ${seekData.duration.formatHourMinSec()}",
-                color = Color.White
-            )
+                Text(
+                    modifier = Modifier
+                        .padding(top = 8.dp, bottom = 0.dp),
+                    text = "${seekData.position.formatHourMinSec()} / ${seekData.duration.formatHourMinSec()}",
+                    color = Color.White
+                )
+            }
         }
     }
 

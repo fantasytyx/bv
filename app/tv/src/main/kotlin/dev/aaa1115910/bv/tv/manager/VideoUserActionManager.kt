@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.java.KoinJavaComponent.get
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 data class VideoActionState(
@@ -38,7 +39,9 @@ object VideoUserActionManager {
     private val favoriteFoldersMap = ConcurrentHashMap<Long, MutableStateFlow<List<FavoriteFolderMetadata>>>()
     private val fetchMutexMap = ConcurrentHashMap<Long, Mutex>()
     /** Tracks which (uid, aid) pairs have been populated via either lazy fetch or gRPC loaded data. */
-    private val loadedKeys = ConcurrentHashMap.newKeySet<Pair<Long, Long>>()
+    // ConcurrentHashMap.newKeySet 需 API 24，minSdk 23 上会 NoSuchMethodError，改用 API 9 起的 newSetFromMap
+    private val loadedKeys: MutableSet<Pair<Long, Long>> =
+        Collections.newSetFromMap(ConcurrentHashMap<Pair<Long, Long>, Boolean>())
     /** Per-(uid,aid) mutex for lazy fetch to prevent duplicate concurrent requests. */
     private val stateFetchMutexMap = ConcurrentHashMap<Pair<Long, Long>, Mutex>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

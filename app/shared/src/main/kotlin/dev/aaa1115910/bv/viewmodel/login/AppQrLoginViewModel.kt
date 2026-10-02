@@ -5,8 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.entity.login.QrLoginState
+import dev.aaa1115910.biliapi.http.util.WebCookieManager
 import dev.aaa1115910.biliapi.repositories.LoginRepository
 import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.entity.AuthData
@@ -39,42 +39,31 @@ class AppQrLoginViewModel(
     private var pollingJob: Job? = null
     private var requestGeneration = 0L
 
-    fun requestQRCode(
-        preferApiType: ApiType = ApiType.App,
-        webQrSource: String? = null,
-        webQrGoUrl: String? = null
-    ) {
+    fun requestQRCode() {
         val generation = ++requestGeneration
         qrRequestJob?.cancel()
         pollingJob?.cancel()
         state = QrLoginState.Ready
         loginUrl = ""
-        logger.fInfo { "Request login qr code with apiType=$preferApiType" }
+        logger.fInfo { "Request login qr code" }
         qrRequestJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 withContext(Dispatchers.Main) { state = QrLoginState.RequestingQRCode }
-                val qrLoginData = when (preferApiType) {
-                    ApiType.Web -> loginRepository.requestWebQrLogin(
-                        source = webQrSource,
-                        goUrl = webQrGoUrl
-                    )
-                    ApiType.App -> loginRepository.requestAppQrLogin()
-                }
+                val qrLoginData = loginRepository.requestAppQrLogin()
                 withContext(Dispatchers.Main) {
                     if (generation != requestGeneration) return@withContext
                     loginUrl = qrLoginData.url
                     state = QrLoginState.WaitingForScan
                 }
                 if (generation != requestGeneration) return@launch
-                logger.fInfo { "Get login request code url with apiType=$preferApiType" }
+                logger.fInfo { "Get login request code url" }
                 logger.info { qrLoginData.url }
                 pollingJob = viewModelScope.launch(Dispatchers.IO) {
                     while (isActive && generation == requestGeneration) {
                         delay(1000)
                         if (checkLoginResult(
                                 generation = generation,
-                                loginKey = qrLoginData.key,
-                                apiType = preferApiType
+                                loginKey = qrLoginData.key
                             )
                         ) {
                             break
@@ -108,15 +97,11 @@ class AppQrLoginViewModel(
      */
     private suspend fun checkLoginResult(
         generation: Long,
-        loginKey: String,
-        apiType: ApiType
+        loginKey: String
     ): Boolean {
-        logger.fInfo { "Check for login result with apiType=$apiType" }
+        logger.fInfo { "Check for login result" }
         return try {
-            val qrLoginResult = when (apiType) {
-                ApiType.Web -> loginRepository.checkWebQrLoginState(loginKey)
-                ApiType.App -> loginRepository.checkAppQrLoginState(loginKey)
-            }
+            val qrLoginResult = loginRepository.checkAppQrLoginState(loginKey)
             if (generation != requestGeneration) return true
             when (qrLoginResult.state) {
                 QrLoginState.WaitingForScan -> {
@@ -143,6 +128,13 @@ class AppQrLoginViewModel(
                         Prefs.buvid3 = loginRepository.getbuvid3()
                     }.onFailure {
                         logger.warn { "Get buvid3 failed: ${it.stackTraceToString()}" }
+                    }
+                    // 请求头用的 buvid3 变了，后台把 web 侧 b_3/b_4 重新配对，否则指纹不成对
+                    viewModelScope.launch(Dispatchers.IO) {
+                        runCatching { WebCookieManager.ensureWebFingerprintCookies() }
+                            .onFailure {
+                                logger.warn { "Refresh web fingerprint failed: ${it.stackTraceToString()}" }
+                            }
                     }
 
                     val authData = AuthData(

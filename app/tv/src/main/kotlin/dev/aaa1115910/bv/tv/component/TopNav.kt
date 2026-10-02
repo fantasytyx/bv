@@ -86,28 +86,19 @@ fun TopNav(
 
     val defaultFocusRequester = tabFocusRequester ?: remember { FocusRequester() }
 
-    var selectedNav by remember(initialSelectedItem) {
-        mutableStateOf(initialSelectedItem ?: items.first())
-    }
-
-    var selectedTabIndex by remember(initialSelectedItem) {
-        mutableIntStateOf(
-            if (initialSelectedItem != null) {
-                val index = items.indexOf(initialSelectedItem)
-                if (index >= 0) index else 0
-            } else 0
-        )
-    }
+    // 选中状态以内部焦点为准，不能用 remember(initialSelectedItem) 直接从外部重建：
+    // 内容区的切换回调延迟 200ms，外部回传的 initialSelectedItem 是上一次切换的旧值，
+    // 一旦在用户已经切到下一个 tab 之后回传，就会把选中状态改回旧 tab，
+    // 表现为“焦点在下一个 tab，下方内容停在上一个 tab”
+    val initialTabIndex = remember { items.indexOf(initialSelectedItem ?: items.first()).coerceAtLeast(0) }
+    var selectedNav by remember { mutableStateOf(initialSelectedItem ?: items.first()) }
+    var selectedTabIndex by remember { mutableIntStateOf(initialTabIndex) }
 
     // 在确认键切换模式下，focusedTabIndex 跟踪当前聚焦的 tab（视觉高亮）
-    var focusedTabIndex by remember(initialSelectedItem) {
-        mutableIntStateOf(
-            if (initialSelectedItem != null) {
-                val index = items.indexOf(initialSelectedItem)
-                if (index >= 0) index else 0
-            } else 0
-        )
-    }
+    var focusedTabIndex by remember { mutableIntStateOf(initialTabIndex) }
+
+    // 最近一次上报给外部的选中项，用于区分“外部主动切换”和“外部回传本组件刚上报的值”
+    var lastNotifiedNav by remember { mutableStateOf<TopNavItem?>(null) }
 
     var tabMoved by remember { mutableStateOf(true) }
 
@@ -117,21 +108,40 @@ fun TopNav(
         itemFocusRequesterProvider?.invoke(focusIndex, items[focusIndex]) ?: defaultFocusRequester
     }
 
-    LaunchedEffect(items, initialSelectedItem) {
-        if (items.isEmpty()) return@LaunchedEffect
-
-        val nextSelectedItem = initialSelectedItem?.takeIf { it in items } ?: items.first()
-        selectedNav = nextSelectedItem
-        val idx = items.indexOf(nextSelectedItem).takeIf { it >= 0 } ?: 0
-        selectedTabIndex = idx
-        focusedTabIndex = idx
+    fun applySelection(item: TopNavItem) {
+        val index = items.indexOf(item)
+        if (index < 0) return
+        selectedNav = item
+        selectedTabIndex = index
+        focusedTabIndex = index
         tabMoved = true
     }
 
+    // items 变化（用户隐藏/排序标签）时，保证当前选中项仍然存在
+    LaunchedEffect(items) {
+        if (items.isEmpty()) return@LaunchedEffect
+        val current = selectedNav.takeIf { it in items }
+        if (current != null) {
+            selectedTabIndex = items.indexOf(current)
+            focusedTabIndex = focusedTabIndex.coerceIn(items.indices)
+        } else {
+            applySelection(initialSelectedItem?.takeIf { it in items } ?: items.first())
+        }
+    }
+
+    // 只在外部真的切到了别的 tab 时才同步，忽略外部回传的本组件上报值
+    LaunchedEffect(initialSelectedItem, items) {
+        val external = initialSelectedItem?.takeIf { it in items } ?: return@LaunchedEffect
+        if (external == lastNotifiedNav || external == selectedNav) return@LaunchedEffect
+        lastNotifiedNav = external
+        applySelection(external)
+    }
+
     LaunchedEffect(selectedNav) {
-        if (selectedNav !in items) return@LaunchedEffect
+        val nav = selectedNav.takeIf { it in items } ?: return@LaunchedEffect
         delay(200)
-        onSelectedChanged(selectedNav)
+        lastNotifiedNav = nav
+        onSelectedChanged(nav)
         // 别急着向下移动焦点，动画还没结束
         delay(400)
         tabMoved = true

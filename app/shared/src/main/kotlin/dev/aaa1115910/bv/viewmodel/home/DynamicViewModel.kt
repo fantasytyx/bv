@@ -10,8 +10,6 @@ import dev.aaa1115910.biliapi.entity.user.DynamicVideo
 import dev.aaa1115910.biliapi.http.entity.AuthFailureException
 import dev.aaa1115910.biliapi.repositories.UserRepository
 import dev.aaa1115910.bv.BVApp
-import dev.aaa1115910.bv.BuildConfig
-import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.addAllWithMainContext
 import dev.aaa1115910.bv.util.fInfo
@@ -86,14 +84,8 @@ class DynamicViewModel(
         }.onFailure {
             logger.fWarn { "Load dynamic video list failed: ${it.stackTraceToString()}" }
             when (it) {
-                is AuthFailureException -> {
-                    withContext(Dispatchers.Main) {
-                        BVApp.context.getString(R.string.exception_auth_failure)
-                            .toast(BVApp.context)
-                    }
-                    logger.fInfo { "User auth failure" }
-                    if (!BuildConfig.DEBUG) bvUserRepository.logout()
-                }
+                // 会话失效的 toast 与登出由 AuthFailureDetection 全局回调统一处理
+                is AuthFailureException -> logger.fInfo { "User auth failure" }
 
                 else -> {
                     withContext(Dispatchers.Main) {
@@ -127,13 +119,7 @@ class DynamicViewModel(
         }.onFailure {
             logger.fWarn { "Load dynamic all list failed: ${it.stackTraceToString()}" }
             when (it) {
-                is AuthFailureException -> {
-                    withContext(Dispatchers.Main) {
-                        BVApp.context.getString(R.string.exception_auth_failure)
-                            .toast(BVApp.context)
-                    }
-                    logger.fInfo { "User auth failure" }
-                }
+                is AuthFailureException -> logger.fInfo { "User auth failure" }
 
                 else -> {
                     withContext(Dispatchers.Main) {

@@ -182,7 +182,7 @@ fun HistoryScreen(
                 fontSize = 11.sp,
                 textAlign = TextAlign.End
             )
-            ProvideListBringIntoViewSpec(padding = 24.dp) {
+            ProvideListBringIntoViewSpec {
                 LazyVerticalGrid(
                     modifier = Modifier
                         .focusRestorer()

@@ -7,9 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.aaa1115910.biliapi.entity.video.VideoDetail
-import dev.aaa1115910.biliapi.http.BiliHttpApi
 import dev.aaa1115910.biliapi.http.entity.VVoucherException
-import dev.aaa1115910.biliapi.http.entity.video.GaiaVgateRegisterData
 import dev.aaa1115910.biliapi.repositories.AuthRepository
 import dev.aaa1115910.biliapi.repositories.VideoDetailRepository
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
@@ -19,19 +17,18 @@ import dev.aaa1115910.bv.player.entity.VideoListPart
 import dev.aaa1115910.bv.player.entity.VideoListUgcEpisode
 import dev.aaa1115910.bv.player.entity.VideoListUgcEpisodeTitle
 import dev.aaa1115910.bv.repository.VideoInfoRepository
+import dev.aaa1115910.bv.util.GeetestSession
+import dev.aaa1115910.bv.util.GeetestSubmitResult
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.VVoucherAlreadyAttemptedException
 import dev.aaa1115910.bv.util.fDebug
 import dev.aaa1115910.bv.util.fException
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.fWarn
-import dev.aaa1115910.bv.util.reserveFreshVVoucher
 import dev.aaa1115910.bv.util.swapListWithMainContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.KoinViewModel
 
@@ -52,13 +49,11 @@ class VideoDetailViewModel(
     var geetestGt by mutableStateOf("")
     var geetestChallenge by mutableStateOf("")
     var errorMessage by mutableStateOf<String?>(null)
-    private var pendingGaiaToken: String? = null
     private var pendingRetryAid = 0L
     private var pendingRetryFromPgcSeason = false
     private var pendingRetryWithUserActions = true
-    // v_voucher 是一次性凭证，记录已处理过的 voucher，避免重复注册弹窗造成死循环
-    private val geetestVoucherRegisterMutex = Mutex()
-    private val attemptedGeetestVVouchers = mutableSetOf<String>()
+    // v_voucher 是一次性凭证，会话内部保证同一个 voucher 只注册一次，避免重复弹窗死循环
+    private val geetestSession = GeetestSession(authRepository)
 
     suspend fun loadDetail(aid: Long, fromPgcSeason: Boolean = false, withUserActions: Boolean = true) {
         logger.fInfo { "Load detail: [avid=$aid, preferApiType=${Prefs.apiType.name}]" }
@@ -95,20 +90,13 @@ class VideoDetailViewModel(
         withUserActions: Boolean,
     ) {
         runCatching {
-            val (reservedVoucher, registerResponse) = registerGeetestChallengeOnce(vVoucher)
-            val token = registerResponse.token
-            val gt = registerResponse.geetest.gt
-            val challenge = registerResponse.geetest.challenge
-            if (token.isBlank() || gt.isBlank() || challenge.isBlank()) {
-                error("gaia_vgate_register 返回数据不完整")
-            }
+            val challenge = geetestSession.start(vVoucher)
             withContext(Dispatchers.Main) {
-                pendingGaiaToken = token
                 pendingRetryAid = aid
                 pendingRetryFromPgcSeason = fromPgcSeason
                 pendingRetryWithUserActions = withUserActions
-                geetestGt = gt
-                geetestChallenge = challenge
+                geetestGt = challenge.gt
+                geetestChallenge = challenge.challenge
                 showGeetestDialog = true
             }
         }.onFailure {
@@ -124,79 +112,60 @@ class VideoDetailViewModel(
         }
     }
 
-    private suspend fun registerGeetestChallengeOnce(
-        candidate: String,
-    ): Pair<String, GaiaVgateRegisterData> =
-        geetestVoucherRegisterMutex.withLock {
-            val reservedVoucher = reserveFreshVVoucher(
-                attemptedVVouchers = attemptedGeetestVVouchers,
-                candidate = candidate,
-            )
-            reservedVoucher to BiliHttpApi.gaiaVgateRegister(
-                vVoucher = reservedVoucher,
-                sessData = authRepository.sessionData,
-                csrf = authRepository.biliJct
-            ).getResponseData()
-        }
-
     fun onGeetestResult(challenge: String, validate: String, seccode: String) {
-        val token = pendingGaiaToken ?: return
         val retryAid = pendingRetryAid
         val retryFromPgcSeason = pendingRetryFromPgcSeason
         val retryWithUserActions = pendingRetryWithUserActions
         if (retryAid <= 0L) return
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val validateResponse = BiliHttpApi.gaiaVgateValidate(
-                    token = token,
-                    geetestChallenge = challenge,
-                    validate = validate,
-                    seccode = seccode,
-                    sessData = authRepository.sessionData,
-                    csrf = authRepository.biliJct
-                ).getResponseData()
-                if (validateResponse.isValid != 1) {
-                    error("验证未通过")
+            when (val result = geetestSession.submit(challenge, validate, seccode)) {
+                is GeetestSubmitResult.StaleChallenge -> withContext(Dispatchers.Main) {
+                    // 失败重试后极验会回传另一个 challenge，其 token 已被服务端丢弃，提交必然失败
+                    logger.fWarn {
+                        "Ignore stale Geetest result: expected=${result.expected.take(8)} actual=${result.actual.take(8)}"
+                    }
+                    // 静默丢弃会让弹窗停在"正在提交…"且无出路，这里直接给出可见失败反馈
+                    clearGeetestState()
+                    errorMessage = "人机验证信息已失效，请重新验证"
+                    state = VideoInfoState.Error
                 }
-                val griskId = validateResponse.griskId
-                if (griskId.isBlank()) {
-                    error("grisk_id 为空")
+
+                is GeetestSubmitResult.Failure -> withContext(Dispatchers.Main) {
+                    logger.fException(result.cause) { "gaiaVgateValidate failed" }
+                    clearGeetestState()
+                    errorMessage = "风控验证失败：${result.message}"
+                    state = VideoInfoState.Error
                 }
-                authRepository.gaiaVtoken = griskId
-                withContext(Dispatchers.Main) {
-                    showGeetestDialog = false
-                    pendingGaiaToken = null
-                    pendingRetryAid = 0L
+
+                GeetestSubmitResult.Success -> {
+                    withContext(Dispatchers.Main) { clearGeetestState() }
+                    // videoDetail 为 null 表示详情尚未成功加载（首次加载即被风控），属于同一会话，应允许重试
+                    val stillCurrent = withContext(Dispatchers.Main) {
+                        videoDetail == null || videoDetail?.aid == retryAid
+                    }
+                    if (!stillCurrent) {
+                        logger.fDebug { "Skip Geetest detail retry: detail changed" }
+                        return@launch
+                    }
+                    logger.fInfo { "Gaia vgate validate success, retrying load detail" }
+                    loadDetail(
+                        aid = retryAid,
+                        fromPgcSeason = retryFromPgcSeason,
+                        withUserActions = retryWithUserActions,
+                    )
                 }
-                // videoDetail 为 null 表示详情尚未成功加载（首次加载即被风控），属于同一会话，应允许重试
-                val stillCurrent = withContext(Dispatchers.Main) {
-                    videoDetail == null || videoDetail?.aid == retryAid
-                }
-                if (!stillCurrent) {
-                    logger.fDebug { "Skip Geetest detail retry: detail changed" }
-                    return@runCatching
-                }
-                logger.fInfo { "Gaia vgate validate success, retrying load detail" }
-                loadDetail(
-                    aid = retryAid,
-                    fromPgcSeason = retryFromPgcSeason,
-                    withUserActions = retryWithUserActions,
-                )
-            }.onFailure {
-                logger.fException(it) { "gaiaVgateValidate failed" }
-                errorMessage = "风控验证失败：${it.localizedMessage}"
-                state = VideoInfoState.Error
-                showGeetestDialog = false
-                pendingGaiaToken = null
-                pendingRetryAid = 0L
             }
         }
     }
 
-    fun onGeetestCancelled() {
+    private fun clearGeetestState() {
         showGeetestDialog = false
-        pendingGaiaToken = null
         pendingRetryAid = 0L
+        geetestSession.clear()
+    }
+
+    fun onGeetestCancelled() {
+        clearGeetestState()
         if (videoDetail == null) {
             errorMessage = "验证已取消"
             state = VideoInfoState.Error

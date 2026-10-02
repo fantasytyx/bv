@@ -25,6 +25,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1304,20 +1305,26 @@ fun VideoPlayerV3Screen(
 
             // 风控 Geetest 验证弹窗（TV 遥控器十字光标 + WebView）
             if (playerViewModel.showGeetestDialog) {
-                GeetestTvVerifyDialog(
-                    gt = playerViewModel.geetestGt,
-                    challenge = playerViewModel.geetestChallenge,
-                    onResult = { result ->
-                        playerViewModel.onGeetestResult(
-                            challenge = result.challenge,
-                            validate = result.validate,
-                            seccode = result.seccode,
-                        )
-                    },
-                    onDismiss = {
-                        playerViewModel.onGeetestCancelled()
-                    },
-                )
+                // WebView 只在首次组合时创建，challenge 变化时必须重建，否则用户解的是旧题
+                key(
+                    playerViewModel.geetestGt,
+                    playerViewModel.geetestChallenge,
+                ) {
+                    GeetestTvVerifyDialog(
+                        gt = playerViewModel.geetestGt,
+                        challenge = playerViewModel.geetestChallenge,
+                        onResult = { result ->
+                            playerViewModel.onGeetestResult(
+                                challenge = result.challenge,
+                                validate = result.validate,
+                                seccode = result.seccode,
+                            )
+                        },
+                        onDismiss = {
+                            playerViewModel.onGeetestCancelled()
+                        },
+                    )
+                }
             }
         }
     }

@@ -262,15 +262,12 @@ object Prefs {
 
     var buvid3: String
         get() = runBlocking {
-            var id = dsm.getPreferenceFlow(PrefKeys.prefBuvid3Request).first()
-            if(!id.contains("infoc")){
-                buvid3 = "${UUID.randomUUID()}${(0..9).random()}infoc"
-                id = buvid3
-            }
+            // 非空值一律原样返回：服务端 finger/spi 签发的 b_3 未必带 infoc 后缀，
+            // 一旦在这里重造，请求头 buvid3 会与 buvid4 永久不成对，且每次读都是新值
+            val id = dsm.getPreferenceFlow(PrefKeys.prefBuvid3Request).first()
             if (id != "") {
                 id
             } else {
-                //random buvid3
                 val randomBuvid3 = "${UUID.randomUUID()}${(0..9).random()}infoc"
                 buvid3 = randomBuvid3
                 randomBuvid3
@@ -295,6 +292,15 @@ object Prefs {
     fun setWebCookies(map: Map<String, String>) {
         webExtraCookies = buildString {
             (webCookieMap(webExtraCookies) + map).forEach { (key, value) ->
+                if (value.isNotBlank()) append("$key=$value;")
+            }
+        }
+    }
+
+    fun removeWebCookies(names: Set<String>) {
+        val remaining = webCookieMap(webExtraCookies).filterKeys { it !in names }
+        webExtraCookies = buildString {
+            remaining.forEach { (key, value) ->
                 if (value.isNotBlank()) append("$key=$value;")
             }
         }
