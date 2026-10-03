@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// 运行命令：node doc/calc_danmaku_averages.js doc/优化前的.txt
-// 指定只统计前 N 条匹配日志：node doc/calc_danmaku_averages.js doc/优化前的.txt 100
+// 运行命令：node docs/弹幕/calc_danmaku_averages.js docs/弹幕/优化前的.txt
+// 指定只统计前 N 条匹配日志：node docs/弹幕/calc_danmaku_averages.js docs/弹幕/优化前的.txt 100
 
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ const inputPath = process.argv[2];
 const maxLogsArg = process.argv[3];
 
 if (!inputPath) {
-  console.error('Usage: node doc/calc_danmaku_averages.js <log-file> [max-logs]');
+  console.error('Usage: node docs/弹幕/calc_danmaku_averages.js <log-file> [max-logs]');
   process.exit(1);
 }
 

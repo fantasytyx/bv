@@ -317,7 +317,8 @@ object BiliHttpApi {
             parameter("type", type)
             parameter("platform", platform)
             // 官方 web 播放器固定带的环境参数，缺了这几项更容易被判定成非 web 播放器
-            parameter("voice_balance", 0)
+            // 只有 1 才会让服务端随响应下发响度均衡元数据（volume），是否应用由本地挡位决定
+            parameter("voice_balance", 1)
             parameter("gaia_source", "pre-load")
             parameter("isGaiaAvoided", "true")
             parameter("web_location", "1315873")

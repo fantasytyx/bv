@@ -168,7 +168,7 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
                 // 如果 sameSnap 基本是 0，说明现有 acquire 模式几乎没有重复旧快照。
                 Log.d(
                     TAG,
-                    "[Draw] fps=%.1f  frames=%d  dropped=%d  sameSnap=%d  maxSameSnapStreak=%d  snapAgeMs(avg/max)=%.1f/%.1f  driftMs(cur/max)=%.1f/%.1f  hardResync=%d  mem=%s".format(
+                    "[Draw] fps=%.1f  frames=%d  dropped=%d  sameSnap=%d  maxSameSnapStreak=%d  snapAgeMs(avg/max)=%.1f/%.1f  driftMs(cur/max)=%.1f/%.1f  trimPct=%.2f  hardResync=%d  mem=%s".format(
                         fps,
                         drawFrameCount,
                         drawDroppedFrames,
@@ -178,6 +178,7 @@ internal class DanmakuPlayer(private val view: DanmakuView) {
                         drawSnapshotAgeMaxMs, // 这一秒里画过的 snapshot 中，最过时的那个和当前时间的差距，单位毫秒。这个值越大说明偶尔会有非常过时的弹幕被画出来，可能会有明显的卡顿尖峰。
                         timer.lastDriftMs, // 当前帧弹幕时钟和播放器位置的偏差，单位毫秒
                         timer.maxAbsDriftMs, // 这一秒里偏差的绝对值峰值，单位毫秒。持续偏大说明播放器时间轴和系统时钟存在速率差
+                        timer.lastTrimPercent, // 当前帧的纠偏速率（百分比），正常应为 0；出现纠偏时也不应超过 5%
                         timer.hardResyncCount, // 这一秒里因偏差过大而直接对齐位置的次数
                         DanmakuLogStats.memoryUsageSummary(),
                     )

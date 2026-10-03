@@ -22,10 +22,16 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
   - `player/shared/` - 共享播放器逻辑（含**自定义弹幕引擎** `danmaku/`）
 - `utils/` - 通用工具
 - `symbols/` - 共享 Compose/Symbol 资源
+- `macrobenchmark/` - Macrobenchmark 基准测试（冷启动、切 Tab 掉帧；含 `benchmark` 变体）
 - `libs/` - **预编译 AAR**（非 Maven 依赖）：`av1Decoder`、`ffmpegDecoder`（详见 [libs/README.md](libs/README.md)）
   - 实际集成进 player/core 的只有 `ffmpegDecoder`；`av1Decoder` 虽在 `settings.gradle.kts` 登记但当前没有任何模块依赖，**不要**默认它会被使用
   - libVLC 仅有 TV 端的可选运行时下载器（`app/tv/.../LibVLCDownloaderDialog.kt`），并未集成到播放器内核；Gradle 9 要求 include 的模块目录必须存在，因此 `:libs:libVLC` 已从 `settings.gradle.kts` 移除
 - `buildSrc/` - Gradle build logic（`AppConfiguration.kt`、`ProtobufConfiguration.kt`）
+- `docs/` - 项目文档
+  - `docs/CONTEXT.md` - 领域术语表（ubiquitous language），新增/改名概念时同步
+  - `docs/adr/` - 架构决策记录
+  - `docs/plans/`、`docs/specs/` - 功能的设计（spec）与实施计划（plan）
+  - `docs/弹幕/` - 弹幕引擎历史资料与性能记录
 
 ## 包命名空间约定
 
@@ -118,9 +124,9 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
 
 **当前使用自研引擎**（`player/shared/src/main/kotlin/dev/aaa1115910/bv/player/danmaku/`），3 线程架构（Main/ActionThread/CacheThread），Choreographer 帧驱动。
 
-- 历史背景与重构需求：[doc/弹幕/弹幕重构需求.md](doc/弹幕/弹幕重构需求.md)
-- 性能优化记录：[doc/弹幕/弹幕库优化.md](doc/弹幕/弹幕库优化.md)
-- Code review 报告：[doc/弹幕/弹幕code%20review%20报告.md](doc/弹幕/弹幕code%20review%20报告.md)
+- 历史背景与重构需求：[docs/弹幕/弹幕重构需求.md](docs/弹幕/弹幕重构需求.md)
+- 性能优化记录：[docs/弹幕/弹幕库优化.md](docs/弹幕/弹幕库优化.md)
+- Code review 报告：[docs/弹幕/弹幕code%20review%20报告.md](docs/弹幕/弹幕code%20review%20报告.md)
 - **不要**引用 `akdanmaku` 模块或文件（已从 `settings.gradle.kts` 和各 `build.gradle.kts` 移除，部分注释残留是历史遗迹）
 - 集成入口：`app/shared/.../viewmodel/VideoPlayerV3ViewModel.kt`
 - 直播弹幕通过 WebSocket 接收（`LiveDataWebSocket`）

@@ -92,6 +92,8 @@ class VideoPlayRepository(
                                         fnver = 0
                                         fourk = true
                                         preferCodecType = codecType.toPlayerSharedCodeType()
+                                        // 与 HTTP 侧一致：恒带 1 索取响度均衡元数据
+                                        this.voiceBalance = 1L
                                     }
                                 }) ?: throw IllegalStateException("Player stub is not initialized")
                             }.onFailure {

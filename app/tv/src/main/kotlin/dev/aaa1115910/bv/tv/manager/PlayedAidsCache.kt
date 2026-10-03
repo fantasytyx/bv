@@ -1,5 +1,6 @@
 package dev.aaa1115910.bv.tv.manager
 
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -8,7 +9,9 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object PlayedAidsCache {
     // 使用线程安全集合，保证多协程访问安全
-    private val playedAids = ConcurrentHashMap.newKeySet<Long>()
+    // ConcurrentHashMap.newKeySet 需 API 24，minSdk 23 上会 NoSuchMethodError，改用 API 9 起的 newSetFromMap
+    private val playedAids: MutableSet<Long> =
+        Collections.newSetFromMap(ConcurrentHashMap<Long, Boolean>())
 
     /** 标记已播放 */
     fun markPlayed(aid: Long) {
