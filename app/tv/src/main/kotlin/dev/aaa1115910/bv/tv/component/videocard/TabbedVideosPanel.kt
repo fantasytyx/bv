@@ -41,6 +41,7 @@ import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.util.onMenuKeyDown
 import dev.aaa1115910.bv.tv.util.stableItemKey
+import dev.aaa1115910.bv.util.ifElse
 
 @Composable
 fun TabbedVideosPanel(
@@ -89,12 +90,15 @@ fun TabbedVideosPanel(
     val relatedListState = rememberLazyListState()
     val preloadedListState = rememberLazyListState()
 
-    // When switching to "视频列表" tab and current video is in the list, scroll to it
     val isPreloadedTab = tabs.size > 1 && selectedTabIndex == 1
     val lazyListState = if (isPreloadedTab) preloadedListState else relatedListState
-    LaunchedEffect(selectedTabIndex) {
-        if (isPreloadedTab && currentVideoIndexInPreloaded >= 0) {
-            preloadedListState.scrollToItem(currentVideoIndexInPreloaded)
+
+    // 列表 tab 定位到当前视频，推荐 tab 定位到第一张；当前视频不在列表里时退回第一张
+    val targetIndex =
+        if (isPreloadedTab && currentVideoIndexInPreloaded >= 0) currentVideoIndexInPreloaded else 0
+    LaunchedEffect(selectedTabIndex, targetIndex, currentVideos.size) {
+        if (currentVideos.isNotEmpty()) {
+            lazyListState.scrollToItem(targetIndex)
         }
     }
 
@@ -160,7 +164,8 @@ fun TabbedVideosPanel(
                 .onGloballyPositioned {
                     rowHeight = with(density) { it.size.height.toDp() }
                 }
-                .focusRestorer()
+                // 焦点恢复失败时（如切换 tab 后 item key 全变了）兜底聚焦到目标卡片
+                .focusRestorer(focusRequester)
                 .onMenuKeyDown {
                     currentVideos.getOrNull(currentIndex)?.let(onLongClickVideo)
                 },
@@ -177,7 +182,7 @@ fun TabbedVideosPanel(
                 SmallVideoCard(
                     modifier = Modifier
                         .width(200.dp)
-                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                        .ifElse(index == targetIndex, Modifier.focusRequester(focusRequester)),
                     data = videoData,
                     unfocusedBorderColor = if (isCurrentVideo) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else null,
                     onClick = {

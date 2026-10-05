@@ -9,6 +9,8 @@ import bilibili.playershared.lossLessItemOrNull
 import bilibili.playershared.segmentVideoOrNull
 import bilibili.playershared.volumeOrNull
 import dev.aaa1115910.biliapi.http.entity.video.ClipInfo
+import dev.aaa1115910.biliapi.http.entity.video.ClipType
+import dev.aaa1115910.biliapi.http.entity.video.OgvPlayViewData
 
 data class PlayData(
     val dashVideos: List<DashVideo>,
@@ -172,6 +174,26 @@ data class PlayData(
 
         fun fromPlayUrlV2Data(playUrlV2Data: dev.aaa1115910.biliapi.http.entity.video.PlayUrlV2Data): PlayData {
             return fromPlayUrlData(playUrlV2Data.videoInfo)
+        }
+
+        fun fromOgvPlayViewData(ogvPlayViewData: OgvPlayViewData): PlayData {
+            // 旧端点的跳过片头/片尾在 video_info.clip_info_list，新端点挪到了 video_extra.clip_info
+            val clips = ogvPlayViewData.videoExtra.clipInfo.map {
+                ClipInfo(
+                    start = it.start,
+                    end = it.end,
+                    clipType = when (it.clipType) {
+                        1 -> ClipType.CLIP_TYPE_OP
+                        2 -> ClipType.CLIP_TYPE_ED
+                        3 -> ClipType.CLIP_TYPE_HE
+                        4 -> ClipType.CLIP_TYPE_MULTI_VIEW
+                        5 -> ClipType.CLIP_TYPE_AD
+                        else -> ClipType.Unknown
+                    },
+                    toastText = it.toastText
+                )
+            }
+            return fromPlayUrlData(ogvPlayViewData.videoInfo).copy(clipInfoList = clips)
         }
 
         fun fromPlayUrlData(playUrlData: dev.aaa1115910.biliapi.http.entity.video.PlayUrlData): PlayData {

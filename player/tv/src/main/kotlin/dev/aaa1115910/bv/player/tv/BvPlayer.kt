@@ -627,7 +627,8 @@ fun BvPlayer(
             showBackToHistory = showBackToHistory
         ),
         LocalVideoPlayerDebugInfoData provides VideoPlayerDebugInfoData(
-            debugInfo = videoPlayer.debugInfo
+            // 关掉时不算：debugInfo 要反射取解码器计数 + 拼字符串，显示侧本来就有 showDebugInfo 门控
+            debugInfo = if (videoPlayerConfigData.showDebugInfo) videoPlayer.debugInfo else ""
         ),
     ) {
         VideoPlayerController(

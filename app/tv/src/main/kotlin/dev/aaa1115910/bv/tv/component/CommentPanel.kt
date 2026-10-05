@@ -1,6 +1,7 @@
 package dev.aaa1115910.bv.tv.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.clickable
@@ -118,6 +119,8 @@ fun CommentPanel(
     var selectedRootComment by remember { mutableStateOf<Comment?>(null) }
     var hasRequestedFocus by remember { mutableStateOf(false) }
     var wasSubCommentPanelShown by remember { mutableStateOf(false) }
+    // 从子评论返回主面板时跳过主面板的滑入动画
+    var skipMainPanelEnterAnimation by remember { mutableStateOf(false) }
     var selectedCommentIndex by remember { mutableStateOf(0) }
     var focusedCommentIndex by remember { mutableStateOf(0) }
 
@@ -255,6 +258,7 @@ fun CommentPanel(
         if (!show) {
             hasRequestedFocus = false
             wasSubCommentPanelShown = false
+            skipMainPanelEnterAnimation = false
             // 重置边栏焦点状态，确保下次打开时焦点在评论列表
             focusOnSidebar = false
             sidebarFocusRequestToken = 0
@@ -267,7 +271,8 @@ fun CommentPanel(
         if (show && !showSubCommentPanel) {
             // 子评论浮窗刚关闭，恢复进入前的滚动位置并聚焦到之前点击的评论
             if (wasSubCommentPanelShown) {
-                delay(300) // 等待动画完成
+                // 主面板此时不播滑入动画，无需等动画结束，只要等列表重新组合出目标项
+                if (!skipMainPanelEnterAnimation) delay(300)
                 // 子面板打开期间评论可能已被清空/替换，索引越界时不做恢复
                 if (selectedCommentIndex in comments.indices) {
                     // 位置未变化时此调用不产生滚动
@@ -330,7 +335,11 @@ fun CommentPanel(
     ) {
         AnimatedVisibility(
             visible = show && !showSubCommentPanel,
-            enter = expandHorizontally(expandFrom = Alignment.End),
+            enter = if (skipMainPanelEnterAnimation) {
+                EnterTransition.None
+            } else {
+                expandHorizontally(expandFrom = Alignment.End)
+            },
             exit = shrinkHorizontally(shrinkTowards = Alignment.End)
         ) {
             Surface(
@@ -635,6 +644,8 @@ fun CommentPanel(
             rootId = selectedRootComment!!.rpid,
             rootComment = selectedRootComment!!,
             onHide = {
+                // 需与下一行同帧写入：AnimatedVisibility 在可见性翻转那一帧读取 enter
+                skipMainPanelEnterAnimation = true
                 showSubCommentPanel = false
                 selectedRootComment = null
             }

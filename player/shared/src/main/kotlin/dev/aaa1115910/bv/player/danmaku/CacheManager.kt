@@ -135,6 +135,9 @@ internal class CacheManager(
         if (released) return
         val item = req.item
         val style = req.style
+        // 请求发出后条目可能已被释放（seek/清屏/换字号/被裁剪）：此时不能再挂 bitmap —— 没人会回收它，
+        // 而且条目被重新激活时会重新发起构建请求，丢弃这一份不会有损。
+        if (item.cacheState != DanmakuCacheState.Rendering) return
         val existing = item.cacheBitmap
         if (existing != null && !existing.isRecycled && item.cacheGeneration == style.generation) {
             item.cacheState = DanmakuCacheState.Rendered

@@ -451,6 +451,7 @@ fun VideoPlayerScreen(
                                 Prefs.defaultDanmakuEnabled = enabled
                             },
                             onEnabledDanmakuTypesChange = { types ->
+                                Prefs.defaultDanmakuTypes = types
                                 playerViewModel.currentDanmakuTypes.swapList(types)
                             },
                             onDanmakuOpacityChange = { opacity ->

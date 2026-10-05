@@ -162,7 +162,10 @@ object Prefs {
         get() = runBlocking {
             val danmakuTypeIdsString =
                 dsm.getPreferenceFlow(PrefKeys.prefDefaultDanmakuTypesRequest).first()
-            if (danmakuTypeIdsString == "") {
+            // "none" 表示「都不显示」；空串只可能是偏好丢失（旧版本用它表示「都不显示」），回退到全部
+            if (danmakuTypeIdsString.isEmpty()) {
+                DanmakuType.entries
+            } else if (danmakuTypeIdsString == "none") {
                 emptyList()
             } else {
                 danmakuTypeIdsString.split(",").map { DanmakuType.entries[it.toInt()] }
@@ -171,7 +174,7 @@ object Prefs {
         set(value) = runBlocking {
             dsm.editPreference(
                 PrefKeys.prefDefaultDanmakuTypesKey,
-                value.map { it.ordinal }.joinToString(",")
+                if (value.isEmpty()) "none" else value.map { it.ordinal }.joinToString(",")
             )
         }
 
@@ -588,6 +591,10 @@ object Prefs {
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefPlayerSkipSilenceRequest).first() }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefPlayerSkipSilenceKey, value) }
 
+    var playerSwitchCdnOnBuffering: Boolean
+        get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefPlayerSwitchCdnOnBufferingRequest).first() }
+        set(value) = runBlocking { dsm.editPreference(PrefKeys.prefPlayerSwitchCdnOnBufferingKey, value) }
+
     var playerAudioBalanceLevel: AudioBalanceLevel
         get() = runBlocking {
             val ordinal = dsm.getPreferenceFlow(PrefKeys.prefPlayerAudioBalanceLevelRequest).first()
@@ -718,6 +725,7 @@ object PrefKeys {
     val prefEnableAsyncQueueing = booleanPreferencesKey("enable_async_queueing")
     val prefEnableScreenRefreshRateMatching = booleanPreferencesKey("enable_screen_refresh_rate_matching")
     val prefPlayerSkipSilenceKey = booleanPreferencesKey("player_skip_silence")
+    val prefPlayerSwitchCdnOnBufferingKey = booleanPreferencesKey("player_switch_cdn_on_buffering")
     val prefPlayerAudioBalanceLevelKey = intPreferencesKey("player_audio_balance_level_v2")
     val prefSkipPgcIntroOutroKey = booleanPreferencesKey("skip_pgc_intro_outro")
     val prefPlayerControllerButtonsOrderKey = stringPreferencesKey("player_controller_buttons_order")
@@ -748,6 +756,7 @@ object PrefKeys {
         PreferenceRequest(prefDefaultDanmakuTransparencyKey, 0)
     val prefDefaultDanmakuOpacityRequest = PreferenceRequest(prefDefaultDanmakuOpacityKey, 0.8f)
     val prefDefaultDanmakuEnabledRequest = PreferenceRequest(prefDefaultDanmakuEnabledKey, true)
+    // "none" 表示「都不显示」；空串按偏好丢失处理并回退到全部类型
     val prefDefaultDanmakuTypesRequest =
         PreferenceRequest(prefDefaultDanmakuTypesKey, "0,1,2,3")
     val prefDefaultDanmakuAreaRequest = PreferenceRequest(prefDefaultDanmakuAreaKey, 0.2f)
@@ -825,6 +834,7 @@ object PrefKeys {
     val prefEnableAsyncQueueingRequest = PreferenceRequest(prefEnableAsyncQueueing, false)
     val prefEnableScreenRefreshRateMatchingRequest = PreferenceRequest(prefEnableScreenRefreshRateMatching, false)
     val prefPlayerSkipSilenceRequest = PreferenceRequest(prefPlayerSkipSilenceKey, false)
+    val prefPlayerSwitchCdnOnBufferingRequest = PreferenceRequest(prefPlayerSwitchCdnOnBufferingKey, false)
     val prefPlayerAudioBalanceLevelRequest =
         PreferenceRequest(prefPlayerAudioBalanceLevelKey, AudioBalanceLevel.Off.ordinal)
     val prefSkipPgcIntroOutroRequest = PreferenceRequest(prefSkipPgcIntroOutroKey, false)

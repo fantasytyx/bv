@@ -384,7 +384,19 @@ internal class DanmakuEngine(
             val minI = minTimeMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             val maxI = maxTimeMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             if (maxI <= minI) return
-            allItems.removeAll { it.timeMs() < minI || it.timeMs() >= maxI }
+            val releaseAt = currentUiFrameId + 1
+            var write = 0
+            for (read in allItems.indices) {
+                val item = allItems[read]
+                // 正在显示的和落在保留区间内的照常保留，其余丢弃并把缓存的 bitmap 归还池子
+                if (item.isActive || item.timeMs() in minI until maxI) {
+                    if (write != read) allItems[write] = item
+                    write++
+                } else {
+                    releaseItemCache(item, releaseAt)
+                }
+            }
+            if (write < allItems.size) allItems.subList(write, allItems.size).clear()
             rebuildFilteredItems()
             index = (index).coerceIn(0, items.size)
         }
@@ -410,6 +422,9 @@ internal class DanmakuEngine(
                 val bmp = item.cacheBitmap
                 if (bmp != null && !bmp.isRecycled) try { bmp.recycle() } catch (_: Exception) {}
                 item.cacheBitmap = null
+                // 让在途的构建请求作废（见 CacheManager.buildCache），否则它会把新 bitmap 挂到这条已丢弃的条目上
+                item.cacheState = DanmakuCacheState.Init
+                item.cacheGeneration = -1
             }
             allItems = mutableListOf()
             items = mutableListOf()

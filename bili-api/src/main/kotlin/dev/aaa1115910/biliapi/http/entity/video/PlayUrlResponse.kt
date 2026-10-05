@@ -1,9 +1,20 @@
 package dev.aaa1115910.biliapi.http.entity.video
 
 import dev.aaa1115910.biliapi.entity.VolumeInfo
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNames
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * 跳过片头/片尾配置
@@ -47,6 +58,20 @@ data class MultiView(
     val mainViewEndTime: Int? = null,
     val subViewStartTime: Int? = null
 )
+
+object LenientStringSerializer : KSerializer<String> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("LenientString", PrimitiveKind.STRING)
+
+    /** 旧接口的 type 是字符串（"DASH"），新 ogv 接口的同名字段是数字（2），统一读成字符串 */
+    override fun deserialize(decoder: Decoder): String {
+        val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeString()
+        return (jsonDecoder.decodeJsonElement() as? JsonPrimitive)?.contentOrNull ?: ""
+    }
+
+    override fun serialize(encoder: Encoder, value: String) =
+        encoder.encodeString(value)
+}
 
 /**
  * @param code 作用尚不明确 pcg独有
@@ -92,6 +117,7 @@ data class PlayUrlData(
     val fnval: Int = 0,
     @SerialName("video_project")
     val videoProject: Boolean = false,
+    @Serializable(with = LenientStringSerializer::class)
     val type: String = "",
     val bp: Int = 0,
     @SerialName("vip_type")
@@ -137,6 +163,38 @@ data class PlayUrlData(
     @SerialName("record_info")
     val recordInfo: RecordInfo? = null,
     val volume: VolumeInfo? = null
+)
+
+/**
+ * `/ogv/player/playview` 的响应体，除 [videoInfo] / [videoExtra] 外其余字段暂未使用
+ */
+@Serializable
+data class OgvPlayViewData(
+    @SerialName("video_info")
+    val videoInfo: PlayUrlData,
+    @SerialName("video_extra")
+    val videoExtra: OgvVideoExtra = OgvVideoExtra()
+) {
+    @Serializable
+    data class OgvVideoExtra(
+        @SerialName("clip_info")
+        val clipInfo: List<OgvClipInfo> = emptyList()
+    )
+}
+
+/**
+ * 新端点的跳过片头/片尾配置，数值含义与 `bilibili.pgc.gateway.player.v2.ClipType` 一致
+ *
+ * @param clipType 1=OP 2=ED 3=HE 4=MULTI_VIEW 5=AD
+ */
+@Serializable
+data class OgvClipInfo(
+    @SerialName("clip_type")
+    val clipType: Int = 0,
+    val start: Int = 0,
+    val end: Int = 0,
+    @SerialName("toast_text")
+    val toastText: String = ""
 )
 
 @Serializable
@@ -317,8 +375,9 @@ data class Durl(
     val order: Int,
     val length: Int,
     val size: Int,
-    val ahead: String,
-    val vhead: String,
+    // ogv 新端点的 durl 不带这两个字段（旧端点给空串）
+    val ahead: String = "",
+    val vhead: String = "",
     val url: String,
     @SerialName("backup_url")
     val backupUrl: List<String> = emptyList()
@@ -328,7 +387,8 @@ data class Durl(
 @Serializable
 data class Dash(
     val duration: Int,
-    val minBufferTime: Float,
+    @SerialName("min_buffer_time")
+    val minBufferTime: Float = 0f,
     val video: List<DashData> = emptyList(),
     val audio: List<DashData>? = null,
     val dolby: DashDolby = DashDolby(),
@@ -347,27 +407,32 @@ data class DashFlac(
     val audio: DashData? = null
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class DashData(
     val id: Int,
     @SerialName("base_url")
     val baseUrl: String,
+    /** 新 ogv 端点只给 snake_case，旧端点两种写法都有 —— 两个键都收，避免换端点后备用地址静默丢失 */
+    @SerialName("backup_url")
+    @JsonNames("backupUrl")
     val backupUrl: List<String> = emptyList(),
     val bandwidth: Int,
     @SerialName("mime_type")
     val mimeType: String,
     val codecs: String,
-    val width: Int,
-    val height: Int,
+    // 纯音频流不返回这些字段，需要默认值
+    val width: Int = 0,
+    val height: Int = 0,
     @SerialName("frame_rate")
-    val frameRate: String,
-    val sar: String,
+    val frameRate: String = "",
+    val sar: String = "",
     @SerialName("start_with_sap")
-    val startWithSap: Int,
+    val startWithSap: Int = 0,
     @SerialName("segment_base")
     val segmentBase: SegmentBase,
     @SerialName("codecid")
-    val codecId: Int
+    val codecId: Int = 0
 )
 
 @Serializable
@@ -400,7 +465,7 @@ data class SupportFormat(
     @SerialName("display_desc")
     val displayDesc: String,
     @SerialName("superscript")
-    val superScript: String,
+    val superScript: String = "",
     val codecs: List<String>? = emptyList(),
     @SerialName("need_login")
     val needLogin: Boolean = false,

@@ -1,9 +1,11 @@
 package dev.aaa1115910.bv
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.datastore.core.DataStore
@@ -26,15 +28,18 @@ import dev.aaa1115910.bv.entity.AuthData
 import dev.aaa1115910.bv.entity.db.UserDB
 import dev.aaa1115910.bv.network.GithubApi
 import dev.aaa1115910.bv.network.HttpServer
+import dev.aaa1115910.bv.network.UpdateCheckResult
 import dev.aaa1115910.bv.repository.UserRepository
 import dev.aaa1115910.bv.util.BlacklistUtil
 import dev.aaa1115910.bv.util.CoilConfig
 import dev.aaa1115910.bv.util.LogCatcherUtil
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.toast
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -57,11 +62,26 @@ class BVApp : Application() {
         lateinit var koinApplication: KoinRuntimeApplication
         var instance: BVApp? = null
 
+        /** 更新检查失败后的重试间隔 */
+        private const val UPDATE_CHECK_RETRY_DELAY_MS = 1_500L
+
+        /** 启动时发现新版本的提示文案 */
+        private const val UPDATE_AVAILABLE_PROMPT = "发现新版本，可前往\"设置→关于\"完成更新"
+
         fun getAppDatabase(context: Context = this.context) = AppDatabase.getDatabase(context)
     }
 
     private val authFailureScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val webCookieScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val updateCheckScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 是否已有 Activity 处于 resumed；为 false 时提交的 Toast 会被系统当成后台应用的提示丢弃 */
+    @Volatile
+    private var appForeground = false
+
+    /** 已确认有新版本、但还没到能展示的时机的提示文案 */
+    @Volatile
+    private var pendingUpdatePrompt: String? = null
 
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
@@ -97,6 +117,7 @@ class BVApp : Application() {
         HttpServer.startServer()
         updateBlacklist()
         startWebCookieMaintenance()
+        observeAppForeground()
         checkUpdateAtStartup()
     }
 
@@ -239,18 +260,64 @@ class BVApp : Application() {
     }
 
     /**
-     * 启动时静默检查更新，发现新版本则 Toast 提示
+     * 记录应用是否处于前台，并在前台就绪时补发挂起的更新提示。
+     *
+     * Application.onCreate 早于任何 Activity 的窗口，此时提交的 Toast 会被 Android 11+
+     * 当作后台应用的提示直接丢弃，因此提示必须等到有 Activity resume 之后再发。
+     */
+    private fun observeAppForeground() {
+        registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) {
+                appForeground = true
+                showPendingUpdatePromptIfForeground()
+            }
+
+            override fun onActivityPaused(activity: Activity) {
+                appForeground = false
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+    }
+
+    /**
+     * 每次冷启动都静默检查更新，只要有新版本就在应用前台就绪后 Toast 提示。
+     *
+     * 冷启动时检查会和黑名单、Cookie 维护、WBI 预热等请求并发，偶发失败不能和"没有新版本"
+     * 一样被静默掉，所以失败重试一次。
      */
     private fun checkUpdateAtStartup() {
-        CoroutineScope(Dispatchers.IO).launch {
-            runCatching {
-                if (GithubApi.checkUpdateAvailable()) {
-                    withContext(Dispatchers.Main) {
-                        "发现新版本，可前往\"设置→关于\"完成更新".toast(context, Toast.LENGTH_LONG)
-                    }
+        updateCheckScope.launch {
+            runCatching { checkAndStageUpdatePrompt() }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    Log.e("BVApp", "startup update check failed", it)
                 }
-            }
         }
+    }
+
+    /** 检查更新并挂起待展示的提示；在 IO 线程执行（内部有网络请求） */
+    private suspend fun checkAndStageUpdatePrompt() {
+        var result = GithubApi.checkUpdate()
+        if (result is UpdateCheckResult.Failed) {
+            delay(UPDATE_CHECK_RETRY_DELAY_MS)
+            result = GithubApi.checkUpdate()
+        }
+        if (result !is UpdateCheckResult.UpdateAvailable) return
+        pendingUpdatePrompt = UPDATE_AVAILABLE_PROMPT
+        withContext(Dispatchers.Main) { showPendingUpdatePromptIfForeground() }
+    }
+
+    /** 必须在主线程调用 */
+    private fun showPendingUpdatePromptIfForeground() {
+        if (!appForeground) return
+        val prompt = pendingUpdatePrompt ?: return
+        pendingUpdatePrompt = null
+        prompt.toast(context, Toast.LENGTH_LONG)
     }
 }
 

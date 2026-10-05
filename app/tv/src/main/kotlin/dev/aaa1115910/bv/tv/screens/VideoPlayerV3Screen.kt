@@ -443,6 +443,7 @@ fun VideoPlayerV3Screen(
             controllerButtonsOrder = prefsSnapshot.controllerButtonsOrder,
             showDebugInfo = showDebugInfo,
             audioBalanceLevel = audioBalanceLevel,
+            hasAudioLoudness = playerViewModel.hasAudioLoudness,
             longPressAction = prefsSnapshot.longPressAction,
             longPressSpeed = prefsSnapshot.longPressSpeed
         ),
@@ -1336,7 +1337,9 @@ private fun InteractivePlaybackDialogHost(
     onExit: () -> Unit,
 ) {
     val showInteractiveOptionDialog = playerViewModel.showInteractiveOptionDialog
-    val interactiveOptions = playerViewModel.interactiveOptions
+    // 每次读都会 filterIsInstance 新建列表，弹窗没显示时不必取（InteractiveOptionDialog 自己也只在 show 时才用它）
+    val interactiveOptions =
+        if (showInteractiveOptionDialog) playerViewModel.interactiveOptions else emptyList()
     val dismissDialog = playerViewModel::dismissInteractiveOptionDialog
 
     BackHandler(enabled = showInteractiveOptionDialog) {

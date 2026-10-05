@@ -17,6 +17,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.util.cio.writeChannel
 import io.ktor.utils.io.copyAndClose
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -29,6 +30,9 @@ object GithubApi {
     private const val REPO = "bv"
     private const val PROXY_URL = "https://ghfast.top/"
     private const val API_URL = "https://api.github.com"
+
+    /** 分页拉取 release 的最大页数，避免服务端/代理异常时无限发包 */
+    private const val MAX_RELEASE_PAGES = 3
     private val client = AppHttpClient.client
     private val json = BiliHttpClient.json
     private val isDebug get() = BuildConfig.DEBUG
@@ -61,19 +65,33 @@ object GithubApi {
     suspend fun getLatestPreReleaseBuild(): Release {
         var release: Release? = null
         var page = 1
-        while (release == null) {
+        while (release == null && page <= MAX_RELEASE_PAGES) {
             val releases = getReleases(page = page)
             if (releases.isEmpty()) break
             release = releases.firstOrNull { it.isPreRelease }
             page++
         }
-        return release ?: throw IllegalStateException("No pre-release found")
+        return release ?: throw IllegalStateException("No pre-release found in $MAX_RELEASE_PAGES pages")
     }
 
     suspend fun getLatestReleaseBuild(): Release = getLatestRelease()
 
-    suspend fun getLatestBuild(): Release =
-        if (isAlpha) getLatestPreReleaseBuild() else getLatestReleaseBuild()
+    suspend fun getLatestBuild(): Release {
+        val preRelease = if (isAlpha) {
+            try {
+                getLatestPreReleaseBuild()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // alpha 通道暂时没有 pre-release 时回退到正式 release，否则启动检查会一直失败
+                logger.warn(e) { "No pre-release build available, fallback to latest release" }
+                null
+            }
+        } else {
+            null
+        }
+        return preRelease ?: getLatestReleaseBuild()
+    }
 
     /**
      * 获取比当前版本新的所有 Release 列表（按发布时间降序）
@@ -88,9 +106,8 @@ object GithubApi {
         val newerReleases = mutableListOf<Release>()
         var page = 1
         var currentVersionInHistory = false
-        val maxPages = 10
 
-        outer@ while (page <= maxPages) {
+        outer@ while (page <= MAX_RELEASE_PAGES) {
             val releases = getReleases(page = page)
             if (releases.isEmpty()) break
 
@@ -277,15 +294,29 @@ object GithubApi {
     }
 
     /**
-     * 轻量级检查是否有可用更新
-     * @return true 表示有新版本可用
+     * 检查更新，并把"检查失败"和"已是最新"区分开——排查启动提示不出现时需要知道是哪一种。
      */
-    suspend fun checkUpdateAvailable(): Boolean {
-        return try {
-            isNewerRelease(getLatestBuild())
-        } catch (e: Exception) {
-            logger.warn(e) { "Failed to check update availability" }
-            false
-        }
+    suspend fun checkUpdate(): UpdateCheckResult = try {
+        if (isNewerRelease(getLatestBuild())) UpdateCheckResult.UpdateAvailable
+        else UpdateCheckResult.UpToDate
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        logger.error(e) { "Failed to check update availability" }
+        UpdateCheckResult.Failed
     }
+}
+
+/**
+ * [GithubApi.checkUpdate] 的结果
+ */
+sealed interface UpdateCheckResult {
+    /** 发现新版本 */
+    object UpdateAvailable : UpdateCheckResult
+
+    /** 已是最新版本 */
+    object UpToDate : UpdateCheckResult
+
+    /** 检查失败：网络异常、接口限流、响应格式异常等 */
+    object Failed : UpdateCheckResult
 }

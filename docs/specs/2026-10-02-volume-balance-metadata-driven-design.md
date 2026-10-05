@@ -62,7 +62,9 @@ B 站官方两端都没有这个问题——因为它们不用猜：**服务端�
 
 由此确认三件事：
 
-1. **`volume` 在响应根**（`data.volume`），不是嵌在 `video_info` 里；PGC v2 则位于 `data.video_info.volume`。两者都落在 `PlayUrlData` 形状的对象上，故字段加在 `PlayUrlData` 一处即可覆盖。
+1. **`volume` 在响应根**（`data.volume`），不是嵌在 `video_info` 里。字段落在 `PlayUrlData` 形状的对象上，故加在 `PlayUrlData` 一处即可覆盖。
+    - **勘误（2026-10-05）**：本条当时推断「PGC v2 的 `data.video_info.volume` 同理可用」，但 2026-10-03 的探针实测该端点**并不下发 `volume`**（`/pgc/player/web/v2/playurl` 与 v1、`voice_balance=0/1`、`platform=pc`、`support_multi_audio=1` 等组合都试过，均无该字段），推断不成立，`fromPlayUrlV2Data` 实际拿不到元数据。
+    - 2026-10-05 起 PGC 的 **Web 直连**分支改用 `/ogv/player/playview`，该端点才下发 `volume`（含 `multi_scene_args`）；代理分支仍走旧端点，依旧没有。详见 [PGC 播放地址（Web）：改用 `/ogv/player/playview`](2026-10-05-pgc-web-playurl-ogv-design.md)
 2. **`multi_scene_args` 的值是字符串**（`"-24"`），而其余字段是数字。当前 kotlinx 版本对 `Double` 字段能接受字符串形式（`VolumeInfoTest` 已把该形状固化为回归用例）。
 3. **`measured_tp` 可以大于 0 dBTP**（样本为 `3.8`，即母带真峰超过满刻度）。因此真峰夹取的取值范围必须允许正值，夹取后增益为负是正确行为——这类响素材本来就要被压。
 4. **`high_dynamic_target_i` 比 `normal_target_i` 更轻**（样本 `-24` vs `-14`），因为「保留动态范围」意味着更低的积分响度。所以切到影音模式在这类素材上会**变轻**而不是变响——这是 B 站两端一致的语义（web 的 `DYNAMIC` 档、TV 端菜单的「影音模式」都取该字段），不是本项目的行为偏差。
@@ -154,9 +156,9 @@ case LINEAR_MODE:
 ### 数据流
 
 ```
-playurl HTTP 响应 .video_info.volume
+playurl HTTP 响应 volume（UGC 为 data.volume；PGC 直连为 data.video_info.volume）
   → PlayUrlData.volume            (bili-api，新增 @Serializable DTO)
-  → PlayData.volume               (bili-api，4 个构造入口分别映射)
+  → PlayData.volume               (bili-api，构造入口分别映射，见「组件与接口」)
   → AudioLoudness                 (app 层映射到玩家侧值类型)
   → AbstractVideoPlayer.setAudioLoudness()
   → VolumeBalanceAudioProcessor   (纯静态增益)
@@ -231,12 +233,13 @@ B 站两端实际生效的线性增益也都是 `档位目标 - measured_i`：we
 - 新增 `biliapi/entity/VolumeInfo.kt`：`@Serializable data class VolumeInfo(...)` 与 `MultiSceneArgs(...)`，字段用 `@SerialName` 对应 JSON 键，缺省值用 `Double.NaN`
 - `PlayUrlData` 增 `val volume: VolumeInfo? = null`
 - `ProxyWebPlayUrlData` / `ProxyAppPlayUrlData` **也各增** `val volume: VolumeInfo? = null`。这两个代理 DTO 与 `PlayUrlData` 字段几乎一一对应，说明它们是同一份 JSON，很可能本就带 `volume`；声明该字段零成本（kotlinx 忽略未知键，JSON 无此键时值为 `null`），能让区域限制的代理线路也拿到元数据
-- `PlayData` 增 `val volume: VolumeInfo? = null`，**6 个构造入口**全部映射：
+- `PlayData` 增 `val volume: VolumeInfo? = null`，**7 个构造入口**全部映射：
 
 | 入口 | 来源 | 映射方式 |
 |---|---|---|
 | `fromPlayUrlData(PlayUrlData)` | HTTP UGC | 直接透传 |
-| `fromPlayUrlV2Data(PlayUrlV2Data)` | HTTP PGC | 取 `videoInfo.volume` 透传 |
+| `fromPlayUrlV2Data(PlayUrlV2Data)` | HTTP PGC（旧 v2 端点 / 代理） | 取 `videoInfo.volume` 透传；**勘误：实测该端点不下发 `volume`**，故实际恒为 `null` |
+| `fromOgvPlayViewData(OgvPlayViewData)` | HTTP PGC（新 OGV 端点，2026-10-05 起） | 委托 `fromPlayUrlData(videoInfo)`；该端点下发 `volume` |
 | `fromPlayUrlData(ProxyWebPlayUrlData)` | HTTP 代理（Web） | 直接透传 |
 | `fromPlayUrlData(ProxyAppPlayUrlData)` | HTTP 代理（App） | 直接透传 |
 | `fromPlayViewUniteReply` | gRPC UGC | 从 `bilibili.playershared.VolumeInfo` 构造，`multiSceneArgs` 恒 `null` |

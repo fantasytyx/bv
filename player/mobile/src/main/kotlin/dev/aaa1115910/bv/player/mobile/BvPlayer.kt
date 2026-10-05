@@ -297,7 +297,8 @@ fun BvPlayer(
             showBackToHistory = showBackToHistory
         ),
         LocalVideoPlayerDebugInfoData provides VideoPlayerDebugInfoData(
-            debugInfo = videoPlayer.debugInfo
+            // 关掉时不算：debugInfo 每次重组都要反射取解码器计数 + 拼字符串，而这里 200ms 就重组一次
+            debugInfo = if (videoPlayerConfigData.showDebugInfo) videoPlayer.debugInfo else ""
         ),
     ) {
         BvPlayerController(

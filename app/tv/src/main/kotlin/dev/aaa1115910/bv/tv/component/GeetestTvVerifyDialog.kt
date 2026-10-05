@@ -21,9 +21,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -292,7 +292,10 @@ private fun GeetestTvVerifyContent(
 
     Column(
         modifier = Modifier
+            // 极验面板是固定尺寸（约 340x380 CSS px，WebView 里 1 CSS px == 1 dp）且按视口居中：
+            // 视口比面板矮时面板上下会被 WebView 裁掉（标题与提交按钮都看不到），所以纵向尽量铺满
             .fillMaxWidth(0.45f)
+            .fillMaxHeight(0.95f)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surface)
             .onPreviewKeyEvent { event ->
@@ -377,14 +380,14 @@ private fun GeetestTvVerifyContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                // 占满卡片剩余高度：固定 320dp 的视口比极验面板还矮，面板会被上下裁掉
+                .weight(1f)
                 .padding(horizontal = 12.dp)
                 .padding(bottom = 4.dp),
         ) {
             AndroidView(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    // 固定高度：极验 bind 模式按 WebView 视口居中面板，wrap_content 会让面板被裁掉
-                    .height(320.dp)
+                    .fillMaxSize()
                     .clip(RoundedCornerShape(8.dp)),
                 factory = { ctx ->
                     val webView = WebView(ctx).apply {

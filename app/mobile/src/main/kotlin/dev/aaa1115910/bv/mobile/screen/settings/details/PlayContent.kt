@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.aaa1115910.bv.mobile.component.preferences.items.radioPreference
+import dev.aaa1115910.bv.mobile.component.preferences.items.switchPreference
 import dev.aaa1115910.bv.mobile.component.preferences.preferenceGroups
 import dev.aaa1115910.bv.mobile.theme.BVMobileTheme
 import dev.aaa1115910.bv.player.entity.Audio
@@ -50,6 +51,15 @@ fun PlayContent(
                     prefReq = PrefKeys.prefDefaultAudioRequest,
                     values = Audio.entries.associate { it.code to it.getDisplayName(context) }
                         .toSortedMap { a, b -> a.compareTo(b) }
+                )
+            },
+            "播放" to {
+                switchPreference(
+                    title = "频繁缓冲时自动切换线路",
+                    summary = "同一线路 90 秒内缓冲 3 次、或单次缓冲超过 12 秒时，自动换下一个播放地址；" +
+                            "仅在拿到多个地址时有效。起播与快进/快退引起的缓冲不计",
+                    prefReq = PrefKeys.prefPlayerSwitchCdnOnBufferingRequest,
+                    onCheckedChange = { true }
                 )
             }
         )

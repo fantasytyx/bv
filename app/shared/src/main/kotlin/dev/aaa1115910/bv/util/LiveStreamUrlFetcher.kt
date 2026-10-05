@@ -11,6 +11,7 @@ import dev.aaa1115910.biliapi.repositories.LiveRepository
 import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.util.Prefs
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.java.KoinJavaComponent.inject
@@ -106,8 +107,13 @@ object LiveStreamUrlFetcher {
                 availableLines = result.availableLines,
                 currentLineIndex = result.currentLineIndex,
                 liveTime = data.liveTime ?: 0L,
-                expiresAt = result.expiresAt
+                expiresAt = result.expiresAt,
+                codecName = result.codecName,
+                formatName = result.formatName
             )
+        } catch (e: CancellationException) {
+            // 切画质/切线路/重连时会取消上一次请求，取消不是失败，不要打日志也不要弹 Toast
+            throw e
         } catch (e: Exception) {
             logger.error(e) { "Failed to fetch live stream URL for room $roomId" }
             withContext(Dispatchers.Main) {
@@ -127,7 +133,11 @@ object LiveStreamUrlFetcher {
         val acceptQn: List<Int>,
         val availableLines: List<LiveStreamLine>,
         val currentLineIndex: Int,
-        val expiresAt: Long = 0
+        val expiresAt: Long = 0,
+        /** 实际选中的编码名（avc/hevc/av1），用于调试信息展示 */
+        val codecName: String = "",
+        /** 实际选中的封装格式（fmp4/ts/flv），用于调试信息展示 */
+        val formatName: String = ""
     )
 
     /**
@@ -275,7 +285,9 @@ object LiveStreamUrlFetcher {
                     acceptQn = codec.acceptQn,
                     availableLines = buildLineOptions(codec),
                     currentLineIndex = lineIndex,
-                    expiresAt = expiresAt
+                    expiresAt = expiresAt,
+                    codecName = codec.codecName,
+                    formatName = formatName
                 )
             }
         }
@@ -299,7 +311,9 @@ object LiveStreamUrlFetcher {
                     acceptQn = codec.acceptQn,
                     availableLines = buildLineOptions(codec),
                     currentLineIndex = lineIndex,
-                    expiresAt = expiresAt
+                    expiresAt = expiresAt,
+                    codecName = codec.codecName,
+                    formatName = format.formatName
                 )
             }
         }
@@ -362,6 +376,10 @@ data class LivePlayInfo(
     val availableLines: List<LiveStreamLine> = emptyList(),
     val currentLineIndex: Int = 0,
     val liveTime: Long = 0L,
-    val expiresAt: Long = 0
+    val expiresAt: Long = 0,
+    /** 实际选中的编码名（avc/hevc/av1） */
+    val codecName: String = "",
+    /** 实际选中的封装格式（fmp4/ts/flv） */
+    val formatName: String = ""
 )
 

@@ -122,17 +122,19 @@ class VideoPlayRepository(
         aid: Long?,
         cid: Long?,
         epid: Int,
+        seasonId: Int? = null,
         preferCodec: CodeType = CodeType.NoCode,
         preferApiType: ApiType = ApiType.Web,
         enableProxy: Boolean = false,
         proxyArea: String = "",
         tryLook: Boolean = false
     ): PlayData {
-        println("get pgc play data: [aid=$aid, cid=$cid, epid=$epid, preferCodec=$preferCodec, preferApiType=$preferApiType, enableProxy=$enableProxy, proxyArea=$proxyArea]")
+        println("get pgc play data: [aid=$aid, cid=$cid, epid=$epid, seasonId=$seasonId, preferCodec=$preferCodec, preferApiType=$preferApiType, enableProxy=$enableProxy, proxyArea=$proxyArea]")
         return when (preferApiType) {
             ApiType.Web -> {
-                val playUrlData = if (enableProxy) {
-                    BiliHttpProxyApi.getPgcVideoPlayUrlV2(
+                // 代理服务仍走旧的 /pgc/player/web/v2/playurl，直连改用 /ogv/player/playview
+                if (enableProxy) {
+                    val playUrlData = BiliHttpProxyApi.getPgcVideoPlayUrlV2(
                         bv = aid?.let { AvBvConverter.av2bv(it) },
                         cid = cid,
                         epid = epid,
@@ -142,25 +144,21 @@ class VideoPlayRepository(
                         fourk = 1,
                         sessData = authRepository.sessionData,
                         gaiaVtoken = authRepository.gaiaVtoken
-//                        buvid3 = authRepository.buvid3
-                    )
+                    ).getResponseData()
+                    PlayData.fromPlayUrlV2Data(playUrlData)
                 } else {
-                    BiliHttpApi.getPgcVideoPlayUrlV2(
-                        bv = aid?.let { AvBvConverter.av2bv(it) },
-                        cid = cid,
+                    val playUrlData = BiliHttpApi.getOgvVideoPlayUrl(
                         epid = epid,
+                        seasonId = seasonId,
                         fnval = 4048,
                         qn = 127,
                         fnver = 0,
-                        fourk = 1,
                         sessData = authRepository.sessionData,
                         gaiaVtoken = authRepository.gaiaVtoken,
                         tryLook = tryLook
-//                        buvid3 = authRepository.buvid3
-                    )
-                }.getResponseData()
-
-                PlayData.fromPlayUrlV2Data(playUrlData)
+                    ).getResponseData()
+                    PlayData.fromOgvPlayViewData(playUrlData)
+                }
             }
 
             ApiType.App -> {

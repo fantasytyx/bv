@@ -240,6 +240,7 @@ class VideoPlayerV3Activity : ComponentActivity() {
             enableAsyncQueueing = Prefs.enableAsyncQueueing,
             enableScreenRefreshRateMatching = Prefs.enableScreenRefreshRateMatching,
             enableSkipSilence = Prefs.playerSkipSilence,
+            enableSwitchCdnOnBuffering = Prefs.playerSwitchCdnOnBuffering,
             audioBalanceLevel = Prefs.playerAudioBalanceLevel,
             cdnSpeedRecorder = CdnSpeedStore
         )

@@ -1,13 +1,17 @@
 package dev.aaa1115910.bv.tv.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Done
@@ -19,6 +23,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -27,6 +32,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
 import androidx.tv.material3.Icon
@@ -73,17 +80,32 @@ fun FavoriteFolderDialog(
         }
     }
 
-    if (show) {
-        TvAlertDialog(
-            modifier = modifier,
-            containerColor = containerColor,
-            onDismissRequest = onDismiss,
-            confirmButton = {},
-            title = { Text(text = stringResource(R.string.favorite_dialog_title)) },
-            text = {
+    if (!show) return
+
+    // M3 AlertDialog 的内容宽度被限制在 560dp，大屏设备上会明显偏窄，这里改用 Dialog 自绘
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = modifier
+                    .fillMaxWidth(0.65f)
+                    .background(color = containerColor, shape = RoundedCornerShape(16.dp))
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.favorite_dialog_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = AlertDialogDefaults.titleContentColor
+                )
                 FlowRow(
                     modifier = Modifier
-                        .width(550.dp)
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -145,6 +167,6 @@ fun FavoriteFolderDialog(
                     }
                 }
             }
-        )
+        }
     }
 }

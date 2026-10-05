@@ -59,6 +59,7 @@ import dev.aaa1115910.biliapi.http.entity.video.CheckVideoFavoured
 import dev.aaa1115910.biliapi.http.entity.video.GaiaVgateRegisterData
 import dev.aaa1115910.biliapi.http.entity.video.GaiaVgateValidateData
 import dev.aaa1115910.biliapi.http.entity.video.InteractiveEdgeInfo
+import dev.aaa1115910.biliapi.http.entity.video.OgvPlayViewData
 import dev.aaa1115910.biliapi.http.entity.video.PlayUrlData
 import dev.aaa1115910.biliapi.http.entity.video.PlayUrlV2Data
 import dev.aaa1115910.biliapi.http.entity.video.PopularVideoData
@@ -464,6 +465,49 @@ object BiliHttpApi {
             } else {
                 println("PGC v2 Cookie is empty! sessData=$sessData, buvid3=$buvid3")
             }
+            //必须得加上 referer 才能通过账号身份验证
+            header("referer", "https://www.bilibili.com")
+        }
+        val bodyText = response.bodyAsText()
+        checkForVVoucher(bodyText)
+        return json.decodeFromString(bodyText)
+    }
+
+    /**
+     * 获取剧集视频流（OGV playview），[seasonId] 可选，缺省时服务端按 [epid] 解析
+     */
+    suspend fun getOgvVideoPlayUrl(
+        epid: Int,
+        seasonId: Int? = null,
+        qn: Int? = null,
+        fnval: Int? = null,
+        fnver: Int? = null,
+        sessData: String? = null,
+        gaiaVtoken: String? = null,
+        tryLook: Boolean = false
+    ): BiliResponse<OgvPlayViewData> {
+        val response = client.get("/ogv/player/playview") {
+            parameter("biz_type", "ogv")
+            parameter("scene", "normal")
+            parameter("version_name", "4.10.2")
+            parameter("app_id", 100)
+            parameter("ep_id", epid)
+            seasonId?.takeIf { it > 0 }?.let { parameter("season_id", it) }
+            qn?.let { parameter("qn", it) }
+            fnval?.let { parameter("fnval", it) }
+            fnver?.let { parameter("fnver", it) }
+            if (tryLook) {
+                // 试看兜底：按游客视角请求，不注入账号态与风控 token
+                parameter("try_look", "1")
+            } else {
+                gaiaVtoken?.let { parameter("gaia_vtoken", it) }
+            }
+            val cookieParts = mutableListOf<String>()
+            if (!tryLook) {
+                sessData?.let { cookieParts.add("SESSDATA=$it") }
+                gaiaVtoken?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
+            }
+            if (cookieParts.isNotEmpty()) header("Cookie", cookieParts.joinToString(";"))
             //必须得加上 referer 才能通过账号身份验证
             header("referer", "https://www.bilibili.com")
         }

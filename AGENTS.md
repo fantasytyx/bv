@@ -140,6 +140,7 @@ B 站对**未登录 Web 请求**风控最严。改 `bili-api` 的请求形态或
 - **流程链**：接口返回 `v_voucher`（`code=0` 或 `-352` 且 `data.v_voucher` 非空）→ `POST /x/gaia-vgate/v1/register` 换极验 `gt`/`challenge` → 用户过极验 → `POST /x/gaia-vgate/v1/validate` 换 `grisk_id`（存 `AuthRepository.gaiaVtoken`）→ 带 `gaia_vtoken` / `x-bili-gaia-vtoken` 重试原请求。`v_voucher` 是**一次性**凭证，见 [GeetestChallenge.kt](app/shared/src/main/kotlin/dev/aaa1115910/bv/util/GeetestChallenge.kt)
 - **极验 `product: 'bind'` 可能下发点击，也可能下发滑块**。滑块必须发 `DOWN → MOVE → UP`，只发一次点击永远过不了
 - **未登录播放**走 `/x/player/wbi/playurl`，并带 `dm_img_list` / `dm_img_str` / `dm_cover_img_str` / `dm_img_inter` 与 `web_location` / `gaia_source` / `isGaiaAvoided`。**不要**给普通游客带 `try_look`——那是"未登录索取受限清晰度"的绕过参数，只在付费视频试看兜底时用；且它只在非 wbi 端点生效
+- **PGC 播放地址**走 `/ogv/player/playview`（`bili-api` 的 `getOgvVideoPlayUrl`），固定 `biz_type=ogv` / `scene=normal` / `version_name=4.10.2` / `app_id=100`；`season_id` 可选（只给 `ep_id` 也能解析，响应会回带），需 wbi 签名（已加进 `encApiSign` 的 `isWbiRequest`），且**缺 `buvid3` cookie 会直接返回 `-400`**
 - **指纹要自洽**：`buvid3` 与 `buvid4` 必须来自同一次 `/x/frontend/finger/spi`（`WebCookieManager` 会把服务端签发的 buvid3 回写到 `Prefs.buvid3`）。web 接口要带 `buvid3`，详情接口另加 `Referer: https://www.bilibili.com/`，不要用 `skipAddBuvid3Cookie()` 把指纹清掉
 - **风控是累计行为**：单次请求探针（换 cookie 组合、换 UA）通常都返回 `code=0`，不能据此判断"不会触发"；也不要只看 1~2 个文件就下结论，下结论前先把关键词在两个仓库里搜全
 
@@ -171,3 +172,4 @@ B 站对**未登录 Web 请求**风控最严。改 `bili-api` 的请求形态或
 - Koin：新增 `@Module` 类要一并加 `@Configuration`，否则 `@KoinApplication`（`BVKoinApp`）不会跨 Gradle 模块发现它；`@KoinViewModel` 的包是 `org.koin.core.annotation`
 - 弹幕引擎改动需同时关注 `player/mobile` 和 `player/tv` 两端的 `BvPlayer.kt`（分别集成 `DanmakuView` 和 `DanmakuLayer`）
 - 依赖的 AAR 在 `libs/`，不是从 Maven 拉取的；版本变动需重新打包并替换
+- PGC 新端点 `/ogv/player/playview` 的响应是**纯 snake_case**（旧 PGC v2 是 snake + camel 双份），且 `video_info.type` 有两种结构：`2` = DASH（有 `dash`，无 `durl`）、`3` = 非 DASH（无 `dash`，只有 `durl`/`durls` 的 MP4，试看场景）。改相关模型时注意：`durl[*]` 不带 `ahead`/`vhead`，`dash.audio[*]` 不带 `width`/`height`/`frame_rate`/`sar`/`start_with_sap`/`codecid`，`support_formats[*]` 常缺 `superscript`（`bili-api` 的 `OgvPlayViewDataTest` 守着这些放宽）；跳过片头/片尾在 `data.video_extra.clip_info`（`clip_type` 为数字，1=OP 2=ED 3=HE 4=MULTI_VIEW 5=AD），**不是** `video_info.clip_info_list`

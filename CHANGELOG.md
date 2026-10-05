@@ -103,6 +103,9 @@
     - 修复按列表播放时手动切到合集或推荐视频后无法继续按列表播放的问题
     - 修复竖屏视频被识别成互动视频的问题
     - 修复 app 接口杜比视频播放失败的问题
+    - PGC 播放地址（Web 直连）改用新接口 `/ogv/player/playview`，请求固定 `biz_type=ogv` / `scene=normal` / `version_name=4.10.2` / `app_id=100`
+        - 修复试看视频（`video_info.type=3`，只有 `durl`/`durls` 的 MP4 结构）解析失败导致完全无法播放的问题
+        - 修复新接口下 PGC 跳过片头/片尾丢失的问题（新接口把配置从 `video_info.clip_info_list` 移到 `video_extra.clip_info`，`clip_type` 也由字符串改成数字枚举）
 - 搜索
     - 搜索结果页视频卡片显示发布时间
     - 支持按返回键回到左侧菜单栏
@@ -185,6 +188,7 @@
         - 标准模式取 `normal_target_i`，影音模式取 `high_dynamic_target_i`；不使用服务端的单值 `target_offset`
         - 增益为纯标量，再做真峰值夹取与 ±12dB 防呆，处理器只做“乘增益 + 50ms 线性斜坡”，不改变音调与音色
     - 没有响度元数据的源（如 gRPC 的 PGC 播放地址）整体旁路
+    - PGC 的 Web 直连线路（`/ogv/player/playview`）也下发响度元数据，不再只有 UGC 有线可用
 - 账号 / 风控
     - 新增 Web Cookie 自动维护
     - 未登录播放统一走 wbi 端点并补齐 web 播放器环境参数，移除游客 `try_look`

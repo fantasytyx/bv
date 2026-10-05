@@ -13,6 +13,8 @@ import androidx.lifecycle.viewModelScope
 import dev.aaa1115910.bv.player.danmaku.DanmakuView
 import dev.aaa1115910.bv.player.danmaku.model.Danmaku
 import dev.aaa1115910.biliapi.entity.ApiType
+import dev.aaa1115910.biliapi.entity.DashAudio
+import dev.aaa1115910.biliapi.entity.DashVideo
 import dev.aaa1115910.biliapi.entity.PlayData
 import dev.aaa1115910.biliapi.entity.danmaku.DanmakuMaskSegment
 import dev.aaa1115910.biliapi.entity.video.InteractiveNode
@@ -66,14 +68,17 @@ import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.fWarn
 import dev.aaa1115910.bv.network.AppHttpClient
 import dev.aaa1115910.bv.util.LiveStreamUrlFetcher
+import dev.aaa1115910.bv.util.LivePlayInfo
 import dev.aaa1115910.bv.util.fDebug
 import dev.aaa1115910.bv.util.swapList
 import dev.aaa1115910.bv.util.swapListWithMainContext
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -83,6 +88,20 @@ import org.koin.core.annotation.KoinViewModel
 import dev.aaa1115910.biliapi.repositories.AuthRepository
 import dev.aaa1115910.bv.player.entity.NextVideoStrategy
 import java.net.URI
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * [runCatching] 会把协程取消也当成失败，进了 `onFailure` 就会留下"xxx 失败"的假日志/假错误状态。
+ * 这里让 [CancellationException] 照常向上抛，只把真正的失败包成 [Result]。
+ */
+private inline fun <T> runCatchingCancellable(block: () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Result.failure(e)
+    }
 
 @KoinViewModel
 class VideoPlayerV3ViewModel(
@@ -101,6 +120,8 @@ class VideoPlayerV3ViewModel(
             videoPlayerState = value
             // 播放器实例可能是新建的，处理器随之是空的，这里必须补推一次
             pushAudioLoudness(playData)
+            // 播放器实例可能是新建的，把已产生的调试信息补回去（直播是在拿到播放器前就写好的）
+            value?.extraDebugInfo = logs
         }
     var danmakuView: DanmakuView? by mutableStateOf(null)
     var show by mutableStateOf(false)
@@ -166,6 +187,13 @@ class VideoPlayerV3ViewModel(
     var errorMessage by mutableStateOf("")
 
     private var playData: PlayData? by mutableStateOf(null)
+
+    /**
+     * 本次播放是否下发了响度元数据；没有时音量均衡无从生效，菜单入口应隐藏。
+     *
+     * 直播一律为 false：进直播时不会清空 [playData]，只看它会误把上一集的点播元数据当成直播的。
+     */
+    val hasAudioLoudness get() = !isLive && playData?.volume != null
     val danmakuMasks = mutableStateListOf<DanmakuMaskSegment>()
     var videoShot: VideoShot? by mutableStateOf(null)
     var clipInfoList: List<ClipInfo> by mutableStateOf(emptyList())
@@ -320,7 +348,12 @@ class VideoPlayerV3ViewModel(
 
     // 点播弹幕管理
     private var danmakuSegmentWatchJob: Job? = null
-    private var currentDanmakuSegmentIndex = -1
+
+    /** [loadedDanmakuSegmentCounts] / [danmakuSegmentGeneration] 会被轮询协程与 seek 协程并发访问，统一加锁 */
+    private val danmakuSegmentLock = Any()
+
+    /** 加载会话号：每次 [stopDanmakuSegmentLoading] +1，用来判断在途请求的占位是否还属于当前会话 */
+    private var danmakuSegmentGeneration = 0
 
     // 风控 Geetest 验证状态
     var showGeetestDialog by mutableStateOf(false)
@@ -360,24 +393,20 @@ class VideoPlayerV3ViewModel(
     var lastVideoHost by mutableStateOf("")
     var lastAudioHost by mutableStateOf("")
 
-    var currentAid = 0L
+    var currentAid by mutableLongStateOf(0L)
     var currentCid by mutableLongStateOf(0L)
     var currentInteractiveNodeId by mutableLongStateOf(0L)
     var currentInteractiveEdgeId by mutableLongStateOf(0L)
     private var currentEpid = 0
     private var pendingInitialSeekPositionMs: Long? = null
 
-    private suspend fun ensureDanmakuView() {
-        // DanmakuView is created by the UI layer, nothing to do here.
-        // Kept for call-site compatibility.
-        logger.fInfo { "ensureDanmakuView: current=$danmakuView" }
-    }
-
     private fun stopDanmakuSegmentLoading() {
         danmakuSegmentWatchJob?.cancel()
         danmakuSegmentWatchJob = null
-        currentDanmakuSegmentIndex = -1
-        loadedDanmakuSegmentCounts.clear()
+        synchronized(danmakuSegmentLock) {
+            danmakuSegmentGeneration++
+            loadedDanmakuSegmentCounts.clear()
+        }
         currentLoadedDanmakuTotal = 0
         danmakuView?.clearDanmakus()
     }
@@ -386,17 +415,33 @@ class VideoPlayerV3ViewModel(
         return (positionMs / DANMAKU_SEGMENT_DURATION_MS).toInt() + 1
     }
 
+    /**
+     * 回滚本次加载留下的占位。
+     *
+     * 只回滚 [generation] 仍是当前会话、且值还是占位（0 条）的那条：弹幕已 append 进引擎后标记必须留下
+     * （否则回跳会重复 append 同一块），而切集后新一轮请求在同一 [segmentIndex] 上的占位更不允许被旧请求删掉。
+     */
+    private fun rollbackDanmakuSegmentMark(segmentIndex: Int, generation: Int) {
+        synchronized(danmakuSegmentLock) {
+            if (danmakuSegmentGeneration == generation && loadedDanmakuSegmentCounts[segmentIndex] == 0) {
+                loadedDanmakuSegmentCounts.remove(segmentIndex)
+            }
+        }
+    }
+
     private suspend fun loadDanmakuSegment(cid: Long, positionMs: Long, force: Boolean = false) {
         val safePosition = positionMs.coerceAtLeast(0L)
         val segmentIndex = getDanmakuSegmentIndex(safePosition + DANMAKU_SEGMENT_POLL_INTERVAL_MS)
-        if (!force && loadedDanmakuSegmentCounts.containsKey(segmentIndex)) {
-            currentDanmakuSegmentIndex = segmentIndex
-            return
+        val generation = synchronized(danmakuSegmentLock) {
+            if (!force && loadedDanmakuSegmentCounts.containsKey(segmentIndex)) {
+                return
+            }
+            // 先占位，并发的第二次请求会在这里提前返回，不会重复拉同一块
+            loadedDanmakuSegmentCounts[segmentIndex] = 0
+            danmakuSegmentGeneration
         }
 
-        loadedDanmakuSegmentCounts[segmentIndex] = 0
-        var loadedCount = 0
-        runCatching {
+        try {
             val segmentData = BiliHttpApi.getDanmakuSeg(
                 cid = cid,
                 avid = currentAid,
@@ -415,27 +460,34 @@ class VideoPlayerV3ViewModel(
                     level = it.level
                 )
             }.sortedWith(compareBy({ it.positionMs }, { it.level }))
-            loadedCount = convertedDanmaku.size
 
-            val shouldResume = withContext(Dispatchers.Main) {
-                videoPlayer?.isPlaying == true
+            // 请求期间可能已经切集，旧视频的分片必须丢弃，否则会混进新视频的引擎
+            if (currentCid != cid) {
+                rollbackDanmakuSegmentMark(segmentIndex, generation)
+                return
             }
 
             withContext(Dispatchers.Main) {
                 danmakuView?.appendDanmakus(convertedDanmaku, maxItems = 0, alreadySorted = true)
             }
 
-            currentDanmakuSegmentIndex = segmentIndex
-            loadedDanmakuSegmentCounts[segmentIndex] = loadedCount
-            currentLoadedDanmakuTotal = loadedDanmakuSegmentCounts.values.sum()
-        }.onFailure {
-            loadedDanmakuSegmentCounts.remove(segmentIndex)
-            addLogs("加载第 $segmentIndex 块弹幕失败：${it.localizedMessage}")
-            logger.fWarn { "Load danmaku segment failed: cid=$cid, segment=$segmentIndex, error=${it.stackTraceToString()}" }
-        }.onSuccess {
+            val (blockCount, totalCount) = synchronized(danmakuSegmentLock) {
+                loadedDanmakuSegmentCounts[segmentIndex] = convertedDanmaku.size
+                val total = loadedDanmakuSegmentCounts.values.sum()
+                currentLoadedDanmakuTotal = total
+                loadedDanmakuSegmentCounts.size to total
+            }
             // 已加载 x 块 x 条弹幕（新追加的第 y 块有 z 条）
-            addLogs("已加载 ${loadedDanmakuSegmentCounts.size} 块共 $currentLoadedDanmakuTotal 条弹幕（6分钟/块）", replaceIfContains = "已加载")
-            logger.fInfo { "Load danmaku segment success, cid=$cid, segment=$segmentIndex, size=$loadedCount, total=$currentLoadedDanmakuTotal" }
+            addLogs("已加载 $blockCount 块共 $totalCount 条弹幕（6分钟/块）", replaceIfContains = "已加载")
+            logger.fInfo { "Load danmaku segment success, cid=$cid, segment=$segmentIndex, size=${convertedDanmaku.size}, total=$totalCount" }
+        } catch (e: CancellationException) {
+            // 切集/退出播放页导致的取消不是失败：只回滚占位，不报错
+            rollbackDanmakuSegmentMark(segmentIndex, generation)
+            throw e
+        } catch (e: Exception) {
+            rollbackDanmakuSegmentMark(segmentIndex, generation)
+            addLogs("加载第 $segmentIndex 块弹幕失败：${e.localizedMessage}")
+            logger.fWarn { "Load danmaku segment failed: cid=$cid, segment=$segmentIndex, error=${e.stackTraceToString()}" }
         }
     }
 
@@ -497,8 +549,8 @@ class VideoPlayerV3ViewModel(
         cancelPlayUrlAutoRefresh("new_media")
         viewModelScope.launch(Dispatchers.Default) {
             // addLogs("加载视频中")
-            ensureDanmakuView()
-            // addLogs("弹幕引擎已就绪")
+            // 清空上一条内容的调试信息，避免残留直播的清晰度/地址
+            clearLogs()
             if (epid != null || seasonId != null) {
                 addLogs("avid:$avid，cid:$cid，epid:$epid，seasonId:$seasonId")
             } else {
@@ -511,7 +563,6 @@ class VideoPlayerV3ViewModel(
                 logger.info { "Subtitle is enabled, next video will enable subtitle automatic" }
             }
 
-            updateSubtitle()
             loadPlayUrl(
                 avid,
                 cid,
@@ -523,6 +574,7 @@ class VideoPlayerV3ViewModel(
             if (isInteractivePlayback && (!interactiveOptionsFromQuestions || interactiveOptions.isEmpty())) {
                 refreshInteractiveBranches(currentInteractiveEdgeId.takeIf { it > 0L })
             }
+            updateSubtitle()
             // addLogs("加载弹幕中")
             loadDanmaku(cid)
             updateDanmakuMask()
@@ -555,12 +607,13 @@ class VideoPlayerV3ViewModel(
         withContext(Dispatchers.Main) { loadState = RequestState.Ready }
         logger.fInfo { "Set request state: ready" }
         logger.fInfo { "fromSeason: $fromSeason" }
-        runCatching {
+        runCatchingCancellable {
             val playData = if (fromSeason) {
                 videoPlayRepository.getPgcPlayData(
                     aid = avid,
                     cid = cid,
                     epid = epid,
+                    seasonId = this@VideoPlayerV3ViewModel.seasonId.takeIf { it > 0 },
                     preferCodec = Prefs.defaultVideoCodec.toBiliApiCodeType(),
                     preferApiType = Prefs.apiType,
                     enableProxy = Prefs.enableProxy,
@@ -581,11 +634,12 @@ class VideoPlayerV3ViewModel(
             }
 
             //检查是否需要购买/充电，如果是试看则继续播放试看片段
-            withContext(Dispatchers.Main) { needPay = playData.needPay }
-
-            withContext(Dispatchers.Main) { this@VideoPlayerV3ViewModel.playData = playData }
-            withContext(Dispatchers.Main) { this@VideoPlayerV3ViewModel.clipInfoList = playData.clipInfoList }
-            withContext(Dispatchers.Main) { pushAudioLoudness(playData) }
+            withContext(Dispatchers.Main) {
+                needPay = playData.needPay
+                this@VideoPlayerV3ViewModel.playData = playData
+                clipInfoList = playData.clipInfoList
+                pushAudioLoudness(playData)
+            }
             logger.fInfo { "Load play data response success" }
             //logger.info { "Play data: $playData" }
 
@@ -638,22 +692,19 @@ class VideoPlayerV3ViewModel(
             val existDefaultResolution =
                 availableQuality.find { it == defaultQualityToUse } != null
 
-            if (!existDefaultResolution) {
+            val resolvedQuality = if (!existDefaultResolution) {
                 val tempList = resolutionList.sortedByDescending { it.code }
-                val currentQuality = tempList.firstOrNull { it.code < defaultQualityToUse.code }
+                tempList.firstOrNull { it.code < defaultQualityToUse.code }
                     ?: tempList.last()
-                withContext(Dispatchers.Main) {
-                    this@VideoPlayerV3ViewModel.currentQuality = currentQuality
-                }
             } else {
                 // 如果默认清晰度可用，直接使用
-                withContext(Dispatchers.Main) { currentQuality = defaultQualityToUse }
+                defaultQualityToUse
             }
 
             //确认最终所选音质
             val existDefaultAudio = availableAudio.contains(Prefs.defaultAudio)
-            if (!existDefaultAudio && availableAudio.isNotEmpty()) {
-                val currentAudio = when {
+            val resolvedAudio = if (!existDefaultAudio && availableAudio.isNotEmpty()) {
+                when {
                     Prefs.defaultAudio == Audio.ADolbyAtmos && availableAudio.contains(Audio.ADolbyAtmos) -> Audio.ADolbyAtmos
                     (Prefs.defaultAudio == Audio.ADolbyAtmos || Prefs.defaultAudio == Audio.AHiRes) && availableAudio.contains(Audio.AHiRes) -> Audio.AHiRes
                     availableAudio.contains(Audio.A192K) -> Audio.A192K
@@ -661,9 +712,13 @@ class VideoPlayerV3ViewModel(
                     availableAudio.contains(Audio.A64K) -> Audio.A64K
                     else -> availableAudio.first()
                 }
-                withContext(Dispatchers.Main) {
-                    this@VideoPlayerV3ViewModel.currentAudio = currentAudio
-                }
+            } else {
+                null
+            }
+
+            withContext(Dispatchers.Main) {
+                currentQuality = resolvedQuality
+                resolvedAudio?.let { currentAudio = it }
             }
 
             //再确认最终所选视频编码
@@ -713,7 +768,7 @@ class VideoPlayerV3ViewModel(
     fun refreshInteractiveBranches(edgeId: Long? = null) {
         val interactiveContext = videoInfoRepository.interactivePlaybackContext ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
+            runCatchingCancellable {
                 BiliHttpApi.getInteractiveEdgeInfo(
                     bvid = interactiveContext.bvid,
                     graphVersion = interactiveContext.graphVersion,
@@ -845,7 +900,7 @@ class VideoPlayerV3ViewModel(
         vVoucher: String,
         retryRequest: GeetestRetryRequest,
     ) {
-        runCatching {
+        runCatchingCancellable {
             val challenge = geetestSession.start(vVoucher)
             withContext(Dispatchers.Main) {
                 pendingRetryRequest = retryRequest
@@ -997,6 +1052,79 @@ class VideoPlayerV3ViewModel(
     /** 用户手动刷新 CDN 的累计次数；一次刷新只加一次，视频流与音频流共用这个步数。 */
     private var cdnAdvanceSteps = 0
 
+    /** [resolveStreamCandidates] 的结果：选中的分片 + 已按 CDN 偏好排好序的候选地址。 */
+    private data class StreamCandidates(
+        val videoItem: DashVideo?,
+        val audioItem: DashAudio?,
+        val videoCandidates: List<String>,
+        val audioCandidates: List<String>,
+        val videoUrl: String,
+        val audioUrl: String?,
+    )
+
+    /**
+     * 按 [qn] / [codec] / [audio] 从 [playData] 挑出视频与音频分片，并排出候选地址顺序。
+     *
+     * 起播（[playQuality]）与 CDN 到期重载（[reloadPlayUrl]）共用，避免两处选流逻辑各自演进。
+     * @return null 表示没有任何可用的视频地址
+     */
+    private suspend fun resolveStreamCandidates(
+        playData: PlayData,
+        qn: Int,
+        codec: VideoCodec,
+        audio: Audio,
+    ): StreamCandidates? {
+        // 偏好只读一次，不要放进 find 的谓词里
+        val apiType = Prefs.apiType
+        val useAliCdn = Prefs.enableProxy && proxyArea != ProxyArea.MainLand
+        val serverPicksCodec = playData.codec.isNotEmpty()
+
+        val videoItem = playData.dashVideos.find {
+            when (apiType) {
+                ApiType.Web -> it.quality == qn && it.codecs?.startsWith(codec.prefix) == true
+                ApiType.App -> if (serverPicksCodec) {
+                    it.quality == qn && it.codecs?.startsWith(codec.prefix) == true
+                } else {
+                    it.quality == qn
+                }
+            }
+        } ?: playData.dashVideos.firstOrNull()
+
+        val audioItem = listOfNotNull(
+            playData.dashAudios.find { it.codecId == audio.code },
+            playData.dolby.takeIf { it?.codecId == audio.code },
+            playData.flac.takeIf { it?.codecId == audio.code },
+            playData.dashAudios.minByOrNull { it.codecId },
+            playData.dolby,
+            playData.flac
+        ).firstOrNull()
+
+        val videoUrls = listOfNotNull(videoItem?.baseUrl) + (videoItem?.backUrl ?: emptyList())
+        val audioUrls = listOfNotNull(audioItem?.baseUrl) + (audioItem?.backUrl ?: emptyList())
+
+        // 走代理时统一改写成阿里 CDN，否则按实测速度/官方偏好排序
+        val videoCandidates = if (useAliCdn) {
+            videoUrls.map { it.replaceUrlDomainWithAliCdn() }
+        } else {
+            CdnSpeedStore.order(videoUrls, currentCid, cdnAdvanceSteps)
+        }
+        val audioCandidates = if (useAliCdn) {
+            audioUrls.map { it.replaceUrlDomainWithAliCdn() }
+        } else {
+            CdnSpeedStore.order(audioUrls, currentCid, cdnAdvanceSteps)
+        }
+
+        val videoUrl = videoCandidates.firstOrNull() ?: videoItem?.baseUrl ?: return null
+        return StreamCandidates(
+            videoItem = videoItem,
+            audioItem = audioItem,
+            videoCandidates = videoCandidates,
+            audioCandidates = audioCandidates,
+            videoUrl = videoUrl,
+            audioUrl = audioCandidates.firstOrNull(),
+        )
+    }
+
     suspend fun playQuality(
         qn: Resolution = currentQuality,
         codec: VideoCodec = currentVideoCodec,
@@ -1020,86 +1148,45 @@ class VideoPlayerV3ViewModel(
         audio: Audio = currentAudio
     ) {
         logger.fInfo { "Select resolution: $qn, codec: $codec, audio: $audio" }
-        if(playData == null) {
-            return
-        }
+        val playData = playData ?: return
 
-        val videoItem = playData!!.dashVideos.find {
-            when (Prefs.apiType) {
-                ApiType.Web -> it.quality == qn && it.codecs?.startsWith(codec.prefix) == true
-                ApiType.App -> {
-                    if (playData!!.codec.isEmpty()) it.quality == qn
-                    else it.quality == qn && it.codecs?.startsWith(codec.prefix) == true
-                }
-            }
-        } ?: playData!!.dashVideos.firstOrNull()
-        var videoUrl = videoItem?.baseUrl
-        if (videoUrl == null) {
+        val streams = resolveStreamCandidates(playData, qn, codec, audio)
+        if (streams == null) {
             logger.fError { "Failed to get video URL" }
             errorMessage = "获取视频地址失败"
             loadState = RequestState.Failed
             return
         }
-        val videoUrls = mutableListOf<String?>()
-        videoUrls.add(videoItem?.baseUrl)
-        videoUrls.addAll(videoItem?.backUrl ?: emptyList())
 
-        val audioItem = listOfNotNull(
-            playData!!.dashAudios.find { it.codecId == audio.code },
-            playData!!.dolby.takeIf { it?.codecId == audio.code },
-            playData!!.flac.takeIf { it?.codecId == audio.code },
-            playData!!.dashAudios.minByOrNull { it.codecId },
-            playData!!.dolby,
-            playData!!.flac
-        ).firstOrNull()
-        var audioUrl = audioItem?.baseUrl
-        val audioUrls = mutableListOf<String>()
-        audioItem?.baseUrl?.let(audioUrls::add)
-        audioUrls.addAll(audioItem?.backUrl ?: emptyList())
+        logger.fInfo { "all video hosts: ${streams.videoCandidates.map { with(URI(it)) { "$scheme://$authority" } }}" }
+        logger.fInfo { "all audio hosts: ${streams.audioCandidates.map { with(URI(it)) { "$scheme://$authority" } }}" }
 
-        logger.fInfo { "all video hosts: ${videoUrls.filterNotNull().map { with(URI(it)) { "$scheme://$authority" } }}" }
-        logger.fInfo { "all audio hosts: ${audioUrls.map { with(URI(it)) { "$scheme://$authority" } }}" }
-
-        //replace cdn
-        val videoCandidates: List<String>
-        val audioCandidates: List<String>
-        if (Prefs.enableProxy && proxyArea != ProxyArea.MainLand) {
-            videoCandidates = videoUrls.filterNotNull().map { it.replaceUrlDomainWithAliCdn() }
-            audioCandidates = audioUrls.map { it.replaceUrlDomainWithAliCdn() }
-        } else {
-            // 如果未通过网络代理获得播放地址，才判断是否应该替换为官方 cdn
-            videoCandidates = CdnSpeedStore.order(videoUrls.filterNotNull(), currentCid, cdnAdvanceSteps)
-            audioCandidates = CdnSpeedStore.order(audioUrls, currentCid, cdnAdvanceSteps)
-        }
-        videoUrl = videoCandidates.firstOrNull() ?: videoUrl
-        audioUrl = audioCandidates.firstOrNull()
-
-        if (audioUrl == null) {
+        if (streams.audioUrl == null) {
             logger.fWarn { "Failed to get audio URL, fallback to video-only playback" }
         }
 
         addLogs(
             "播放清晰度：${availableQuality.firstOrNull { it.code == qn }}, " +
                     "视频编码：${codec.getDisplayName(BVApp.context)}, " +
-                    "音频编码：${(Audio.fromCode(audioItem?.codecId ?: 0))?.getDisplayName(BVApp.context) ?: "未知"}",
+                    "音频编码：${(Audio.fromCode(streams.audioItem?.codecId ?: 0))?.getDisplayName(BVApp.context) ?: "未知"}",
             replaceIfContains = "播放清晰度"
         )
 
-        var videoHost = with(URI(videoUrl)) { "$scheme://$authority" }
-        var audioHost = audioUrl?.let { with(URI(it)) { "$scheme://$authority" } } ?: "无音频流，纯视频流播放"
+        val videoHost = with(URI(streams.videoUrl)) { "$scheme://$authority" }
+        val audioHost = streams.audioUrl?.let { with(URI(it)) { "$scheme://$authority" } } ?: "无音频流，纯视频流播放"
         addLogs("video host: $videoHost", replaceIfContains = "video host")
         addLogs("audio host: $audioHost", replaceIfContains = "audio host")
 
-        logger.fInfo { "Select audio: $audioItem" }
+        logger.fInfo { "Select audio: ${streams.audioItem}" }
 
         withContext(Dispatchers.Main) {
-            currentVideoHeight = videoItem?.height ?: 0
-            currentVideoWidth = videoItem?.width ?: 0
+            currentVideoHeight = streams.videoItem?.height ?: 0
+            currentVideoWidth = streams.videoItem?.width ?: 0
             lastVideoHost = videoHost
             lastAudioHost = audioHost
-            logger.info { "Video url: $videoUrl" }
-            logger.info { "Audio url: $audioUrl" }
-            videoPlayer!!.playUrl(videoCandidates, audioCandidates)
+            logger.info { "Video url: ${streams.videoUrl}" }
+            logger.info { "Audio url: ${streams.audioUrl}" }
+            videoPlayer!!.playUrl(streams.videoCandidates, streams.audioCandidates)
             val initialSeekPosition = resolveInitialPlaybackPositionMs()
             if (initialSeekPosition != null) {
                 logger.info { "Set initial seek position: ${initialSeekPosition}ms" }
@@ -1111,8 +1198,8 @@ class VideoPlayerV3ViewModel(
         // 为点播内容安排CDN URL自动刷新，防止2小时有效期过期
         if (!isLive) {
             schedulePlayUrlAutoRefresh(
-                videoUrl = videoUrl,
-                audioUrl = audioUrl,
+                videoUrl = streams.videoUrl,
+                audioUrl = streams.audioUrl,
                 reason = "play_quality"
             )
         }
@@ -1192,21 +1279,20 @@ class VideoPlayerV3ViewModel(
     private suspend fun reloadPlayUrl() {
         val aid = currentAid
         val cid = currentCid
-        val currentPos = withContext(Dispatchers.Main) {
-            videoPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L
-        }
-        val wasPlaying = withContext(Dispatchers.Main) {
-            videoPlayer?.isPlaying == true
+        val (currentPos, wasPlaying) = withContext(Dispatchers.Main) {
+            val pos = videoPlayer?.currentPosition?.coerceAtLeast(0L) ?: 0L
+            pos to (videoPlayer?.isPlaying == true)
         }
 
         logger.fInfo { "reloadPlayUrl: aid=$aid, cid=$cid, pos=${currentPos}ms" }
 
-        runCatching {
+        runCatchingCancellable {
             val playData = if (fromSeason) {
                 videoPlayRepository.getPgcPlayData(
                     aid = aid,
                     cid = cid,
                     epid = currentEpid,
+                    seasonId = this@VideoPlayerV3ViewModel.seasonId.takeIf { it > 0 },
                     preferCodec = Prefs.defaultVideoCodec.toBiliApiCodeType(),
                     preferApiType = Prefs.apiType,
                     enableProxy = Prefs.enableProxy,
@@ -1224,59 +1310,20 @@ class VideoPlayerV3ViewModel(
                 )
             }
 
-            withContext(Dispatchers.Main) { this@VideoPlayerV3ViewModel.playData = playData }
-            withContext(Dispatchers.Main) { pushAudioLoudness(playData) }
-
             // 使用当前清晰度和编码重新播放
-            val qn = currentQuality
-            val codec = currentVideoCodec
-            val audio = currentAudio
-
-            // 查找视频项
-            val videoItem = playData.dashVideos.find {
-                when (Prefs.apiType) {
-                    ApiType.Web -> it.quality == qn.code && it.codecs!!.startsWith(codec.prefix)
-                    ApiType.App -> {
-                        if (playData.codec.isEmpty()) it.quality == qn.code
-                        else it.quality == qn.code && it.codecs!!.startsWith(codec.prefix)
-                    }
-                }
-            }
-            var videoUrl = videoItem?.baseUrl ?: playData.dashVideos.firstOrNull()?.baseUrl
-                ?: return@runCatching
-
-            val videoUrls = mutableListOf<String?>()
-            videoUrls.add(videoItem?.baseUrl)
-            videoUrls.addAll(videoItem?.backUrl ?: emptyList())
-
-            val audioItem = listOfNotNull(
-                playData.dashAudios.find { it.codecId == audio.code },
-                playData.dolby.takeIf { it?.codecId == audio.code },
-                playData.flac.takeIf { it?.codecId == audio.code },
-                playData.dashAudios.minByOrNull { it.codecId },
-                playData.dolby,
-                playData.flac
-            ).firstOrNull()
-            var audioUrl = audioItem?.baseUrl
-            val audioUrls = mutableListOf<String>()
-            audioItem?.baseUrl?.let(audioUrls::add)
-            audioUrls.addAll(audioItem?.backUrl ?: emptyList())
-
-            val videoCandidates: List<String>
-            val audioCandidates: List<String>
-            if (Prefs.enableProxy && proxyArea != ProxyArea.MainLand) {
-                videoCandidates = videoUrls.filterNotNull().map { it.replaceUrlDomainWithAliCdn() }
-                audioCandidates = audioUrls.map { it.replaceUrlDomainWithAliCdn() }
-            } else {
-                videoCandidates = CdnSpeedStore.order(videoUrls.filterNotNull(), currentCid, cdnAdvanceSteps)
-                audioCandidates = CdnSpeedStore.order(audioUrls, currentCid, cdnAdvanceSteps)
-            }
-            videoUrl = videoCandidates.firstOrNull() ?: videoUrl
-            audioUrl = audioCandidates.firstOrNull()
+            val streams = resolveStreamCandidates(
+                playData = playData,
+                qn = currentQuality.code,
+                codec = currentVideoCodec,
+                audio = currentAudio,
+            ) ?: return@runCatchingCancellable
 
             withContext(Dispatchers.Main) {
+                this@VideoPlayerV3ViewModel.playData = playData
+                pushAudioLoudness(playData)
+
                 videoPlayer?.let { player ->
-                    player.playUrl(videoCandidates, audioCandidates)
+                    player.playUrl(streams.videoCandidates, streams.audioCandidates)
                     player.prepare()
                     player.seekTo(currentPos)
                     if (wasPlaying) player.start()
@@ -1285,8 +1332,8 @@ class VideoPlayerV3ViewModel(
 
             // 安排下一次自动刷新
             schedulePlayUrlAutoRefresh(
-                videoUrl = videoUrl,
-                audioUrl = audioUrl,
+                videoUrl = streams.videoUrl,
+                audioUrl = streams.audioUrl,
                 reason = "auto_refresh"
             )
 
@@ -1345,7 +1392,7 @@ class VideoPlayerV3ViewModel(
         currentSubtitleId = -1
         currentSubtitleData.clear()
 
-        runCatching {
+        runCatchingCancellable {
             val subtitleData = videoPlayRepository.getSubtitle(
                 aid = currentAid,
                 cid = currentCid,
@@ -1422,11 +1469,31 @@ class VideoPlayerV3ViewModel(
         }
     }
 
+    /** 切换播放内容（点播/直播、换房间）时清空上一份调试信息，避免残留显示错的内容。 */
+    private suspend fun clearLogs() {
+        withContext(Dispatchers.Main) {
+            logs = ""
+            lastChangedLog = System.currentTimeMillis()
+            videoPlayer?.extraDebugInfo = ""
+        }
+    }
+
+    /** 直播实际生效的编码展示：优先用服务端返回的真实编码，取不到再退回用户所选档位。 */
+    private fun liveCodecDisplay(info: LivePlayInfo): String {
+        val name = info.codecName.uppercase()
+        if (name.isBlank()) return currentLiveCodec.getDisplayName(BVApp.context)
+        return if (info.formatName.isBlank()) name else "$name（${info.formatName.uppercase()}）"
+    }
+
+    /** 直播调试信息里只展示主机名，不带签名参数，避免过长。 */
+    private fun liveHost(url: String): String =
+        runCatching { with(URI(url)) { "$scheme://$authority" } }.getOrDefault(url)
+
     suspend fun uploadHistory(time: Int) {
         if (!Prefs.isLogin) {
             return@uploadHistory
         }
-        runCatching {
+        runCatchingCancellable {
             if (!fromSeason) {
                 logger.info { "Send heartbeat: [avid=$currentAid, cid=$currentCid, time=$time]" }
                 videoPlayRepository.sendHeartbeat(
@@ -1455,40 +1522,52 @@ class VideoPlayerV3ViewModel(
         }
     }
 
+    /** 复位字幕状态。用 [NonCancellable] 包住：协程被取消时（切集/退出播放页）也要复位，否则会留下半截字幕 */
+    private suspend fun resetSubtitleState() = withContext(NonCancellable + Dispatchers.Main) {
+        currentSubtitleData.clear()
+        currentSubtitleId = -1
+        currentSubtitleType = SubtitleType.CC
+    }
+
+    /** 字幕加载请求号：只有最新一次请求才允许把状态复位，避免慢的旧请求覆盖掉新选中的字幕 */
+    private val subtitleLoadToken = AtomicInteger()
+
     fun loadSubtitle(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
+            val token = subtitleLoadToken.incrementAndGet()
             if (id == -1L) {
-                withContext(Dispatchers.Main) {
-                    currentSubtitleData.clear()
-                    currentSubtitleId = -1
-                    currentSubtitleType = SubtitleType.CC
-                }
+                resetSubtitleState()
                 return@launch
             }
             var subtitleName = ""
-            runCatching {
-                val subtitle = availableSubtitle.find { it.id == id } ?: return@runCatching
+            var loaded = false
+            try {
+                val subtitle = availableSubtitle.find { it.id == id } ?: return@launch
                 subtitleName = subtitle.langDoc
                 val isAI = subtitle.type == SubtitleType.AI
                 logger.info { "Subtitle url: ${subtitle.url}, isAI: $isAI" }
                 val responseText = AppHttpClient.client.get(subtitle.url).bodyAsText()
                 val subtitleData = SubtitleParser.fromBccString(responseText, isAI)
-                withContext(Dispatchers.Main) {
+                val applied = withContext(Dispatchers.Main) {
+                    // 期间用户又选了别的字幕（或关掉了字幕）：这次结果作废，由更晚那次请求决定状态
+                    if (token != subtitleLoadToken.get()) return@withContext false
                     currentSubtitleId = id
                     currentSubtitleType = subtitle.type
                     currentSubtitleData.swapList(subtitleData)
+                    true
                 }
-            }.onFailure {
-                withContext(Dispatchers.Main) {
-                    currentSubtitleData.clear()
-                    currentSubtitleId = -1
-                    currentSubtitleType = SubtitleType.CC
+                loaded = applied
+                if (applied) {
+                    logger.fInfo { "Load subtitle $subtitleName success" }
+                    addLogs("加载字幕 $subtitleName 成功，数量: ${currentSubtitleData.size}")
                 }
-                logger.fInfo { "Load subtitle failed: ${it.stackTraceToString()}" }
-                addLogs("加载字幕 $subtitleName 失败: ${it.localizedMessage}")
-            }.onSuccess {
-                logger.fInfo { "Load subtitle $subtitleName success" }
-                addLogs("加载字幕 $subtitleName 成功，数量: ${currentSubtitleData.size}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.fInfo { "Load subtitle failed: ${e.stackTraceToString()}" }
+                addLogs("加载字幕 $subtitleName 失败: ${e.localizedMessage}")
+            } finally {
+                if (!loaded && token == subtitleLoadToken.get()) resetSubtitleState()
             }
         }
     }
@@ -1508,7 +1587,7 @@ class VideoPlayerV3ViewModel(
     }
 
     private suspend fun updateDanmakuMask() {
-        runCatching {
+        runCatchingCancellable {
             val masks = videoPlayRepository.getDanmakuMask(
                 aid = currentAid,
                 cid = currentCid,
@@ -1523,7 +1602,7 @@ class VideoPlayerV3ViewModel(
 
     private suspend fun updateVideoShot() {
         withContext(Dispatchers.Main) { videoShot = null }
-        runCatching {
+        runCatchingCancellable {
             val videoShot = videoPlayRepository.getVideoShot(
                 aid = currentAid,
                 cid = currentCid,
@@ -1714,11 +1793,8 @@ class VideoPlayerV3ViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             logger.fInfo { "Load live stream with quality: roomId=$roomId, qn=$qn" }
             withContext(Dispatchers.Main) { loadState = RequestState.Doing }
-
-            // 仅在首次加载时初始化弹幕播放器，画质切换时不重复创建
-            if (danmakuView == null) {
-                ensureDanmakuView()
-            }
+            // 清空上一条内容的调试信息，避免残留点播的清晰度/地址
+            clearLogs()
 
             val playInfo = LiveStreamUrlFetcher.fetchLiveStreamUrl(roomId, qn, currentLiveCodec, preferredLiveLineIndex)
             if (playInfo == null) {
@@ -1753,7 +1829,14 @@ class VideoPlayerV3ViewModel(
                 logger.fDebug { "Live stream URL expires at: ${playInfo.expiresAt}" }
             }
 
-            runCatching {
+            addLogs(
+                "直播清晰度：${playInfo.qnDescMap[playInfo.currentQn] ?: "未知"}， " +
+                        "视频编码：${liveCodecDisplay(playInfo)}",
+                replaceIfContains = "直播清晰度"
+            )
+            addLogs("直播地址: ${liveHost(playInfo.streamUrl)}", replaceIfContains = "直播地址")
+
+            runCatchingCancellable {
                 withContext(Dispatchers.Main) {
                     videoPlayer?.playUrl(videoUrls = listOf(playInfo.streamUrl))
                     videoPlayer?.prepare()
@@ -1862,6 +1945,12 @@ class VideoPlayerV3ViewModel(
                 videoPlayer?.start()
                 loadState = RequestState.Success
             }
+            addLogs(
+                "直播清晰度：${playInfo.qnDescMap[playInfo.currentQn] ?: "未知"}， " +
+                        "视频编码：${liveCodecDisplay(playInfo)}",
+                replaceIfContains = "直播清晰度"
+            )
+            addLogs("直播地址: ${liveHost(playInfo.streamUrl)}", replaceIfContains = "直播地址")
             logger.fInfo { "Live stream retry successful, new URL loaded" }
             // 重置刷新失败计数并重新调度刷新
             consecutiveRefreshFailures = 0
@@ -1951,10 +2040,20 @@ class VideoPlayerV3ViewModel(
                 videoPlayer?.playUrl(videoUrls = listOf(playInfo.streamUrl))
             }
 
+            // 刷新后地址/编码可能变化，同步调试信息
+            addLogs(
+                "直播清晰度：${playInfo.qnDescMap[playInfo.currentQn] ?: "未知"}， " +
+                        "视频编码：${liveCodecDisplay(playInfo)}",
+                replaceIfContains = "直播清晰度"
+            )
+            addLogs("直播地址: ${liveHost(playInfo.streamUrl)}", replaceIfContains = "直播地址")
+
             logger.fInfo { "Live URL refreshed successfully, new expiresAt=$liveStreamExpiresAt" }
 
             // 调度下一次刷新
             scheduleLiveUrlRefresh()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.fError { "Error refreshing live URL: ${e.message}" }
             consecutiveRefreshFailures++
@@ -1973,11 +2072,7 @@ class VideoPlayerV3ViewModel(
             logger.fInfo { "Load live stream: $streamUrl" }
             withContext(Dispatchers.Main) { loadState = RequestState.Doing }
 
-            // 初始化弹幕播放器
-            ensureDanmakuView()
-            logger.fInfo { "Danmaku view ready for live stream" }
-
-            runCatching {
+            runCatchingCancellable {
                 withContext(Dispatchers.Main) {
                     videoPlayer?.playUrl(videoUrls = listOf(streamUrl))
                     videoPlayer?.prepare()
@@ -2009,7 +2104,7 @@ class VideoPlayerV3ViewModel(
 
         // 连接 WebSocket
         liveWebSocket = viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
+            runCatchingCancellable {
                 logger.fInfo { "Getting live danmaku info for room $roomId" }
                 val danmuInfo = BiliLiveHttpApi.getLiveDanmuInfo(roomId, sessData = Prefs.sessData)
                 logger.fInfo { "Danmaku info response: code=${danmuInfo.code}, message=${danmuInfo.message}" }
@@ -2111,6 +2206,8 @@ class VideoPlayerV3ViewModel(
             try {
                 danmakuMasks.clear()
                 danmakuView?.clearDanmakus()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.fError { "Error releasing danmaku player: ${e.message}" }
             }

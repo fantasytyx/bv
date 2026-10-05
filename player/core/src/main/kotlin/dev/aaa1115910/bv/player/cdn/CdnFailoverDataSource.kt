@@ -11,6 +11,17 @@ import java.net.SocketTimeoutException
 private const val TAG = "CdnFailover"
 
 /**
+ * 同一个地址上「读失败 → 续传又失败」累计到多少次才换下一个候选。
+ *
+ * 读失败后 ExoPlayer 会用 Range 请求**从断点续传**，并保留已解析的 extractor 状态
+ * （见 `ProgressiveMediaPeriod.ExtractingLoadable.load()`）。续传必须落回同一个地址：
+ * B 站各镜像的 fMP4 只是语义等价，`sidx`/`trun` 编码有差异，偏移一错，NAL 长度字段就落在
+ * 样本数据中间，报 `ParserException: Invalid NAL length`。所以第一次失败先原地重试，
+ * 只有同一个地址连续两次都续不上，才认定它是坏节点换下一个。
+ */
+private const val MAX_READ_FAILURES_ON_SAME_CDN = 2
+
+/**
  * 请求是否是被取消的：换播放地址时旧的 MediaSource 会被丢掉，在途请求随之 cancel，
  * OkHttp 抛的是裸的 `InterruptedIOException`。这不是厂商的问题，记成硬失败会把好节点误降权。
  *
@@ -48,12 +59,19 @@ internal class CdnFailoverDataSourceFactory(
             sampler = sampler,
             recorder = recorder,
         )
+
+    /** 见 [CdnFailoverState.skipServing]。 */
+    fun skipServing(): Boolean = state.skipServing()
 }
 
 /** 候选列表与当前首选下标，被同一播放会话内的所有 DataSource 共享。 */
 private class CdnFailoverState(candidates: List<String>) {
     val candidates: List<String> = candidates.filter { it.isNotBlank() }
 
+    /** 已经当过「实际在用地址」并且被判为慢的候选下标。 */
+    private val abandoned = mutableSetOf<Int>()
+
+    /** 实际打开成功的下标；`open` 里 `prefer` 的就是它，所以它等于当前在用地址。 */
     @Volatile
     var preferredIndex: Int = 0
         private set
@@ -65,6 +83,27 @@ private class CdnFailoverState(candidates: List<String>) {
     /** 当前候选不可用时推进到下一个，供下次 open 换节点重试。 */
     fun advance() {
         if (candidates.size > 1) preferredIndex = (preferredIndex + 1) % candidates.size
+    }
+
+    /**
+     * 从当前在用地址往后跳到第一个还没放弃过的候选，供频繁缓冲时换地址。全部候选都当过
+     * 在用地址后返回 false（不再切换）且不改动起点。
+     *
+     * 不能简单地 +1：前面打不开的候选不在 [preferredIndex] 里（它只记实际打开成功的那次），
+     * 直接往后挪一格会撞回被 open 跳过、或刚刚才放弃过的地址，白切一次。
+     */
+    fun skipServing(): Boolean {
+        if (candidates.size <= 1) return false
+        abandoned += preferredIndex
+        if (abandoned.size >= candidates.size) return false
+        for (offset in 1..candidates.size) {
+            val index = (preferredIndex + offset) % candidates.size
+            if (index !in abandoned) {
+                preferredIndex = index
+                return true
+            }
+        }
+        return false
     }
 }
 
@@ -133,6 +172,12 @@ private class CdnFailoverDataSource(
     private var upstream: DataSource? = null
     private val transferListeners = ArrayList<TransferListener>(2)
 
+    /** 当前 upstream 打开用的候选下标；-1 表示没走候选列表（直通）。 */
+    private var currentIndex = -1
+
+    /** 当前地址上的连续读失败次数，见 [MAX_READ_FAILURES_ON_SAME_CDN]。 */
+    private var readFailures = 0
+
     override fun addTransferListener(transferListener: TransferListener) {
         transferListeners.add(transferListener)
         upstream?.addTransferListener(transferListener)
@@ -150,6 +195,8 @@ private class CdnFailoverDataSource(
             val dataSource = upstreamFactory.createDataSource()
             transferListeners.forEach { dataSource.addTransferListener(it) }
             upstream = dataSource
+            currentIndex = -1
+            readFailures = 0
             return dataSource.open(dataSpec)
         }
 
@@ -164,6 +211,9 @@ private class CdnFailoverDataSource(
             try {
                 val openedLength = dataSource.open(spec)
                 upstream = dataSource
+                // 换了地址就重新算连续失败次数
+                if (currentIndex != index) readFailures = 0
+                currentIndex = index
                 state.prefer(index)
                 cdnHostOf(url)?.let(sampler::begin)
                 Log.i(TAG, "open ok [$index/${candidates.size}] $url length=$openedLength")
@@ -190,13 +240,23 @@ private class CdnFailoverDataSource(
             try {
                 dataSource.read(buffer, offset, length)
             } catch (e: Exception) {
-                // 读取中途失败（连接被断、重连时又撞上坏证书等）：换下一个候选，
-                // 让 ExoPlayer 的重试落到别的厂商；这里不降权，避免把偶发抖动记成厂商不可用
-                state.advance()
-                Log.w(TAG, "read failed, next candidate index=${state.preferredIndex}", e)
+                // 读取中途失败（连接被断、重连时又撞上坏证书等）：这里不降权，避免把偶发抖动记成厂商不可用。
+                // 换地址会破坏续传（见 MAX_READ_FAILURES_ON_SAME_CDN），所以先原地重试，
+                // 同一个地址连续失败两次才换下一个候选，让 ExoPlayer 的重试落到别的厂商
+                readFailures++
+                if (readFailures >= MAX_READ_FAILURES_ON_SAME_CDN) {
+                    readFailures = 0
+                    state.advance()
+                    Log.w(TAG, "read failed, next candidate index=${state.preferredIndex}", e)
+                } else {
+                    Log.w(TAG, "read failed, retry on same cdn", e)
+                }
                 throw e
             }
-        if (read > 0) sampler.add(read, System.nanoTime() - startedAtNanos)
+        if (read > 0) {
+            readFailures = 0
+            sampler.add(read, System.nanoTime() - startedAtNanos)
+        }
         return read
     }
 

@@ -158,6 +158,8 @@ data class VideoPlayerConfigData(
     val currentLiveLineIndex: Int = 0,
     val showDebugInfo: Boolean = false,
     val audioBalanceLevel: AudioBalanceLevel = AudioBalanceLevel.Off,
+    /** 本集 playurl 是否下发了响度元数据，没有时音量均衡无从生效、入口应隐藏 */
+    val hasAudioLoudness: Boolean = false,
     val longPressAction: Int = 0, // 0 = 打开菜单, 1 = 加速播放
     val longPressSpeed: Float = 2f,
 )

@@ -138,8 +138,8 @@ fun OthersMenuList(
                 if (videoPlayerConfigData.isLive) {
                     remove(VideoPlayerOthersMenuItem.PlayMode)
                 }
-                // 响度元数据只有 UGC playurl 下发，PGC（fromSeason）与直播下音量均衡无从生效
-                if (videoPlayerConfigData.isLive || videoPlayerConfigData.fromSeason) {
+                // 没有响度元数据（直播、gRPC PGC 等）时音量均衡无从生效
+                if (!videoPlayerConfigData.hasAudioLoudness) {
                     remove(VideoPlayerOthersMenuItem.AudioBalance)
                 }
             }) { index, item ->

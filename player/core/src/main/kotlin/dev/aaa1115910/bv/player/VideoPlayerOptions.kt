@@ -11,6 +11,11 @@ data class VideoPlayerOptions(
     val enableScreenRefreshRateMatching: Boolean = false,
     /** 跳过音频中的静音段，只在 2.5 倍速及以上生效（低倍速会压缩时间轴导致画面快进） */
     val enableSkipSilence: Boolean = false,
+    /**
+     * 点播中同一地址频繁缓冲时自动换下一个候选地址（起播与快进/快退引起的那次缓冲不计）。
+     * 只在有多个候选地址时有效。
+     */
+    val enableSwitchCdnOnBuffering: Boolean = false,
     /** 音量均衡挡位，播放中可通过 AbstractVideoPlayer.setAudioBalanceLevel 动态调整 */
     val audioBalanceLevel: AudioBalanceLevel = AudioBalanceLevel.Off,
     /** CDN 吞吐样本上报入口，为空时不上报 */

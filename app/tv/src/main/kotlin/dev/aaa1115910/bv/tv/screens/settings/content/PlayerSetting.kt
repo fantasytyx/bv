@@ -95,6 +95,7 @@ fun PlayerSetting(
     var enableAsyncQueueing by remember { mutableStateOf(Prefs.enableAsyncQueueing) }
     var enableScreenRefreshRateMatching by remember { mutableStateOf(Prefs.enableScreenRefreshRateMatching) }
     var playerSkipSilence by remember { mutableStateOf(Prefs.playerSkipSilence) }
+    var playerSwitchCdnOnBuffering by remember { mutableStateOf(Prefs.playerSwitchCdnOnBuffering) }
     var playerAudioBalanceLevel by remember { mutableStateOf(Prefs.playerAudioBalanceLevel) }
     var skipPgcIntroOutro by remember { mutableStateOf(Prefs.skipPgcIntroOutro) }
     var showControllerButtonDialog by remember { mutableStateOf(false) }
@@ -231,6 +232,18 @@ fun PlayerSetting(
                     onCheckedChange = {
                         enableScreenRefreshRateMatching = it
                         Prefs.enableScreenRefreshRateMatching = it
+                    }
+                )
+            }
+            item {
+                SettingSwitchListItem(
+                    title = "频繁缓冲时自动切换线路",
+                    supportText = "同一线路 90 秒内缓冲 3 次、或单次缓冲超过 12 秒时，自动换下一个播放地址；" +
+                            "仅在拿到多个地址时有效。起播与快进/快退引起的缓冲不计",
+                    checked = playerSwitchCdnOnBuffering,
+                    onCheckedChange = {
+                        playerSwitchCdnOnBuffering = it
+                        Prefs.playerSwitchCdnOnBuffering = it
                     }
                 )
             }

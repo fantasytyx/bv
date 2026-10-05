@@ -84,6 +84,7 @@ class VideoPlayerActivity : ComponentActivity() {
                 ApiType.App -> null
             },
             enableSkipSilence = Prefs.playerSkipSilence,
+            enableSwitchCdnOnBuffering = Prefs.playerSwitchCdnOnBuffering,
             audioBalanceLevel = Prefs.playerAudioBalanceLevel,
             cdnSpeedRecorder = CdnSpeedStore
         )
