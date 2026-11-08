@@ -314,6 +314,7 @@ class VideoPlayerV3Activity : ComponentActivity() {
             val pubTime = intent.getStringExtra("pubTime") ?: ""
             dev.aaa1115910.bv.tv.activities.video.VideoPlayerV3Activity.Companion.logger.fInfo { "Launch parameter: [aid=$aid, cid=$cid]" }
             playerViewModel.apply {
+                // 风控验证由屏幕组合的弹窗负责，ViewModel 只发布待验证凭证
                 // lastPlayed 需要在 loadPlayUrl 之前设置，以便 prepare() 时能正确设置初始跳转位置
                 this.lastPlayed = played
                 this.fromSeason = fromSeason

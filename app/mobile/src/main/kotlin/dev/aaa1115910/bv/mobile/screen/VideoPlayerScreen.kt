@@ -112,6 +112,7 @@ import dev.aaa1115910.bv.player.entity.VideoPlayerVideoInfoData
 import dev.aaa1115910.bv.player.entity.VideoPlayerVideoShotData
 import dev.aaa1115910.bv.player.mobile.BvPlayer
 import dev.aaa1115910.bv.player.danmaku.DanmakuView
+import dev.aaa1115910.bv.util.GeetestChallengeData
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.formatPubTimeString
@@ -135,13 +136,14 @@ import org.koin.androidx.compose.koinViewModel
 
 /**
  * 极验 GT3 弹窗宿主：驱动一次完整的自定义验证流程。
- * 播放与详情各持有一个实例，避免详情页被风控时无人渲染弹窗而静默卡住。
+ *
+ * 题目在弹窗出现时才去申请（v1 register）：同一批 v_voucher 只能注册一次，提前注册会让
+ * 真正展示时拿不到题目。播放与详情各持有一个实例，避免详情页被风控时无人渲染弹窗而静默卡住。
  */
 @Composable
 private fun GeetestDialogHost(
-    show: Boolean,
-    gt: String,
-    challenge: String,
+    voucher: String?,
+    onRequestChallenge: suspend () -> GeetestChallengeData?,
     onResult: (challenge: String, validate: String, seccode: String) -> Unit,
     onCancelled: () -> Unit,
 ) {
@@ -197,16 +199,16 @@ private fun GeetestDialogHost(
         }
     }
 
-    LaunchedEffect(show) {
-        if (show) {
-            gt3GeetestUtils?.startCustomFlow()
-            gt3ConfigBean.api1Json = JSONObject().apply {
-                put("success", 1)
-                put("gt", gt)
-                put("challenge", challenge)
-            }
-            gt3GeetestUtils?.getGeetest()
+    LaunchedEffect(voucher) {
+        if (voucher == null) return@LaunchedEffect
+        val challenge = onRequestChallenge() ?: return@LaunchedEffect
+        gt3ConfigBean.api1Json = JSONObject().apply {
+            put("success", 1)
+            put("gt", challenge.gt)
+            put("challenge", challenge.challenge)
         }
+        gt3GeetestUtils?.startCustomFlow()
+        gt3GeetestUtils?.getGeetest()
     }
 }
 
@@ -246,20 +248,18 @@ fun VideoPlayerScreen(
     )
     val replySheetState = rememberBottomSheetScaffoldState()
 
-    // 风控 Geetest 验证：播放与详情各一个独立宿主
+    // 风控验证：播放与详情各一个独立宿主，弹窗出现时才向对应 ViewModel 申请题目
     GeetestDialogHost(
-        show = playerViewModel.showGeetestDialog,
-        gt = playerViewModel.geetestGt,
-        challenge = playerViewModel.geetestChallenge,
+        voucher = playerViewModel.riskCaptchaVoucher,
+        onRequestChallenge = playerViewModel::requestLegacyGeetest,
         onResult = playerViewModel::onGeetestResult,
-        onCancelled = playerViewModel::onGeetestCancelled,
+        onCancelled = playerViewModel::onRiskCaptchaCancelled,
     )
     GeetestDialogHost(
-        show = videoDetailViewModel.showGeetestDialog,
-        gt = videoDetailViewModel.geetestGt,
-        challenge = videoDetailViewModel.geetestChallenge,
+        voucher = videoDetailViewModel.riskCaptchaVoucher,
+        onRequestChallenge = videoDetailViewModel::requestLegacyGeetest,
         onResult = videoDetailViewModel::onGeetestResult,
-        onCancelled = videoDetailViewModel::onGeetestCancelled,
+        onCancelled = videoDetailViewModel::onRiskCaptchaCancelled,
     )
 
     val setPreviewerPictures: (List<Picture>, () -> Unit) -> Unit =

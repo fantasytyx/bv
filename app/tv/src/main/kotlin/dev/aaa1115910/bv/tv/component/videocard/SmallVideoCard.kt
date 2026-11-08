@@ -21,10 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,27 +58,32 @@ fun SmallVideoCard(
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
     onFocus: () -> Unit = {},
+    /** 仅用于预览：没有真实焦点时也绘制聚焦态背景 */
     initialFocus: Boolean = false,
     unfocusedBorderColor: Color? = null
 ) {
-    var hasFocus by remember { mutableStateOf(initialFocus) }
+    val focusedBackground = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged {
-                hasFocus = it.isFocused
-                if (hasFocus) onFocus()
-            },
+            .then(
+                if (initialFocus) {
+                    Modifier.background(focusedBackground, MaterialTheme.shapes.medium)
+                } else {
+                    Modifier
+                }
+            )
+            .onFocusChanged { if (it.isFocused) onFocus() },
         onClick = onClick,
         onLongClick = onLongClick,
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = if (hasFocus) MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f) else Color.Transparent,
+            focusedContainerColor = focusedBackground,
             pressedContainerColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
         ),
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1.04f),
+        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1f),
         border = ClickableSurfaceDefaults.border(
             border = Border(
                 border = BorderStroke(
@@ -93,14 +95,14 @@ fun SmallVideoCard(
             focusedBorder = Border(
                 border = BorderStroke(
                     width = 2.dp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                 ),
                 shape = MaterialTheme.shapes.medium
             )
         )
     ) {
         Column(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 3.dp, start = 3.dp, end = 3.dp),
         ) {
@@ -188,20 +190,21 @@ fun CardCover(
     time: String,
     badges: List<String> = emptyList()
 ) {
+    val context = LocalContext.current
+    val imageModel = remember(cover) {
+        ImageRequest.Builder(context)
+            .data(cover.resizedImageUrl(ImageSize.SmallVideoCardCover))
+            // AsyncImage 使用测量后的卡片尺寸作为解码尺寸。
+            .precision(Precision.INEXACT)
+            .crossfade(false)
+            .build()
+    }
+
     BoxWithConstraints(
         modifier = modifier,
         contentAlignment = Alignment.BottomCenter
     ) {
-        val context = LocalContext.current
         val showInfo = maxWidth > 160.dp
-        val imageModel = remember(cover) {
-            ImageRequest.Builder(context)
-                .data(cover.resizedImageUrl(ImageSize.SmallVideoCardCover))
-                // AsyncImage 使用测量后的卡片尺寸作为解码尺寸。
-                .precision(Precision.INEXACT)
-                .crossfade(false)
-                .build()
-        }
 
         AsyncImage(
             modifier = Modifier

@@ -70,7 +70,7 @@ fun LiveRoomCard(
             pressedContainerColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)
         ),
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1.04f),
+        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1f),
         border = ClickableSurfaceDefaults.border(
             border = Border(
                 border = BorderStroke(
@@ -82,7 +82,7 @@ fun LiveRoomCard(
             focusedBorder = Border(
                 border = BorderStroke(
                     width = 2.dp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
                 ),
                 shape = MaterialTheme.shapes.medium
             )

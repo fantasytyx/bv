@@ -24,7 +24,7 @@ slf4j-android-mvysny = "2.0.13"
 slf4j-simple = "2.0.20"
 #vlc = "3.6.5"
 zxing = "3.5.4"
-uiUtil = "1.11.4"
+uiUtil = "1.12.1"
 
 [libraries]
 # https://google.github.io/accompanist/

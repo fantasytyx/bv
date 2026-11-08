@@ -10,6 +10,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -50,34 +51,16 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.http.BiliHttpApi
+import dev.aaa1115910.biliapi.http.util.BiliWebConf
+import dev.aaa1115910.biliapi.repositories.AuthRepository
+import dev.aaa1115910.bv.util.buildRiskCaptchaCookie
+import dev.aaa1115910.bv.util.riskCaptchaCookieCommands
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 private val logger = KotlinLogging.logger("GeetestTvVerify")
-
-/**
- * Geetest 验证结果
- */
-data class GeetestTvResult(
-    val challenge: String,
-    val validate: String,
-    val seccode: String,
-)
-
-/**
- * 本地交互分支。真实题目类型由极验服务端下发，此处只决定用哪套遥控器操作：
- * 点击题（移动光标 + 点击）或滑块题（拖动 + 提交）。
- */
-enum class GeetestInputMode {
-    /** 按极验页面检测结果自动切换，正式流程用这个 */
-    Auto,
-
-    /** 强制点击交互 */
-    Click,
-
-    /** 强制滑块交互 */
-    Slider,
-}
 
 /** 确认键族：长按切换题类交互的一次性标记，必须在这几个键的 KeyUp 上无条件清除 */
 private val GeetestConfirmKeyCodes = setOf(
@@ -87,10 +70,14 @@ private val GeetestConfirmKeyCodes = setOf(
 )
 
 /**
- * TV 端 Geetest 风控验证弹窗
+ * TV 端风控验证弹窗
  *
- * 在 WebView 中加载极验 JS SDK，上层覆盖十字光标，
- * 通过遥控器方向键移动光标、确认键触发点击 → 将 touch 事件注入 WebView。
+ * 在 WebView 中加载 **B 站官方风控 SDK**（`risk-captcha-sdk/CaptchaLoader.js`），由它自己完成
+ * `gaia-vgate` v2 register、极验 v3/v4 版本选择、结果加密与 validate，成功时直接返回
+ * `gaia_vtoken`。上层覆盖十字光标，通过遥控器方向键移动光标、确认键触发点击 → 注入 touch 事件。
+ *
+ * 不要改回自己用 gt.js 拼 v3 页面：B 站已经改用极验 v4（gt 是 v4 的 captchaId），
+ * 拿它去请求 v3 的 `gettype.php` 只会返回 `captcha not found`，题目永远出不来。
  *
  * 交互方式：
  * - 方向键 (D-Pad) 移动十字光标，长按/连按加速
@@ -99,18 +86,17 @@ private val GeetestConfirmKeyCodes = setOf(
  * - 长按确认键可手动切换点击/滑块（仅自动模式），题类探测失败时的兜底
  * - 返回键 (Back) 取消验证
  *
- * @param gt       Geetest gt 参数
- * @param challenge Geetest challenge 参数
- * @param inputMode 本地交互分支，默认按极验检测结果自动切换
- * @param onResult  验证成功后回调
- * @param onDismiss 用户取消/关闭时回调
+ * @param vVoucher 播放/详情接口返回的一次性 v_voucher，只有第一次 register 有效
+ * @param cookie   注入 WebView 的 Cookie（登录态 + web 指纹），为空表示游客
+ * @param onVerified 验证成功，参数为可直接使用的 gaia_vtoken
+ * @param onFailed   SDK 报错（凭证过期、网络失败等），参数为可见的错误文案
+ * @param onDismiss  用户取消/关闭时回调
  */
 @Composable
 fun GeetestTvVerifyDialog(
-    gt: String,
-    challenge: String,
-    inputMode: GeetestInputMode = GeetestInputMode.Auto,
-    onResult: (GeetestTvResult) -> Unit,
+    vVoucher: String,
+    onVerified: (token: String) -> Unit,
+    onFailed: (message: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     Dialog(
@@ -127,10 +113,9 @@ fun GeetestTvVerifyDialog(
             contentAlignment = Alignment.Center,
         ) {
             GeetestTvVerifyContent(
-                gt = gt,
-                challenge = challenge,
-                inputMode = inputMode,
-                onResult = onResult,
+                vVoucher = vVoucher,
+                onVerified = onVerified,
+                onFailed = onFailed,
                 onDismiss = onDismiss,
             )
         }
@@ -140,21 +125,24 @@ fun GeetestTvVerifyDialog(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun GeetestTvVerifyContent(
-    gt: String,
-    challenge: String,
-    inputMode: GeetestInputMode,
-    onResult: (GeetestTvResult) -> Unit,
+    vVoucher: String,
+    onVerified: (token: String) -> Unit,
+    onFailed: (message: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val density = LocalDensity.current
     val focusRequester = remember { FocusRequester() }
     val callbackScope = rememberCoroutineScope()
 
+    // 风控 SDK 在 WebView 里自己请求 api.bilibili.com，登录态与 web 指纹由这里自己准备
+    val authRepository: AuthRepository = koinInject()
+    val cookie = remember { buildRiskCaptchaCookie(authRepository) }
+
     // 状态提示
     var statusText by remember { mutableStateOf("正在加载验证码…") }
 
     // 极验 bind 模式可能下发点击或滑块；滑块必须发 DOWN→MOVE→UP，只点一下永远过不了
-    var sliderMode by remember { mutableStateOf(inputMode == GeetestInputMode.Slider) }
+    var sliderMode by remember { mutableStateOf(false) }
     var dragActive by remember { mutableStateOf(false) }
     var dragDownTime by remember { mutableLongStateOf(0L) }
     val sliderHandle = remember { floatArrayOf(Float.NaN, Float.NaN) }
@@ -332,9 +320,9 @@ private fun GeetestTvVerifyContent(
 
                     in GeetestConfirmKeyCodes -> {
                         when {
-                            // 长按切换题类交互（真实题类由极验下发，探测失败时的兜底；调试强制模式不切）
+                            // 长按切换题类交互（真实题类由极验下发，探测失败时的兜底）
                             isLongPress -> {
-                                if (!longPressToggled && inputMode == GeetestInputMode.Auto) {
+                                if (!longPressToggled) {
                                     longPressToggled = true
                                     toggleSliderMode()
                                 }
@@ -390,6 +378,8 @@ private fun GeetestTvVerifyContent(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(8.dp)),
                 factory = { ctx ->
+                    // 风控 SDK 在 WebView 里自己请求 api.bilibili.com，登录态与 web 指纹只能靠 Cookie 带上
+                    injectRiskCaptchaCookies(cookie)
                     val webView = WebView(ctx).apply {
                         layoutParams = FrameLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -398,11 +388,13 @@ private fun GeetestTvVerifyContent(
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
+                        // WebView 默认 UA 是移动端，会把极验面板切成移动布局；用与 API 请求一致的桌面 UA
+                        settings.userAgentString = riskCaptchaUserAgent()
                         isFocusable = false
                         isFocusableInTouchMode = false
                         webChromeClient = WebChromeClient()
-                        // 只做计时/报错：gt.js 是 head 里的阻塞脚本，它没下完 JS 就不会执行，
-                        // 界面会一直停在"正在加载验证码…"（onPageFinished 覆盖到这一步）
+                        // 只做计时/报错：SDK 逻辑脚本约 400KB，没下完就不会有验证面板，
+                        // 界面会一直停在"正在加载验证码…"（onPageFinished 只覆盖到这一步）
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 logger.info { "Geetest page finished at +${SystemClock.uptimeMillis() - startMs}ms" }
@@ -420,60 +412,36 @@ private fun GeetestTvVerifyContent(
                         addJavascriptInterface(
                             object {
                                 @JavascriptInterface
-                                fun onGeetestResult(
-                                    validate: String?,
-                                    seccode: String?,
-                                    geetestChallenge: String?,
-                                ) {
-                                    val v = validate.orEmpty().trim()
-                                    val s = seccode.orEmpty().trim()
-                                    val c = geetestChallenge.orEmpty().trim()
-                                    if (v.isBlank() || s.isBlank() || c.isBlank()) return
-                                    logger.info { "Geetest verification succeeded" }
-                                    // JavascriptInterface 在 WebView 私有线程回调，切回主线程避免跨线程改状态
-                                    callbackScope.launch {
-                                        onResult(
-                                            GeetestTvResult(
-                                                challenge = c,
-                                                validate = v,
-                                                seccode = s
-                                            )
-                                        )
+                                fun onRiskCaptchaToken(token: String?) {
+                                    val vToken = token.orEmpty().trim()
+                                    if (vToken.isBlank()) {
+                                        onFailed("验证结果为空")
+                                        return
                                     }
+                                    logger.info { "Risk captcha verified, token length=${vToken.length}" }
+                                    // JavascriptInterface 在 WebView 私有线程回调，切回主线程避免跨线程改状态
+                                    callbackScope.launch { onVerified(vToken) }
+                                }
+
+                                @JavascriptInterface
+                                fun onRiskCaptchaFailed(message: String?) {
+                                    val text = message.orEmpty().trim().ifBlank { "未知错误" }
+                                    logger.warn { "Risk captcha failed at +${SystemClock.uptimeMillis() - startMs}ms: $text" }
+                                    callbackScope.launch { onFailed(text) }
                                 }
 
                                 @JavascriptInterface
                                 fun onStatusUpdate(text: String?) {
                                     val message = text ?: return
-                                    logger.info { "Geetest status at +${SystemClock.uptimeMillis() - startMs}ms: $message" }
+                                    logger.info { "Risk captcha status at +${SystemClock.uptimeMillis() - startMs}ms: $message" }
                                     callbackScope.launch { statusText = message }
-                                }
-
-                                @JavascriptInterface
-                                fun onReady() {
-                                    logger.info { "Geetest ready, inputMode=$inputMode" }
-                                    callbackScope.launch {
-                                        statusText = when (inputMode) {
-                                            GeetestInputMode.Auto -> "请使用方向键移动光标，确认键点击"
-                                            GeetestInputMode.Click -> "点击模式：方向键移动光标，确认键点击"
-                                            GeetestInputMode.Slider -> "滑块模式：左右键拖动滑块，确定键提交"
-                                        }
-                                    }
                                 }
 
                                 @JavascriptInterface
                                 fun onVerificationType(type: String?) {
                                     val isSlider = type?.trim()?.equals("slider", ignoreCase = true) == true
-                                    logger.info { "Geetest reports type=$type, inputMode=$inputMode" }
+                                    logger.info { "Risk captcha reports type=$type" }
                                     callbackScope.launch {
-                                        // 调试强制模式下不改交互分支，但真实题类与强制模式冲突时要提示，否则用户会一直点不中
-                                        if (inputMode != GeetestInputMode.Auto) {
-                                            if (isSlider != (inputMode == GeetestInputMode.Slider)) {
-                                                val actual = if (isSlider) "滑块" else "点击"
-                                                statusText = "注意：本题实际为${actual}题，当前强制模式可能无法通过"
-                                            }
-                                            return@launch
-                                        }
                                         // 拖动中不切分支，否则手里的滑块会被中途切走
                                         if (dragActive) return@launch
                                         sliderMode = isSlider
@@ -503,7 +471,7 @@ private fun GeetestTvVerifyContent(
 
                         loadDataWithBaseURL(
                             "https://api.bilibili.com/",
-                            buildGeetestHtml(gt, challenge),
+                            buildRiskCaptchaHtml(vVoucher),
                             "text/html",
                             "utf-8",
                             null,
@@ -534,15 +502,10 @@ private fun GeetestTvVerifyContent(
 
         // ---- 操作提示 ----
         Text(
-            text = when {
-                sliderMode && inputMode == GeetestInputMode.Auto ->
-                    "左右键拖动滑块 ｜ 确认键提交 ｜ 长按确认键切换 ｜ 返回键取消"
-
-                sliderMode -> "左右键拖动滑块 ｜ 确认键提交 ｜ 返回键取消"
-                inputMode == GeetestInputMode.Auto ->
-                    "方向键移动光标 ｜ 确认键点击 ｜ 长按确认键切换 ｜ 返回键取消"
-
-                else -> "方向键移动光标 ｜ 确认键点击 ｜ 返回键取消"
+            text = if (sliderMode) {
+                "左右键拖动滑块 ｜ 确认键提交 ｜ 长按确认键切换 ｜ 返回键取消"
+            } else {
+                "方向键移动光标 ｜ 确认键点击 ｜ 长按确认键切换 ｜ 返回键取消"
             },
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             style = MaterialTheme.typography.labelSmall,
@@ -692,21 +655,54 @@ private class CrosshairOverlayView(context: Context) : View(context) {
 }
 
 /**
- * 构建加载极验验证码的 HTML 页面。
+ * 与 API 请求保持一致的 UA。
  *
- * 使用极验 JS SDK (`gt.js`) 初始化验证并自动弹出验证窗口，
- * 用户在 WebView 中完成点选后，通过 JS bridge 回调原生代码。
+ * WebView 默认 UA 是移动端（`Android ... Mobile Safari`），B 站风控 SDK 会按 UA 切成移动布局；
+ * 而 API 侧的 web 请求一直用桌面 Chrome UA（见 `BiliUserAgent`），两边统一才不会显得是两套客户端。
  */
-private fun buildGeetestHtml(gt: String, challenge: String): String {
+private fun riskCaptchaUserAgent(): String =
+    BiliHttpApi.userAgentProvider()?.takeIf { it.isNotBlank() }
+        ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/${BiliWebConf.webViewVersion}.0.0.0 Safari/537.36"
+
+/**
+ * 把应用侧的 Cookie 同步进 WebView。
+ *
+ * 风控 SDK 在 WebView 里直接请求 `api.bilibili.com`，登录态（SESSDATA / bili_jct）与
+ * web 指纹（buvid3 / buvid4 / b_nut / bili_ticket）只能靠 WebView 的 CookieManager 带上。
+ * 指令由 [riskCaptchaCookieCommands] 生成：先清掉受管名字，再写本次值——登出/换账号后
+ * 不能把上一个账号的会话残留在 WebView 里。
+ */
+private fun injectRiskCaptchaCookies(cookie: String) {
+    runCatching {
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        val commands = riskCaptchaCookieCommands(cookie)
+        listOf("https://api.bilibili.com", "https://www.bilibili.com").forEach { url ->
+            commands.forEach { command -> cookieManager.setCookie(url, command) }
+        }
+        cookieManager.flush()
+    }.onFailure {
+        logger.warn { "Inject risk captcha cookie failed: ${it.message}" }
+    }
+}
+
+/**
+ * 构建加载 B 站官方风控 SDK 的 HTML 页面。
+ *
+ * 不再自己用 `gt.js` 拼极验 v3：B 站风控已经改用极验 v4（下发的 `gt` 是 v4 的 captchaId），
+ * 拿它去请求 v3 的 `gettype.php` 只会返回 `captcha not found`，题目永远出不来。
+ * 这里交给官方 `risk-captcha-sdk`：它自己完成 v2 register、v3/v4 选择、结果加密与 validate，
+ * 成功时 Promise 直接 resolve 出 `gaia_vtoken`。
+ */
+private fun buildRiskCaptchaHtml(vVoucher: String): String {
     // 防止参数注入
-    val safeGt = gt.replace("\\", "\\\\").replace("'", "\\'").replace("<", "&lt;")
-    val safeChallenge = challenge.replace("\\", "\\\\").replace("'", "\\'").replace("<", "&lt;")
+    val safeVoucher = vVoucher.replace("\\", "\\\\").replace("'", "\\'").replace("<", "&lt;")
     return """
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <script src="https://static.geetest.com/static/tools/gt.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -716,22 +712,8 @@ private fun buildGeetestHtml(gt: String, challenge: String): String {
       font-family: sans-serif;
       overflow: hidden;
     }
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 4px;
-    }
-    #captcha {
-      width: 100%;
-      min-height: 300px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
     /*
-     * bind 模式会把验证面板按 WebView 视口居中。不能改成 relative：
-     * 极验保留的 top/left 偏移会叠加到普通文档流位置，导致面板下移并被裁切。
+     * bind 模式会把验证面板按 WebView 视口居中，官方 SDK 的 pc 适配也依赖这个定位。
      * 注意：这里依赖极验未公开的类名，极验前端改版后会静默失效（表现为面板被裁切），
      * 遇到该类问题先查这段样式。
      */
@@ -743,7 +725,7 @@ private fun buildGeetestHtml(gt: String, challenge: String): String {
   </style>
 </head>
 <body>
-  <div id="captcha"></div>
+  <script src="https://s1.hdslb.com/bfs/seed/jinkela/risk-captcha-sdk/CaptchaLoader.js"></script>
   <script>
     (function() {
       function notify(msg) {
@@ -752,11 +734,18 @@ private fun buildGeetestHtml(gt: String, challenge: String): String {
       function reportVerificationType(type) {
         try { window.Android.onVerificationType(type); } catch(e) {}
       }
+      function fail(msg) {
+        var text = msg || '未知错误';
+        notify('验证失败：' + text);
+        try { window.Android.onRiskCaptchaFailed(text); } catch(e) {}
+      }
       function findSliderHandle() {
         var selectors = [
           '.geetest_slider_button',
           '[class*="slider_button"]',
-          '[class*="slider-btn"]'
+          '[class*="slider-btn"]',
+          '.geetest_btn',
+          '[class*="geetest_btn"]'
         ];
         for (var i = 0; i < selectors.length; i++) {
           var nodes = document.querySelectorAll(selectors[i]);
@@ -801,52 +790,47 @@ private fun buildGeetestHtml(gt: String, challenge: String): String {
           setTimeout(function() { reportSliderPosition(attempt + 1); }, 100);
         }
       }
-      if (typeof initGeetest !== 'function') {
-        notify('验证码脚本加载失败，请检查网络');
+      // 面板是 SDK 异步渲染的，轮询到面板出现后再开始探测题类并给操作提示
+      function waitForPanel(attempt) {
+        var panel = document.querySelector('.geetest_panel, .geetest_box, .geetest_slide, .geetest_click, [class*="geetest"]');
+        if (panel) {
+          notify('请使用方向键移动光标，确认键点击');
+          reportSliderPosition(0);
+          return;
+        }
+        if (attempt < 100) {
+          setTimeout(function() { waitForPanel(attempt + 1); }, 100);
+        }
+      }
+      if (typeof CaptchaLoader !== 'object' || typeof CaptchaLoader.load !== 'function') {
+        fail('验证码脚本加载失败，请检查网络');
         return;
       }
-      notify('正在初始化验证…');
-      initGeetest({
-        gt: '$safeGt',
-        challenge: '$safeChallenge',
-        new_captcha: true,
-        product: 'bind',
-        offline: false,
-        https: true
-      }, function(captchaObj) {
-        captchaObj.appendTo('#captcha');
-        captchaObj.onReady(function() {
-          try { window.Android.onReady(); } catch(e) {}
-          // 自动弹出验证
-          captchaObj.verify();
-          setTimeout(function() { reportSliderPosition(0); }, 100);
-        });
-        captchaObj.onSuccess(function() {
-          var res = captchaObj.getValidate();
-          if (!res) return;
+      notify('正在加载风控验证…');
+      CaptchaLoader.load()
+        .then(function(useCaptcha) {
+          if (typeof useCaptcha !== 'function') {
+            throw new Error('风控 SDK 初始化失败');
+          }
+          notify('正在初始化验证…');
+          var pending = useCaptcha({
+            riskParams: { v_voucher: '$safeVoucher' },
+            language: 'zh-Hans'
+          });
+          waitForPanel(0);
+          return pending;
+        })
+        .then(function(token) {
+          if (!token) {
+            fail('验证未返回结果');
+            return;
+          }
           notify('验证成功，正在提交…');
-          try {
-            window.Android.onGeetestResult(
-              res.geetest_validate,
-              res.geetest_seccode,
-              res.geetest_challenge
-            );
-          } catch(e) {}
+          try { window.Android.onRiskCaptchaToken(token); } catch(e) {}
+        })
+        .catch(function(e) {
+          fail((e && (e.tip || e.message || e.msg)) || '未知错误');
         });
-        captchaObj.onError(function(e) {
-          notify('验证出错：' + (e && (e.msg || e.error_code) || '未知错误'));
-          // 出错后极验可能重建面板，重新探测把手位置
-          setTimeout(function() { reportSliderPosition(0); }, 300);
-        });
-        captchaObj.onClose(function() {
-          // 极验面板关闭后重新弹出，防止误触关闭
-          notify('验证已关闭，正在重新打开…');
-          setTimeout(function() {
-            captchaObj.verify();
-            reportSliderPosition(0);
-          }, 500);
-        });
-      });
     })();
   </script>
 </body>

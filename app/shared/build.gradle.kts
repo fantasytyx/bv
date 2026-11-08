@@ -154,7 +154,9 @@ dependencies {
     api(project(mapOf("path" to ":utils")))
     api(project(mapOf("path" to ":symbols")))
     testImplementation(androidx.room.testing)
-    testImplementation(libs.kotlin.test)
+    // Android Library 的 unit test 不会为裸 kotlin-test 选到 JUnit 变体（只剩空的 common 变体），
+    // 显式取 JUnit4 变体；它会把 junit:junit 一并带进来
+    testImplementation(kotlin("test-junit"))
     androidTestImplementation(androidx.compose.ui.test.junit4)
     debugApi(androidx.compose.ui.test.manifest)
     debugApi(androidx.compose.ui.tooling)

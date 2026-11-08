@@ -1,15 +1,22 @@
 package dev.aaa1115910.bv.tv.component
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -19,9 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,6 +50,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
@@ -62,6 +69,7 @@ import dev.aaa1115910.biliapi.entity.reply.CommentSort
 import dev.aaa1115910.biliapi.entity.video.season.Episode
 import dev.aaa1115910.biliapi.entity.video.season.Section
 import dev.aaa1115910.biliapi.repositories.CommentRepository
+import dev.aaa1115910.bv.util.ImageSize
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.focusedBorder
 import dev.aaa1115910.bv.util.isDpadDown
@@ -69,13 +77,10 @@ import dev.aaa1115910.bv.util.isDpadLeft
 import dev.aaa1115910.bv.util.isKeyDown
 import dev.aaa1115910.bv.util.onBackPressed
 import dev.aaa1115910.bv.util.requestFocus
+import dev.aaa1115910.bv.util.resizedImageUrl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.getKoin
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import dev.aaa1115910.bv.util.ImageSize
-import dev.aaa1115910.bv.util.resizedImageUrl
 
 /**
  * 评论浮层组件
@@ -114,13 +119,12 @@ fun CommentPanel(
     // 排序方式：默认按热度
     var commentSort by remember { mutableStateOf(CommentSort.Hot) }
 
-    // 子评论浮窗状态
+    // 子评论内容状态（与评论列表共用同一个面板，仅切换内容与宽度）
     var showSubCommentPanel by remember { mutableStateOf(false) }
+    // 打开子评论后一直保留到最后一次收起：内容交叉淡入时旧内容还要用它，不能提前置空
     var selectedRootComment by remember { mutableStateOf<Comment?>(null) }
     var hasRequestedFocus by remember { mutableStateOf(false) }
     var wasSubCommentPanelShown by remember { mutableStateOf(false) }
-    // 从子评论返回主面板时跳过主面板的滑入动画
-    var skipMainPanelEnterAnimation by remember { mutableStateOf(false) }
     var selectedCommentIndex by remember { mutableStateOf(0) }
     var focusedCommentIndex by remember { mutableStateOf(0) }
 
@@ -173,6 +177,11 @@ fun CommentPanel(
     val showSidebar by remember(allEpisodeItems) {
         derivedStateOf { allEpisodeItems.size > 1 }
     }
+
+    // 主评论面板宽度（原 widthIn + fillMaxWidth 组合受约束顺序影响，实际恒取 min）
+    val mainPanelWidth = if (showSidebar) 650.dp else 350.dp
+    // 子评论内容宽度：屏宽的 30%，夹在 350~450dp
+    val subPanelWidth = (LocalConfiguration.current.screenWidthDp * 0.3f).coerceIn(350f, 450f).dp
 
     fun requestFocusToCurrentEpisode() {
         if (!showSidebar) return
@@ -258,22 +267,25 @@ fun CommentPanel(
         if (!show) {
             hasRequestedFocus = false
             wasSubCommentPanelShown = false
-            skipMainPanelEnterAnimation = false
             // 重置边栏焦点状态，确保下次打开时焦点在评论列表
             focusOnSidebar = false
             sidebarFocusRequestToken = 0
             pendingFocusToComments = false
+
+            // 等面板收起动画结束再清空子评论状态，避免收起过程中内容闪切
+            delay(350)
+            showSubCommentPanel = false
+            selectedRootComment = null
         }
     }
 
-    // 显示后请求焦点（初次显示时或子评论浮窗关闭后）
+    // 显示后请求焦点（初次显示时或子评论内容关闭后）
     LaunchedEffect(show, showSubCommentPanel, comments.isNotEmpty(), loading) {
         if (show && !showSubCommentPanel) {
-            // 子评论浮窗刚关闭，恢复进入前的滚动位置并聚焦到之前点击的评论
+            // 子评论内容刚关闭，恢复进入前的滚动位置并聚焦到之前点击的评论
             if (wasSubCommentPanelShown) {
-                // 主面板此时不播滑入动画，无需等动画结束，只要等列表重新组合出目标项
-                if (!skipMainPanelEnterAnimation) delay(300)
-                // 子面板打开期间评论可能已被清空/替换，索引越界时不做恢复
+                // 列表内容只做淡入，不用等动画结束，只要等列表重新组合出目标项
+                // 子评论打开期间评论可能已被清空/替换，索引越界时不做恢复
                 if (selectedCommentIndex in comments.indices) {
                     // 位置未变化时此调用不产生滚动
                     listState.scrollToItem(
@@ -330,326 +342,331 @@ fun CommentPanel(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(onClick = onHide),
+            .clickable {
+                // 子评论内容时点击空白处先回到评论列表，与返回键保持一致
+                if (showSubCommentPanel) showSubCommentPanel = false else onHide()
+            },
         contentAlignment = Alignment.CenterEnd
     ) {
         AnimatedVisibility(
-            visible = show && !showSubCommentPanel,
-            enter = if (skipMainPanelEnterAnimation) {
-                EnterTransition.None
-            } else {
-                expandHorizontally(expandFrom = Alignment.End)
-            },
+            visible = show,
+            enter = expandHorizontally(expandFrom = Alignment.End),
             exit = shrinkHorizontally(shrinkTowards = Alignment.End)
         ) {
+            // 主评论列表与子评论内容共用同一个 Surface：切换时宽度做动画、内容交叉淡入，
+            // 不会出现「一块面板瞬间消失、另一块再出现」的闪烁
+            val targetPanelWidth = if (showSubCommentPanel) subPanelWidth else mainPanelWidth
+            val panelWidth by animateDpAsState(
+                targetValue = targetPanelWidth,
+                animationSpec = tween(durationMillis = 200),
+                label = "CommentPanelWidth"
+            )
             Surface(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .widthIn(
-                        min = if (showSidebar) 650.dp else 350.dp,
-                        max = if (showSidebar) 750.dp else 450.dp
-                    )
-                    .fillMaxWidth(if (showSidebar) 0.5f else 0.3f)
+                    .width(panelWidth)
                     .clickable(enabled = true, onClick = {}) // 阻止点击穿透
                     .onBackPressed {
-                        if (focusOnSidebar && showSidebar) {
+                        when {
+                            // 子评论内容：返回键先回到评论列表
+                            showSubCommentPanel -> showSubCommentPanel = false
                             // 在边栏时按返回键关闭评论面板
-                            onHide()
-                        } else if (showSidebar) {
+                            focusOnSidebar && showSidebar -> onHide()
                             // 在评论列表时按返回键切换到边栏
-                            requestFocusToCurrentEpisode()
-                        } else {
+                            showSidebar -> requestFocusToCurrentEpisode()
                             // 没有边栏时直接关闭
-                            onHide()
+                            else -> onHide()
                         }
                     },
                 colors = SurfaceDefaults.colors(
                     containerColor = Color.Black.copy(alpha = 0.8f)
                 )
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 左侧边栏 - 仅在有多个剧集时显示
-                    if (showSidebar) {
-                        EpisodeSidebar(
-                            episodes = allEpisodeItems,
-                            currentEpisode = currentEpisode,
-                            onEpisodeSelected = { episodeItem ->
-                                currentEpisode = episodeItem.episode
-                                onEpisodeChange?.invoke(episodeItem.episode)
-                                comments.clear()
-                                loadComments(true)
-                                // 切换剧集后将焦点移回评论列表
-                                focusOnSidebar = false
-                                // 标记需要在评论加载完成后请求焦点
-                                pendingFocusToComments = true
-                            },
-                            modifier = Modifier
-                                .width(220.dp)
-                                .fillMaxHeight(),
-                            focusRequester = sidebarFocusRequester,
-                            onFocusMoved = {
-                                // 焦点返回评论列表
-                                focusOnSidebar = false
-                                scope.launch {
-                                    focusRequester.requestFocus(scope)
-                                }
-                            },
-                            focusRequestToken = sidebarFocusRequestToken
+                AnimatedContent(
+                    targetState = showSubCommentPanel,
+                    transitionSpec = {
+                        fadeIn(tween(durationMillis = 150)) togetherWith
+                            fadeOut(tween(durationMillis = 150))
+                    },
+                    label = "CommentPanelContent"
+                ) { subCommentShown ->
+                    val rootComment = selectedRootComment
+                    if (subCommentShown && rootComment != null) {
+                        SubCommentPanelContent(
+                            oid = currentOid,
+                            rootId = rootComment.rpid,
+                            rootComment = rootComment
                         )
-                    }
-
-                    // 右侧评论列表区域
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .onFocusChanged { focusState ->
-                                if (focusState.hasFocus && focusOnSidebar) {
-                                    focusOnSidebar = false
-                                }
-                            },
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // 标题栏
+                    } else {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .fillMaxSize()
+                                .padding(20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = if (commentSort == CommentSort.Hot) "热门评论" else "最新评论",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = Color.White
-                                )
-                                // 操作提示
-                                Text(
-                                    text = if (showSidebar) "左键返回顶部,返回键切换剧集" else "左键返回顶部",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.5f)
-                                )
-                                // 显示当前剧集
-                                if (currentEpisode != null && showSidebar) {
-                                    Text(
-                                        text = generateEpisodeTitle(currentEpisode, ""),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                CommentSortToggle(
-                                    sort = commentSort,
-                                    onToggle = { toggleCommentSort() }
-                                )
-                                Text(
-                                    text = if (comments.isNotEmpty()) "${comments.size} 条" else "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-
-                        // 评论列表
-                        if (error != null) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequester)
-                                    .focusable(),
-                                contentAlignment = Alignment.TopStart
-                            ) {
-                                Text(
-                                    text = error ?: "加载失败",
-                                    color = Color.Red,
+                            // 左侧边栏 - 仅在有多个剧集时显示
+                            if (showSidebar) {
+                                EpisodeSidebar(
+                                    episodes = allEpisodeItems,
+                                    currentEpisode = currentEpisode,
+                                    onEpisodeSelected = { episodeItem ->
+                                        currentEpisode = episodeItem.episode
+                                        onEpisodeChange?.invoke(episodeItem.episode)
+                                        comments.clear()
+                                        loadComments(true)
+                                        // 切换剧集后将焦点移回评论列表
+                                        focusOnSidebar = false
+                                        // 标记需要在评论加载完成后请求焦点
+                                        pendingFocusToComments = true
+                                    },
                                     modifier = Modifier
-                                        .align(Alignment.Center)
-                                        .padding(16.dp)
-                                )
-                            }
-                        } else if (comments.isEmpty() && !loading) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequester)
-                                    .focusable(),
-                                contentAlignment = Alignment.TopStart
-                            ) {
-                                Text(
-                                    text = "暂无评论",
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    modifier = Modifier
-                                        .align(Alignment.Center)
-                                        .padding(16.dp)
-                                )
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequester)
-                                    .onPreviewKeyEvent { event ->
-                                        when {
-                                            // 左键：第一条时转移焦点到左侧边栏，否则返回顶部
-                                            event.isKeyDown() && event.isDpadLeft() -> {
-                                                if (focusedCommentIndex == 0 && showSidebar) {
-                                                    requestFocusToCurrentEpisode()
-                                                } else {
-                                                    scope.launch {
-                                                        listState.scrollToItem(0)
-                                                        delay(100)
-                                                        focusRequester.requestFocus(scope)
-                                                    }
-                                                }
-                                                true
-                                            }
-                                            // 下键：逐步滚动，在列表末尾时阻止焦点移出
-                                            event.isKeyDown() && event.isDpadDown() -> {
-                                                val layoutInfo = listState.layoutInfo
-
-                                                // 已聚焦到最后一条评论时，阻止焦点移出列表
-                                                if (focusedCommentIndex >= comments.size - 1 && comments.isNotEmpty()) {
-                                                    true
-                                                } else {
-                                                    val currentItemInfo = layoutInfo.visibleItemsInfo
-                                                        .firstOrNull { it.index == focusedCommentIndex }
-
-                                                    if (currentItemInfo != null) {
-                                                        val viewportEnd = layoutInfo.viewportEndOffset
-                                                        val itemBottom = currentItemInfo.offset + currentItemInfo.size
-
-                                                        // 如果评论底部不可见，逐步滚动
-                                                        if (itemBottom > viewportEnd) {
-                                                            scope.launch {
-                                                                // 每次滚动约 100dp
-                                                                val scrollAmount = with(density) { 100.dp.toPx() }
-                                                                listState.animateScrollBy(scrollAmount)
-                                                            }
-                                                            true // 拦截事件，不允许焦点转移
-                                                        } else {
-                                                            false // 评论已完全可见，允许焦点转移
-                                                        }
-                                                    } else {
-                                                        false
-                                                    }
-                                                }
-                                            }
-                                            else -> false
+                                        .width(220.dp)
+                                        .fillMaxHeight(),
+                                    focusRequester = sidebarFocusRequester,
+                                    onFocusMoved = {
+                                        // 焦点返回评论列表
+                                        focusOnSidebar = false
+                                        scope.launch {
+                                            focusRequester.requestFocus(scope)
                                         }
                                     },
-                            state = listState,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(
-                                items = comments,
-                                key = { index, it -> "$index-comment-${it.rpid}" }
-                            ) { index, comment ->
-                                CommentItem(
-                                    comment = comment,
+                                    focusRequestToken = sidebarFocusRequestToken
+                                )
+                            }
+
+                            // 右侧评论列表区域
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .onFocusChanged { focusState ->
+                                        if (focusState.hasFocus && focusOnSidebar) {
+                                            focusOnSidebar = false
+                                        }
+                                    },
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // 标题栏
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .then(
-                                            if (index == selectedCommentIndex) {
-                                                Modifier.focusRequester(selectedCommentFocusRequester)
-                                            } else Modifier
-                                        )
-                                        .onFocusChanged { focusState ->
-                                            if (focusState.hasFocus) {
-                                                focusedCommentIndex = index
-                                            }
-                                        },
-                                    onClick = {
-                                        // 只有有子评论时才能点击打开子评论浮窗
-                                        if (comment.repliesCount > 0) {
-                                            selectedCommentIndex = index
-                                            // 记住当前滚动位置，返回时恢复
-                                            savedScrollIndex = listState.firstVisibleItemIndex
-                                            savedScrollOffset = listState.firstVisibleItemScrollOffset
-                                            selectedRootComment = comment
-                                            showSubCommentPanel = true
-                                        }
-                                    },
-                                    onLongClick = {
-                                        // 如果发现评论带链接（可能有多个链接）
-                                        // 把链接转成二维码图片（二维码图片底部显示二维码内容、也就是链接文本）
-                                        // 拼接comment.pictures和二维码图片,comment.pictures在前面
-                                        val result = getDisplayPictures(context, comment)
-                                        if (result.pictures.isNotEmpty()) {
-                                            imageViewerPictures = result.pictures
-                                            imageViewerBitmaps = result.bitmapOverrides
-                                            showImageViewer = true
-                                        }
-                                    }
-                                )
-                            }
-
-                            // 加载状态
-                            if (loading) {
-                                item {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        horizontalArrangement = Arrangement.Center
+                                        .padding(bottom = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        LoadingTip()
+                                        Text(
+                                            text = if (commentSort == CommentSort.Hot) "热门评论" else "最新评论",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            color = Color.White
+                                        )
+                                        // 操作提示
+                                        Text(
+                                            text = if (showSidebar) "左键返回顶部,返回键切换剧集" else "左键返回顶部",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.5f)
+                                        )
+                                        // 显示当前剧集
+                                        if (currentEpisode != null && showSidebar) {
+                                            Text(
+                                                text = generateEpisodeTitle(currentEpisode, ""),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        CommentSortToggle(
+                                            sort = commentSort,
+                                            onToggle = { toggleCommentSort() }
+                                        )
+                                        Text(
+                                            text = if (comments.isNotEmpty()) "${comments.size} 条" else "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+
+                                // 评论列表
+                                if (error != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .focusRequester(focusRequester)
+                                            .focusable(),
+                                        contentAlignment = Alignment.TopStart
+                                    ) {
+                                        Text(
+                                            text = error ?: "加载失败",
+                                            color = Color.Red,
+                                            modifier = Modifier
+                                                .align(Alignment.Center)
+                                                .padding(16.dp)
+                                        )
+                                    }
+                                } else if (comments.isEmpty() && !loading) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .focusRequester(focusRequester)
+                                            .focusable(),
+                                        contentAlignment = Alignment.TopStart
+                                    ) {
+                                        Text(
+                                            text = "暂无评论",
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            modifier = Modifier
+                                                .align(Alignment.Center)
+                                                .padding(16.dp)
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth()
+                                            .focusRequester(focusRequester)
+                                            .onPreviewKeyEvent { event ->
+                                                when {
+                                                    // 左键：第一条时转移焦点到左侧边栏，否则返回顶部
+                                                    event.isKeyDown() && event.isDpadLeft() -> {
+                                                        if (focusedCommentIndex == 0 && showSidebar) {
+                                                            requestFocusToCurrentEpisode()
+                                                        } else {
+                                                            scope.launch {
+                                                                listState.scrollToItem(0)
+                                                                delay(100)
+                                                                focusRequester.requestFocus(scope)
+                                                            }
+                                                        }
+                                                        true
+                                                    }
+                                                    // 下键：逐步滚动，在列表末尾时阻止焦点移出
+                                                    event.isKeyDown() && event.isDpadDown() -> {
+                                                        val layoutInfo = listState.layoutInfo
+
+                                                        // 已聚焦到最后一条评论时，阻止焦点移出列表
+                                                        if (focusedCommentIndex >= comments.size - 1 && comments.isNotEmpty()) {
+                                                            true
+                                                        } else {
+                                                            val currentItemInfo = layoutInfo.visibleItemsInfo
+                                                                .firstOrNull { it.index == focusedCommentIndex }
+
+                                                            if (currentItemInfo != null) {
+                                                                val viewportEnd = layoutInfo.viewportEndOffset
+                                                                val itemBottom = currentItemInfo.offset + currentItemInfo.size
+
+                                                                // 如果评论底部不可见，逐步滚动
+                                                                if (itemBottom > viewportEnd) {
+                                                                    scope.launch {
+                                                                        // 每次滚动约 100dp
+                                                                        val scrollAmount = with(density) { 100.dp.toPx() }
+                                                                        listState.animateScrollBy(scrollAmount)
+                                                                    }
+                                                                    true // 拦截事件，不允许焦点转移
+                                                                } else {
+                                                                    false // 评论已完全可见，允许焦点转移
+                                                                }
+                                                            } else {
+                                                                false
+                                                            }
+                                                        }
+                                                    }
+                                                    else -> false
+                                                }
+                                            },
+                                    state = listState,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = comments,
+                                        key = { index, it -> "$index-comment-${it.rpid}" }
+                                    ) { index, comment ->
+                                        CommentItem(
+                                            comment = comment,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .then(
+                                                    if (index == selectedCommentIndex) {
+                                                        Modifier.focusRequester(selectedCommentFocusRequester)
+                                                    } else Modifier
+                                                )
+                                                .onFocusChanged { focusState ->
+                                                    if (focusState.hasFocus) {
+                                                        focusedCommentIndex = index
+                                                    }
+                                                },
+                                            onClick = {
+                                                // 只有有子评论时才能点击打开子评论浮窗
+                                                if (comment.repliesCount > 0) {
+                                                    selectedCommentIndex = index
+                                                    // 记住当前滚动位置，返回时恢复
+                                                    savedScrollIndex = listState.firstVisibleItemIndex
+                                                    savedScrollOffset = listState.firstVisibleItemScrollOffset
+                                                    selectedRootComment = comment
+                                                    showSubCommentPanel = true
+                                                }
+                                            },
+                                            onLongClick = {
+                                                // 如果发现评论带链接（可能有多个链接）
+                                                // 把链接转成二维码图片（二维码图片底部显示二维码内容、也就是链接文本）
+                                                // 拼接comment.pictures和二维码图片,comment.pictures在前面
+                                                val result = getDisplayPictures(context, comment)
+                                                if (result.pictures.isNotEmpty()) {
+                                                    imageViewerPictures = result.pictures
+                                                    imageViewerBitmaps = result.bitmapOverrides
+                                                    showImageViewer = true
+                                                }
+                                            }
+                                        )
+                                    }
+
+                                    // 加载状态
+                                    if (loading) {
+                                        item {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                LoadingTip()
+                                            }
+                                        }
+                                    }
+
+                                    // 没有更多了
+                                    if (!hasNext && comments.isNotEmpty()) {
+                                        item {
+                                            Text(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                text = "没有更多评论了",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White.copy(alpha = 0.5f)
+                                            )
+                                        }
                                     }
                                 }
                             }
 
-                            // 没有更多了
-                            if (!hasNext && comments.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        text = "没有更多评论了",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White.copy(alpha = 0.5f)
-                                    )
-                                }
-                            }
+                            // 底部提示
+                            Spacer(modifier = Modifier.height(8.dp))
+                            } // Column (右侧评论列表区域) 结束
                         }
                     }
-
-                    // 底部提示
-                    Spacer(modifier = Modifier.height(8.dp))
-                } // Column (右侧评论列表区域) 结束
-            } // Row 结束
-        } // Surface 结束
-        } // AnimatedVisibility 结束
-    } // Box 结束
-
-    // 子评论浮窗
-    if (selectedRootComment != null) {
-        SubCommentPanel(
-            show = showSubCommentPanel,
-            oid = currentOid,
-            rootId = selectedRootComment!!.rpid,
-            rootComment = selectedRootComment!!,
-            onHide = {
-                // 需与下一行同帧写入：AnimatedVisibility 在可见性翻转那一帧读取 enter
-                skipMainPanelEnterAnimation = true
-                showSubCommentPanel = false
-                selectedRootComment = null
+                }
             }
-        )
+        }
     }
 
     // 全屏图片查看器

@@ -3,8 +3,8 @@ package dev.aaa1115910.bv.util
 import dev.aaa1115910.biliapi.http.BiliHttpApi
 import dev.aaa1115910.biliapi.repositories.AuthRepository
 
-/** gaia vgate register 下发的极验参数 */
-internal data class GeetestChallengeData(
+/** gaia vgate register 下发的极验参数（v1/legacy 流程用；TV 端已改用 WebView 内官方风控 SDK） */
+data class GeetestChallengeData(
     val gt: String,
     val challenge: String,
 )
@@ -13,7 +13,8 @@ internal data class GeetestChallengeData(
 internal sealed interface GeetestSubmitResult {
     /** 回传的 challenge 与本次注册不一致，对应的 token 已被服务端丢弃 */
     data class StaleChallenge(val expected: String, val actual: String) : GeetestSubmitResult
-    data object Success : GeetestSubmitResult
+    /** 验证通过；[token] 为可直接使用的 gaia_vtoken（即 grisk_id） */
+    data class Success(val token: String) : GeetestSubmitResult
     data class Failure(val message: String, val cause: Throwable) : GeetestSubmitResult
 }
 
@@ -80,7 +81,7 @@ internal class GeetestSession(private val authRepository: AuthRepository) {
                 error("grisk_id 为空")
             }
             authRepository.gaiaVtoken = griskId
-            GeetestSubmitResult.Success
+            GeetestSubmitResult.Success(griskId)
         }.getOrElse { GeetestSubmitResult.Failure(it.localizedMessage ?: "未知错误", it) }
     }
 

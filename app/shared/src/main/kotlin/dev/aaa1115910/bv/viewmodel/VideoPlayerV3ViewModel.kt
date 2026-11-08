@@ -58,9 +58,11 @@ import dev.aaa1115910.bv.player.entity.VideoRotation
 import dev.aaa1115910.bv.player.entity.toAudioLoudness
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.util.CdnSpeedStore
+import dev.aaa1115910.bv.util.GeetestChallengeData
 import dev.aaa1115910.bv.util.GeetestSession
 import dev.aaa1115910.bv.util.GeetestSubmitResult
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.RiskCaptchaSession
 import dev.aaa1115910.bv.util.VVoucherAlreadyAttemptedException
 import dev.aaa1115910.bv.util.fError
 import dev.aaa1115910.bv.util.fException
@@ -355,12 +357,14 @@ class VideoPlayerV3ViewModel(
     /** 加载会话号：每次 [stopDanmakuSegmentLoading] +1，用来判断在途请求的占位是否还属于当前会话 */
     private var danmakuSegmentGeneration = 0
 
-    // 风控 Geetest 验证状态
-    var showGeetestDialog by mutableStateOf(false)
-    var geetestGt by mutableStateOf("")
-    var geetestChallenge by mutableStateOf("")
-    private var pendingRetryRequest: GeetestRetryRequest? = null
-    // v_voucher 是一次性凭证，会话内部保证同一个 voucher 只注册一次，避免重复弹窗死循环
+    // 风控验证：只发布"待验证凭证"，具体弹什么由屏幕决定（TV = WebView 官方 SDK，移动端 = GT3）
+    private val riskCaptcha = RiskCaptchaSession<GeetestRetryRequest>()
+
+    /** 待验证的一次性 v_voucher；非 null 时界面应展示风控验证弹窗 */
+    val riskCaptchaVoucher: String?
+        get() = riskCaptcha.request?.vVoucher
+
+    // legacy（v1 register / GT3）只在移动端弹窗惰性申请题目时用到，会话内部保证同一 voucher 只注册一次
     private val geetestSession = GeetestSession(authRepository)
     private val loadedDanmakuSegmentCounts = mutableMapOf<Int, Int>()
     var currentLoadedDanmakuTotal by mutableIntStateOf(0)
@@ -522,6 +526,8 @@ class VideoPlayerV3ViewModel(
     ) {
         showInteractiveOptionDialog = false
         pendingInitialSeekPositionMs = initialSeekPositionMs
+        // 用户主动切视频：重置风控验证的次数预算
+        riskCaptcha.resetBudget()
         if (continuePlayNext) {
             lastPlayed = 0
         }
@@ -896,93 +902,146 @@ class VideoPlayerV3ViewModel(
             }?.toLong()
     }
 
+    /**
+     * 被风控：只登记"待验证凭证 + 重试快照"。
+     *
+     * 用哪种验证方式（WebView 官方风控 SDK / GT3）由屏幕组合的弹窗决定，这里不区分。
+     */
     private suspend fun handleVVoucher(
         vVoucher: String,
         retryRequest: GeetestRetryRequest,
     ) {
-        runCatchingCancellable {
-            val challenge = geetestSession.start(vVoucher)
+        val started = withContext(Dispatchers.Main) { riskCaptcha.begin(vVoucher, retryRequest) }
+        if (!started) {
+            // 同一次播放里验证通过后仍被风控，说明服务端不接受这个 token；继续弹窗只会死循环
+            addLogs("风控验证未生效，请稍后重试")
             withContext(Dispatchers.Main) {
-                pendingRetryRequest = retryRequest
-                geetestGt = challenge.gt
-                geetestChallenge = challenge.challenge
-                showGeetestDialog = true
-            }
-            addLogs("请完成人机验证")
-        }.onFailure {
-            if (it is VVoucherAlreadyAttemptedException) {
-                logger.fWarn { "Skip duplicated Geetest verification: ${it.message}" }
-                addLogs("风控验证已申请过，跳过重复弹窗")
-                withContext(Dispatchers.Main) {
-                    errorMessage = "风控验证申请已提交，请稍后重试"
-                    loadState = RequestState.Failed
-                }
-                return@onFailure
-            }
-            addLogs("风控验证申请失败：${it.localizedMessage}")
-            withContext(Dispatchers.Main) {
-                errorMessage = "风控验证申请失败：${it.localizedMessage}"
+                errorMessage = "风控验证未生效，请稍后重试"
                 loadState = RequestState.Failed
             }
-            logger.fException(it) { "gaiaVgateRegister failed" }
+            return
+        }
+        addLogs("请完成人机验证")
+    }
+
+    /**
+     * legacy（GT3 弹窗）的题目申请：拿当前待验证凭证去 v1 register。
+     *
+     * 只有移动端会调用——TV 端由 WebView 里的官方风控 SDK 自己 register（提前 register 会消耗掉
+     * 一次性的 v_voucher）。返回 null 表示无法发起验证，失败文案已写进 [errorMessage]。
+     */
+    suspend fun requestLegacyGeetest(): GeetestChallengeData? {
+        val voucher = riskCaptcha.request?.vVoucher ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatchingCancellable { geetestSession.start(voucher) }.getOrElse { error ->
+                if (error is VVoucherAlreadyAttemptedException) {
+                    logger.fWarn { "Skip duplicated Geetest verification: ${error.message}" }
+                    addLogs("风控验证已申请过，跳过重复弹窗")
+                    withContext(Dispatchers.Main) {
+                        riskCaptcha.cancel()
+                        errorMessage = "风控验证申请已提交，请稍后重试"
+                        loadState = RequestState.Failed
+                    }
+                } else {
+                    logger.fException(error) { "gaiaVgateRegister failed" }
+                    addLogs("风控验证申请失败：${error.localizedMessage}")
+                    withContext(Dispatchers.Main) {
+                        riskCaptcha.cancel()
+                        errorMessage = "风控验证申请失败：${error.localizedMessage}"
+                        loadState = RequestState.Failed
+                    }
+                }
+                null
+            }
         }
     }
 
+    /** legacy（GT3 弹窗）的验证结果：提交成功后与 WebView 通道汇合到 [onRiskCaptchaVerified] */
     fun onGeetestResult(challenge: String, validate: String, seccode: String) {
-        val retryRequest = pendingRetryRequest ?: return
+        if (riskCaptcha.request == null) {
+            logger.fWarn { "Ignore legacy geetest result: no pending request" }
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             when (val result = geetestSession.submit(challenge, validate, seccode)) {
+                is GeetestSubmitResult.Success -> withContext(Dispatchers.Main) {
+                    onRiskCaptchaVerified(result.token)
+                }
+
                 is GeetestSubmitResult.StaleChallenge -> withContext(Dispatchers.Main) {
                     // 失败重试后极验会回传另一个 challenge，其 token 已被服务端丢弃，提交必然失败
                     logger.fWarn {
                         "Ignore stale Geetest result: expected=${result.expected.take(8)} actual=${result.actual.take(8)}"
                     }
                     // 静默丢弃会让弹窗停在"正在提交…"且无出路，这里直接给出可见失败反馈
+                    riskCaptcha.cancel()
+                    geetestSession.clear()
                     addLogs("人机验证信息已失效，请重新验证")
                     errorMessage = "人机验证信息已失效，请重新验证"
                     loadState = RequestState.Failed
-                    clearGeetestState()
                 }
 
                 is GeetestSubmitResult.Failure -> {
-                    addLogs("风控验证失败：${result.message}")
                     logger.fException(result.cause) { "gaiaVgateValidate failed" }
-                    withContext(Dispatchers.Main) {
-                        errorMessage = "风控验证失败：${result.message}"
-                        loadState = RequestState.Failed
-                        clearGeetestState()
-                    }
-                }
-
-                GeetestSubmitResult.Success -> {
-                    withContext(Dispatchers.Main) { clearGeetestState() }
-                    addLogs("风控验证通过")
-                    logger.fInfo { "Gaia vgate validate success, retrying play url" }
-                    if (!isCurrentGeetestPlaybackSession(retryRequest)) {
-                        logger.fDebug { "Skip Geetest retry: playback session changed" }
-                        return@launch
-                    }
-                    loadPlayUrl(
-                        avid = retryRequest.avid,
-                        cid = retryRequest.cid,
-                        epid = retryRequest.epid,
-                        proxyArea = retryRequest.proxyArea,
-                        initialSeekPositionMs = retryRequest.initialSeekPositionMs,
-                    )
+                    onRiskCaptchaFailed(result.message)
                 }
             }
         }
     }
 
-    private fun clearGeetestState() {
-        showGeetestDialog = false
-        pendingRetryRequest = null
+    /**
+     * 风控验证成功：两条通道（WebView 官方 SDK / GT3）最终都走这里。
+     *
+     * @param token 可直接使用的 gaia_vtoken（legacy 流程里就是 grisk_id）
+     */
+    fun onRiskCaptchaVerified(token: String) {
+        val vToken = token.trim()
+        if (vToken.isEmpty()) {
+            onRiskCaptchaFailed("验证结果为空")
+            return
+        }
+        val retryRequest = riskCaptcha.consume()
+        if (retryRequest == null) {
+            logger.fWarn { "Ignore risk captcha token: no pending request" }
+            return
+        }
         geetestSession.clear()
+        authRepository.gaiaVtoken = vToken
+        viewModelScope.launch(Dispatchers.IO) {
+            addLogs("风控验证通过")
+            logger.fInfo { "Risk captcha verified, retrying play url" }
+            if (!isCurrentGeetestPlaybackSession(retryRequest)) {
+                logger.fDebug { "Skip risk captcha retry: playback session changed" }
+                return@launch
+            }
+            loadPlayUrl(
+                avid = retryRequest.avid,
+                cid = retryRequest.cid,
+                epid = retryRequest.epid,
+                proxyArea = retryRequest.proxyArea,
+                initialSeekPositionMs = retryRequest.initialSeekPositionMs,
+            )
+        }
     }
 
-    fun onGeetestCancelled() {
-        val retryRequest = pendingRetryRequest
-        clearGeetestState()
+    /** 风控验证失败/被关闭：清掉待验证状态并给出可见失败 */
+    fun onRiskCaptchaFailed(message: String) {
+        logger.fWarn { "Risk captcha failed: $message" }
+        riskCaptcha.cancel()
+        geetestSession.clear()
+        viewModelScope.launch(Dispatchers.IO) {
+            addLogs("风控验证失败：$message")
+            withContext(Dispatchers.Main) {
+                errorMessage = "风控验证失败：$message"
+                loadState = RequestState.Failed
+            }
+        }
+    }
+
+    fun onRiskCaptchaCancelled() {
+        val retryRequest = riskCaptcha.request?.retry
+        riskCaptcha.cancel()
+        geetestSession.clear()
         viewModelScope.launch {
             addLogs("用户取消了风控验证")
         }

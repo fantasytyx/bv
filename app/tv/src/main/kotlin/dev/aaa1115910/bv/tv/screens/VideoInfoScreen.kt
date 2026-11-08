@@ -520,6 +520,7 @@ fun VideoInfoScreen(
                 }
 
                 runCatching {
+                    // 风控验证由本屏幕组合的弹窗负责，ViewModel 只发布待验证凭证
                     videoDetailViewModel.loadDetail(aid, fromSeason)
                     // 首次加载被风控拦截时 loadDetail 会静默返回并弹出验证弹窗，
                     // videoDetail 仍为 null，此时不能继续，收尾与自动起播由验证通过后的重试补跑
@@ -1149,26 +1150,15 @@ fun VideoInfoScreen(
         }
     }
 
-    // 风控 Geetest 验证弹窗（TV 遥控器十字光标 + WebView）
-    if (videoDetailViewModel.showGeetestDialog) {
-        // WebView 只在首次组合时创建，challenge 变化时必须重建，否则用户解的是旧题
-        key(
-            videoDetailViewModel.geetestGt,
-            videoDetailViewModel.geetestChallenge,
-        ) {
+    // 风控验证弹窗（TV 遥控器十字光标 + 内嵌 B 站官方风控 SDK）：有凭证就弹，用哪种验证由本屏幕决定
+    videoDetailViewModel.riskCaptchaVoucher?.let { voucher ->
+        // WebView 只在首次组合时创建，v_voucher 变化时必须重建，否则用户解的是旧题
+        key(voucher) {
             GeetestTvVerifyDialog(
-                gt = videoDetailViewModel.geetestGt,
-                challenge = videoDetailViewModel.geetestChallenge,
-                onResult = { result ->
-                    videoDetailViewModel.onGeetestResult(
-                        challenge = result.challenge,
-                        validate = result.validate,
-                        seccode = result.seccode,
-                    )
-                },
-                onDismiss = {
-                    videoDetailViewModel.onGeetestCancelled()
-                },
+                vVoucher = voucher,
+                onVerified = videoDetailViewModel::onRiskCaptchaVerified,
+                onFailed = videoDetailViewModel::onRiskCaptchaFailed,
+                onDismiss = videoDetailViewModel::onRiskCaptchaCancelled,
             )
         }
     }

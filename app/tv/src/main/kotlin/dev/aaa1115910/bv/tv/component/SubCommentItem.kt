@@ -142,15 +142,18 @@ fun SubCommentItem(
  *
  * @param comment 评论数据
  * @param onLongClick 长按回调
+ * @param modifier 外部修饰符
+ * @param focusRequester 外部焦点请求器（进入子评论时立即聚焦到这里）
  */
 @Composable
 fun SubCommentRootItem(
     comment: Comment,
-    onLongClick: () -> Unit = {}
+    onLongClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester = remember { FocusRequester() }
 ) {
     var expanded by remember { mutableStateOf(false) }
     var contentExceedsLimit by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -158,7 +161,7 @@ fun SubCommentRootItem(
     Surface(
         onClick = { /* 右键展开/收起 */ },
         onLongClick = onLongClick,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { event ->

@@ -138,6 +138,7 @@ BV（B 站第三方 Android 客户端），fork 自 [aaa1115910/bv](https://gith
 B 站对**未登录 Web 请求**风控最严。改 `bili-api` 的请求形态或极验 UI 前，先看这几条：
 
 - **流程链**：接口返回 `v_voucher`（`code=0` 或 `-352` 且 `data.v_voucher` 非空）→ `POST /x/gaia-vgate/v1/register` 换极验 `gt`/`challenge` → 用户过极验 → `POST /x/gaia-vgate/v1/validate` 换 `grisk_id`（存 `AuthRepository.gaiaVtoken`）→ 带 `gaia_vtoken` / `x-bili-gaia-vtoken` 重试原请求。`v_voucher` 是**一次性**凭证，见 [GeetestChallenge.kt](app/shared/src/main/kotlin/dev/aaa1115910/bv/util/GeetestChallenge.kt)
+- **B 站风控已改用极验 v4**，`gt` 是 v4 的 `captchaId`：拿它去请求 v3 的 `gettype.php` 只会返回 `{"status":"error","error":"captcha not found"}`（面板永远加载不出来，`GeetestTvVerifyDialog` 里显示成"验证失败：captcha not found"）。B 站网页侧对 `v_voucher` 走的是 `/x/gaia-vgate/v2/register`（响应 `data.content` 加密）+ `v2/validate`（body 加密），所以 TV 端**不再自己拼 v3 页面**，而是内嵌官方 `risk-captcha-sdk/CaptchaLoader.js`：`CaptchaLoader.load()` → `useCaptcha({riskParams:{v_voucher}})`，Promise 直接 resolve 出 `gaia_vtoken`。走这条路时**不能再调用 v1 register**（会提前消耗 voucher）。验证方式由**屏幕组合的弹窗**决定：ViewModel 只发布 `riskCaptchaVoucher`、收 `onRiskCaptchaVerified(token)`（见 `RiskCaptchaSession`）；TV 组合 `GeetestTvVerifyDialog`，移动端组合 GT3 宿主并用 `requestLegacyGeetest()` 惰性 register。弹窗自己把 Cookie 同步进 WebView（`riskCaptchaCookieCommands`，先清理再写入，避免登出后残留旧 `SESSDATA`）
 - **极验 `product: 'bind'` 可能下发点击，也可能下发滑块**。滑块必须发 `DOWN → MOVE → UP`，只发一次点击永远过不了
 - **未登录播放**走 `/x/player/wbi/playurl`，并带 `dm_img_list` / `dm_img_str` / `dm_cover_img_str` / `dm_img_inter` 与 `web_location` / `gaia_source` / `isGaiaAvoided`。**不要**给普通游客带 `try_look`——那是"未登录索取受限清晰度"的绕过参数，只在付费视频试看兜底时用；且它只在非 wbi 端点生效
 - **PGC 播放地址**走 `/ogv/player/playview`（`bili-api` 的 `getOgvVideoPlayUrl`），固定 `biz_type=ogv` / `scene=normal` / `version_name=4.10.2` / `app_id=100`；`season_id` 可选（只给 `ep_id` 也能解析，响应会回带），需 wbi 签名（已加进 `encApiSign` 的 `isWbiRequest`），且**缺 `buvid3` cookie 会直接返回 `-400`**
@@ -156,7 +157,7 @@ B 站对**未登录 Web 请求**风控最严。改 `bili-api` 的请求形态或
 
 - **改动前先判定目标端**：TV 入口在 `app/tv`，Mobile 入口在 `app/mobile`，两端的 UI/交互是各自实现的。用户说"TV 版"时默认只改 `app/tv` 与共享层，不要顺手动 `app/mobile`；另一端的对应实现只在明确要求时改
 - **TV 遥控：长按 ≠ 单击**，不要用时间阈值区分（"弹窗后 400ms 内忽略点击"这类改法会被否掉——超过阈值再松手仍会误触发，且手感变差）。按按键序列判断：长按的 `isLongPress` KeyDown repeat 与随后那次 KeyUp 必须成对处理，"跳过下一个 KeyUp"的标记要在**同一个键**的 KeyUp 上无条件清除，不能只在某个条件分支里清——残留标记会吞掉下一次真实按键，此处已回归过一次。涉及 `VideoPlayerV3Screen.kt`（`skipNextKeyUpCancel`）、`VideoPlayerController.kt`、长按卡片弹出的操作菜单时，先枚举「长按中 / 松手 / 无倒计时」三种组合
-- 极验/风控 UI 有**三处**实现，别只找到一处就下结论：`app/mobile` 的 `LoginScreen`、移动端播放页（内联官方 Sensebot SDK）、`app/tv` 的 `GeetestTvVerifyDialog`（自绘 WebView）+ `SmsLoginContent`
+- 极验/风控 UI 有**三处**实现，别只找到一处就下结论：`app/mobile` 的 `LoginScreen`、移动端播放页（内联官方 Sensebot SDK，仍是 v3，遇到 v4 题目会失败）、`app/tv` 的 `GeetestTvVerifyDialog`（自绘 WebView，内嵌 B 站官方风控 SDK）+ `SmsLoginContent`
 - Kotlin 代码风格 `official`（已在 `gradle.properties` 配置）
 - `nonTransitiveRClass=true` 已启用
 - Compose Compiler Reports 输出到 `build/compose_build_reports`
@@ -167,7 +168,7 @@ B 站对**未登录 Web 请求**风控最严。改 `bili-api` 的请求形态或
 ## 常见坑
 
 - 修改 `AppConfiguration` 的版本号常量会立即影响所有变体，无需同步其他文件
-- 升级 AndroidX 前先确认 minSdk 上限：Compose 1.12+、Navigation 2.10+、WebKit 1.16+、Material3 alpha19+ 都要求 **minSdk 24**，本项目 minSdk 23 只能停在 Compose 1.11.x / Material3 1.5.0-alpha18；Compose 1.13+ 还需要预览版 `android-37.1`（本机只有 `android-37.0`）
+- 升级 AndroidX 前先确认 minSdk 上限（以下 minSdk 已用 AAR manifest 逐个核过）：**Compose 1.12.x 仍是 minSdk 23**（1.13 起才是 24）；**Material3 最后支持 minSdk 23 的是 `1.5.0-alpha25`**（alpha26+ 为 24）；Navigation 2.10+、WebKit 1.16+ 需 24；tv-material 最新就是 1.1.0、tv-foundation 最新是 1.0.0（无需再找新版）。Compose 1.13+ 还需要预览版 `android-37.1`（本机只有 `android-37.0`）
 - 调整 protobuf 后必须确认 `ProtobufConfiguration.usedProtoFiles` 同步更新，否则会被静默排除
 - Koin：新增 `@Module` 类要一并加 `@Configuration`，否则 `@KoinApplication`（`BVKoinApp`）不会跨 Gradle 模块发现它；`@KoinViewModel` 的包是 `org.koin.core.annotation`
 - 弹幕引擎改动需同时关注 `player/mobile` 和 `player/tv` 两端的 `BvPlayer.kt`（分别集成 `DanmakuView` 和 `DanmakuLayer`）

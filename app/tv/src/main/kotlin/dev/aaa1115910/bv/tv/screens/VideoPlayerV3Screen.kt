@@ -1160,7 +1160,7 @@ fun VideoPlayerV3Screen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .scale(1.1f)
+                                    .scale(1.15f)
                                     .background(Color.Black.copy(alpha = 0.6f)),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1304,26 +1304,15 @@ fun VideoPlayerV3Screen(
                 onlineCount = playerViewModel.liveOnlineCount
             )
 
-            // 风控 Geetest 验证弹窗（TV 遥控器十字光标 + WebView）
-            if (playerViewModel.showGeetestDialog) {
-                // WebView 只在首次组合时创建，challenge 变化时必须重建，否则用户解的是旧题
-                key(
-                    playerViewModel.geetestGt,
-                    playerViewModel.geetestChallenge,
-                ) {
+            // 风控验证弹窗（TV 遥控器十字光标 + 内嵌 B 站官方风控 SDK）：有凭证就弹，用哪种验证由本屏幕决定
+            playerViewModel.riskCaptchaVoucher?.let { voucher ->
+                // WebView 只在首次组合时创建，v_voucher 变化时必须重建，否则用户解的是旧题
+                key(voucher) {
                     GeetestTvVerifyDialog(
-                        gt = playerViewModel.geetestGt,
-                        challenge = playerViewModel.geetestChallenge,
-                        onResult = { result ->
-                            playerViewModel.onGeetestResult(
-                                challenge = result.challenge,
-                                validate = result.validate,
-                                seccode = result.seccode,
-                            )
-                        },
-                        onDismiss = {
-                            playerViewModel.onGeetestCancelled()
-                        },
+                        vVoucher = voucher,
+                        onVerified = playerViewModel::onRiskCaptchaVerified,
+                        onFailed = playerViewModel::onRiskCaptchaFailed,
+                        onDismiss = playerViewModel::onRiskCaptchaCancelled,
                     )
                 }
             }

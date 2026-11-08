@@ -68,7 +68,7 @@ fun SeasonCard(
         ),
         tonalElevation = 8.dp,
         shape = ClickableSurfaceDefaults.shape(shape = MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1.04f),
+        scale = ClickableSurfaceDefaults.scale(scale = 1f, focusedScale = 1f),
         border = ClickableSurfaceDefaults.border(
             border = Border(
                 BorderStroke(width = 1.dp, color = MaterialTheme.colorScheme.border.copy(0.05f))
