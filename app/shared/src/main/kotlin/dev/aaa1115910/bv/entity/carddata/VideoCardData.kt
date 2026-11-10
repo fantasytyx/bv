@@ -1,5 +1,7 @@
 package dev.aaa1115910.bv.entity.carddata
 
+import dev.aaa1115910.biliapi.entity.FavoriteItemType
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.util.formatHourMinSec
 import java.text.SimpleDateFormat
 
@@ -23,10 +25,13 @@ data class VideoCardData(
     val pubTime: String? = null,
     val historyBusiness: String? = null,
     val historyKid: Long? = null,
+    val historyBadgeText: String = "",
     // var pubTimeString: String = "",
     val isInteractive: Boolean = false,
     val isChargingArc: Boolean = false,
-    val badgeText: String = ""
+    val badgeText: String = "",
+    val favoriteItemType: FavoriteItemType = FavoriteItemType.Video,
+    val pgcTypeName: String? = null
 ) {
     val coverBadges: List<String>
         get() = listOfNotNull(
@@ -35,8 +40,13 @@ data class VideoCardData(
                 isChargingArc && badgeText.isNotBlank() -> "⚡$badgeText"
                 isChargingArc -> "⚡充电专属"
                 else -> null
-            }
+            },
+            historyBadgeText.takeIf { it.isNotBlank() },
+            pgcTypeName?.takeIf { it.isNotBlank() }
         )
+
+    val favoriteResourceType: FavoriteResourceType
+        get() = FavoriteResourceType.fromFavoriteItemType(favoriteItemType)
 
     init {
         play?.let {

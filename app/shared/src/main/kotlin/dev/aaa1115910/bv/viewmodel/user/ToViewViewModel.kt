@@ -6,7 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.aaa1115910.biliapi.entity.FavoriteItemType
 import dev.aaa1115910.biliapi.entity.ugc.toSmartDate
+import dev.aaa1115910.biliapi.entity.user.ToViewItemType
 import dev.aaa1115910.biliapi.http.entity.AuthFailureException
 import dev.aaa1115910.biliapi.repositories.ToViewRepository
 import dev.aaa1115910.bv.BVApp
@@ -59,24 +61,30 @@ class ToViewViewModel(
                 preferApiType = Prefs.apiType
             )
 
-            data.data.forEach { ToViewItem ->
-                val newCard = 
+            data.data.forEach { toViewItem ->
+                val isPgc = toViewItem.type == ToViewItemType.Pgc
+                val newCard =
                     VideoCardData(
-                        avid = ToViewItem.oid,
-                        title = ToViewItem.title,
-                        cover = ToViewItem.cover,
-                        play = ToViewItem.play,
+                        avid = toViewItem.oid,
+                        title = toViewItem.title,
+                        cover = toViewItem.cover,
+                        play = toViewItem.play,
                         // danmaku = ToViewItem.danmaku, // 视频时长>1小时时 显示不全，所以不显示弹幕数
-                        pubTime = ToViewItem.pubdate.toSmartDate(),
-                        upName = ToViewItem.author,
-                        upId = ToViewItem.authorId,
-                        upFace = ToViewItem.authorFace,
-                        timeString = if (ToViewItem.progress == -1) context.getString(R.string.play_time_finish)
+                        pubTime = toViewItem.pubdate.toSmartDate(),
+                        upName = toViewItem.author,
+                        upId = toViewItem.authorId,
+                        upFace = toViewItem.authorFace,
+                        timeString = if (toViewItem.progress == -1) context.getString(R.string.play_time_finish)
                         else context.getString(
                             R.string.play_time_history,
-                            (ToViewItem.progress * 1000L).formatHourMinSec(),
-                            (ToViewItem.duration * 1000L).formatHourMinSec()
-                        )
+                            (toViewItem.progress * 1000L).formatHourMinSec(),
+                            (toViewItem.duration * 1000L).formatHourMinSec()
+                        ),
+                        jumpToSeason = isPgc,
+                        epId = toViewItem.epid,
+                        seasonId = toViewItem.seasonId,
+                        favoriteItemType = if (isPgc) FavoriteItemType.Pgc else FavoriteItemType.Video,
+                        pgcTypeName = toViewItem.pgcLabel.takeIf { isPgc && it.isNotBlank() }
                     )
                 withContext(Dispatchers.Main) { histories = histories + newCard }
             }

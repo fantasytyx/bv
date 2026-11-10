@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.aaa1115910.biliapi.entity.FavoriteItemType
 import dev.aaa1115910.biliapi.entity.ugc.toSmartDate
 import dev.aaa1115910.biliapi.entity.user.HistoryItemType
 import dev.aaa1115910.biliapi.http.entity.AuthFailureException
@@ -85,7 +86,9 @@ class HistoryViewModel(
                         HistoryItemType.Pgc -> "pgc"
                         HistoryItemType.Unknown -> null
                     },
-                    historyKid = historyItem.kid
+                    historyKid = historyItem.kid,
+                    historyBadgeText = historyItem.badge,
+                    favoriteItemType = if (isPgc) FavoriteItemType.Pgc else FavoriteItemType.Video
                 )
             }
             withContext(Dispatchers.Main) {

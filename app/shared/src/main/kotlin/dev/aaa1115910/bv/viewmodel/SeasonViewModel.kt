@@ -55,6 +55,10 @@ class SeasonViewModel(
                 preferApiType = if (proxyArea != ProxyArea.MainLand) ApiType.App else Prefs.apiType
             )
             seasonData = data.copy()
+            // 只传了 epId 时 seasonId 需要从响应补全，追番/追剧与播放进度都依赖它
+            if (data.seasonId > 0) {
+                seasonId = data.seasonId
+            }
             seasons.swapList(data.seasons)
             isFollowing = data.userStatus.follow
             lastPlayProgress = data.userStatus.progress

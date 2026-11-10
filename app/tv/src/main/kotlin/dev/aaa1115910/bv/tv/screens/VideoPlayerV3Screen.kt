@@ -68,6 +68,7 @@ import dev.aaa1115910.bv.player.entity.VideoListInteractiveNode
 import dev.aaa1115910.bv.player.entity.VideoListItemData
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.player.entity.VideoPlayerConfigData
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.biliapi.entity.live.LiveRoomItem
 import dev.aaa1115910.bv.tv.component.live.LiveRoomCard
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
@@ -202,6 +203,16 @@ fun VideoPlayerV3Screen(
     }
     val sharedActionState by sharedActionFlow.collectAsState()
     val followStateMap by FollowStateManager.followStateMap.collectAsState()
+
+    // 播放器可能被直接打开（如从剧集页起播，未经菜单/详情），这里补齐点赞/收藏/投币状态。
+    // 已加载过（详情页/菜单先跑过）的键会被 ensureStateLoaded 内部的 loadedKeys 直接跳过，不会重复请求。
+    LaunchedEffect(currentAid, prefsSnapshot.uid) {
+        VideoUserActionManager.ensureStateLoaded(
+            aid = currentAid,
+            uid = prefsSnapshot.uid,
+            resourceType = if (playerViewModel.fromSeason) FavoriteResourceType.Pgc else FavoriteResourceType.Video
+        )
+    }
 
     LaunchedEffect(followStateMap, playerViewModel.upId) {
         val currentUpId = playerViewModel.upId
@@ -960,7 +971,10 @@ fun VideoPlayerV3Screen(
                     focusMap, 
                     onFocus, 
                     onPauseAutoHide ->
-                    if (prefsSnapshot.isLogin && !playerViewModel.fromSeason) {
+                    if (prefsSnapshot.isLogin && playerViewModel.currentAid > 0) {
+                        // PGC 的收藏走 season 资源类型，点赞/投币/稍后再看仍用条目 aid
+                        val userActionResourceType =
+                            if (playerViewModel.fromSeason) FavoriteResourceType.Pgc else FavoriteResourceType.Video
                         // 增加操作：点赞、收藏、投币。通过 focusMap 获取 focusRequester 并在 onFocusChanged 回调时通知 controller
                         val likeFocus = focusMap[UserActionKey.Like]
                         val favFocus = focusMap[UserActionKey.Favorite]
@@ -1050,7 +1064,11 @@ fun VideoPlayerV3Screen(
                                 favoriteFolderIds = sharedActionState.favoriteFolderIds,
                                 onAddToDefaultFavoriteFolder = {
                                     scope.launch {
-                                        val success = VideoUserActionManager.addToDefaultFavoriteFolder(playerViewModel.currentAid, prefsSnapshot.uid)
+                                        val success = VideoUserActionManager.addToDefaultFavoriteFolder(
+                                            aid = playerViewModel.currentAid,
+                                            uid = prefsSnapshot.uid,
+                                            resourceType = userActionResourceType
+                                        )
                                         if (!success) {
                                             "收藏失败！默认收藏夹不存在？".toast(context)
                                         }
@@ -1058,7 +1076,12 @@ fun VideoPlayerV3Screen(
                                 },
                                 onUpdateFavoriteFolders = {
                                     scope.launch {
-                                        val success = VideoUserActionManager.updateVideoFavoriteFolders(playerViewModel.currentAid, it, prefsSnapshot.uid)
+                                        val success = VideoUserActionManager.updateVideoFavoriteFolders(
+                                            aid = playerViewModel.currentAid,
+                                            folderIds = it,
+                                            uid = prefsSnapshot.uid,
+                                            resourceType = userActionResourceType
+                                        )
                                         if (!success) {
                                             "收藏失败！此收藏夹收藏数量已达上限（1000）".toast(context)
                                         }

@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
@@ -177,6 +178,7 @@ fun TagScreen(
         upId = menuUpId,
         upName = menuUpName,
         upFace = menuUpFace,
-        onDismiss = { showVideoActionMenu = false }
+        onDismiss = { showVideoActionMenu = false },
+        resourceType = FavoriteResourceType.Video
     )
 }

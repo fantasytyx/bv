@@ -13,6 +13,7 @@ import dev.aaa1115910.biliapi.repositories.FavoriteRepository
 import dev.aaa1115910.bv.BVApp.Companion.context
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
+import dev.aaa1115910.bv.entity.carddata.toVideoCardDataOrNull
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.DeviceUtil
 import dev.aaa1115910.bv.util.addWithMainContext
@@ -101,21 +102,19 @@ class FavoriteViewModel(
                     preferApiType = Prefs.apiType
                 )
                 favoriteFolderData.medias.forEach { favoriteItem ->
-                    if (favoriteItem.type != FavoriteItemType.Video) return@forEach
-                    favorites.addWithMainContext(
-                        VideoCardData(
-                            avid = favoriteItem.id,
-                            title = favoriteItem.title,
-                            cover = favoriteItem.cover,
-                            play = favoriteItem.cntInfo.play,
-                            danmaku = favoriteItem.cntInfo.danmaku,
-                            upName = favoriteItem.upper.name,
-                            upId = favoriteItem.upper.mid,
-                            upFace = favoriteItem.upper.face,
-                            time = favoriteItem.duration * 1000L,
-                            pubTime = favoriteItem.favTime.toSmartDate() + context.getString(R.string.favorite_at)
-                        )
+                    val cardData = favoriteItem.toVideoCardDataOrNull(
+                        pubTime = favoriteItem.favTime.toSmartDate() +
+                            context.getString(R.string.favorite_at)
                     )
+                    if (cardData == null) {
+                        if (favoriteItem.type == FavoriteItemType.Pgc) {
+                            logger.fWarn {
+                                "Skip PGC favorite without a valid episode or season: ${favoriteItem.id}"
+                            }
+                        }
+                        return@forEach
+                    }
+                    favorites.addWithMainContext(cardData)
                 }
                 hasMore = favoriteFolderData.hasMore
                 logger.fInfo { "Update favorite items success" }

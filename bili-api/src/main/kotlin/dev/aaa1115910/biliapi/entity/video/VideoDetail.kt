@@ -1,6 +1,5 @@
 package dev.aaa1115910.biliapi.entity.video
 
-import bilibili.app.view.v1.ReqUser
 import bilibili.app.view.v1.ViewReply
 import bilibili.app.view.v1.ugcSeasonOrNull
 import dev.aaa1115910.biliapi.entity.user.Author
@@ -28,7 +27,6 @@ data class VideoDetail(
     var isInteractive: Boolean = false,
     var interactiveGraphVersion: Int? = null,
     var interactiveNodes: List<InteractiveNode> = emptyList(),
-    val userActions: UserActions,
     var history: History,
     var playerIcon: PlayerIcon? = null,
     var isChargingArc: Boolean = false,
@@ -57,7 +55,6 @@ data class VideoDetail(
                     argueTip = viewReply.argueMsg.takeIf { it.isNotEmpty() },
                     tags = viewReply.tagList.map { Tag.fromTag(it) },
                     isInteractive = false,
-                    userActions = UserActions.fromReqUser(viewReply.reqUser),
                     history = History.fromHistory(viewReply.history),
                     playerIcon = viewReply.playerIcon?.let { PlayerIcon.fromPlayerIcon(it) }
                 )
@@ -86,7 +83,6 @@ data class VideoDetail(
                     argueTip = viewReply.activitySeason.argueMsg.takeIf { it.isNotEmpty() },
                     tags = viewReply.tagList.map { Tag.fromTag(it) },
                     isInteractive = false,
-                    userActions = UserActions.fromReqUser(viewReply.activitySeason.reqUser),
                     history = History.fromHistory(viewReply.activitySeason.history),
                     playerIcon = viewReply.activitySeason.playerIcon?.let {
                         PlayerIcon.fromPlayerIcon(
@@ -117,7 +113,6 @@ data class VideoDetail(
                 argueTip = videoDetail.view.stat.argueMsg.takeIf { it.isNotEmpty() },
                 tags = videoDetail.tags.map { Tag.fromTag(it) },
                 isInteractive = videoDetail.view.rights.isSteinGate == 1,
-                userActions = UserActions(),
                 history = History(0, 0),
                 playerIcon = null,
                 isChargingArc = videoDetail.view.isUpowerExclusive,
@@ -199,24 +194,6 @@ data class VideoDetail(
                         moving = playerIcon.url1 ?: return@let null
                     )
                 }
-        }
-    }
-}
-
-data class UserActions(
-    var like: Boolean = false,
-    var favorite: Boolean = false,
-    var coin: Boolean = false,
-    var dislike: Boolean = false
-) {
-    companion object {
-        fun fromReqUser(reqUser: ReqUser): UserActions {
-            return UserActions(
-                like = reqUser.like == 1,
-                favorite = reqUser.favorite == 1,
-                coin = reqUser.coin == 1,
-                dislike = reqUser.dislike == 1
-            )
         }
     }
 }

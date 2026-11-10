@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import dev.aaa1115910.biliapi.entity.ApiType
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.biliapi.entity.live.LiveRoomItem
 import dev.aaa1115910.biliapi.entity.ugc.toSmartDate
 import dev.aaa1115910.biliapi.repositories.SearchType
@@ -399,6 +400,7 @@ fun SearchResultScreen(
         upName = menuVideo?.author ?: "",
         upFace = menuVideo?.face ?: "",
         onDismiss = { menuVideo = null },
+        resourceType = FavoriteResourceType.Video,
         extraItems = if (filterAvailable) {
             listOf(
                 VideoActionMenuExtraItem(

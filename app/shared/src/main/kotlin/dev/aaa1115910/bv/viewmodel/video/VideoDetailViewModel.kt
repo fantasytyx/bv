@@ -50,7 +50,6 @@ class VideoDetailViewModel(
     private data class DetailRetryRequest(
         val aid: Long,
         val fromPgcSeason: Boolean,
-        val withUserActions: Boolean,
     )
 
     // 风控验证：只发布"待验证凭证"，具体弹什么由屏幕决定（TV = WebView 官方 SDK，移动端 = GT3）
@@ -65,16 +64,15 @@ class VideoDetailViewModel(
     // legacy（v1 register / GT3）只在移动端弹窗惰性申请题目时用到，会话内部保证同一 voucher 只注册一次
     private val geetestSession = GeetestSession(authRepository)
 
-    suspend fun loadDetail(aid: Long, fromPgcSeason: Boolean = false, withUserActions: Boolean = true) {
+    suspend fun loadDetail(aid: Long, fromPgcSeason: Boolean = false) {
         // 用户主动打开某个详情：重置风控验证的次数预算
         riskCaptcha.resetBudget()
-        loadDetailInternal(aid, fromPgcSeason, withUserActions)
+        loadDetailInternal(aid, fromPgcSeason)
     }
 
     private suspend fun loadDetailInternal(
         aid: Long,
         fromPgcSeason: Boolean,
-        withUserActions: Boolean,
     ) {
         logger.fInfo { "Load detail: [avid=$aid, preferApiType=${Prefs.apiType.name}]" }
         state = VideoInfoState.Loading
@@ -82,8 +80,7 @@ class VideoDetailViewModel(
         runCatching {
             val videoDetailData = videoDetailRepository.getVideoDetail(
                 aid = aid,
-                preferApiType = Prefs.apiType,
-                withUserActions = withUserActions
+                preferApiType = Prefs.apiType
             )
             withContext(Dispatchers.Main) { videoDetail = videoDetailData }
             if (!fromPgcSeason) updateVideoList(aid)
@@ -99,7 +96,6 @@ class VideoDetailViewModel(
                     retry = DetailRetryRequest(
                         aid = aid,
                         fromPgcSeason = fromPgcSeason,
-                        withUserActions = withUserActions,
                     ),
                 )
                 return
@@ -218,7 +214,6 @@ class VideoDetailViewModel(
             loadDetailInternal(
                 aid = retry.aid,
                 fromPgcSeason = retry.fromPgcSeason,
-                withUserActions = retry.withUserActions,
             )
         }
     }
@@ -248,8 +243,7 @@ class VideoDetailViewModel(
         runCatching {
             val historyData = videoDetailRepository.getVideoDetail(
                 aid = aid,
-                preferApiType = Prefs.apiType,
-                withUserActions = false
+                preferApiType = Prefs.apiType
             ).history
             withContext(Dispatchers.Main) { videoDetail?.history = historyData }
         }.onFailure {

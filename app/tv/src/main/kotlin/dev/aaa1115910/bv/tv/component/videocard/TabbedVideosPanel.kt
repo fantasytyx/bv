@@ -37,6 +37,7 @@ import androidx.tv.material3.Tab
 import androidx.tv.material3.TabDefaults
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.util.onMenuKeyDown
@@ -108,12 +109,18 @@ fun TabbedVideosPanel(
     var menuUpId by remember { mutableLongStateOf(0L) }
     var menuUpName by remember { mutableStateOf("") }
     var menuUpFace by remember { mutableStateOf("") }
+    var menuVideo by remember { mutableStateOf<VideoCardData?>(null) }
+    var menuResourceType by remember { mutableStateOf(FavoriteResourceType.Video) }
+    var menuFromUGCList by remember { mutableStateOf(false) }
 
     val onLongClickVideo: (VideoCardData) -> Unit = { videoCard ->
         menuAid = videoCard.avid
         menuUpId = videoCard.upId
         menuUpName = videoCard.upName
         menuUpFace = videoCard.upFace
+        menuResourceType = videoCard.favoriteResourceType
+        menuVideo = videoCard
+        menuFromUGCList = selectedTabIndex == 1
         showVideoActionMenu = true
     }
 
@@ -206,6 +213,16 @@ fun TabbedVideosPanel(
         upId = menuUpId,
         upName = menuUpName,
         upFace = menuUpFace,
-        onDismiss = { showVideoActionMenu = false }
+        onDismiss = { showVideoActionMenu = false },
+        resourceType = menuResourceType,
+        onDetailClick = {
+            menuVideo?.let {
+                if (it.jumpToSeason) {
+                    onOpenSeasonInfo(it, menuFromUGCList)
+                } else {
+                    onOpenVideoInfo(it, menuFromUGCList)
+                }
+            }
+        }
     )
 }

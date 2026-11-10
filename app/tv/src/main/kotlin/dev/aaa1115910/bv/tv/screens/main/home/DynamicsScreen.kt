@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.biliapi.entity.user.DynamicVideo
 import dev.aaa1115910.bv.R as SharedR
 import dev.aaa1115910.bv.tv.component.LoadingTip
@@ -241,6 +242,7 @@ fun DynamicsScreen(
             upName = menuUpName,
             upFace = menuUpFace,
             onDismiss = { showVideoActionMenu = false },
+            resourceType = FavoriteResourceType.Video,
             extraItems = listOf(
                 VideoActionMenuExtraItem(
                     CardActionMenuItem(icon = Icons.Rounded.People, text = "已关注 UP 列表") {

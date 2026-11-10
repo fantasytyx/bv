@@ -155,7 +155,6 @@ import dev.aaa1115910.bv.util.ImageSize
 import dev.aaa1115910.bv.util.resizedImageUrl
 import dev.aaa1115910.bv.util.onBackPressed
 import dev.aaa1115910.bv.util.requestFocus
-import dev.aaa1115910.bv.util.swapList
 import dev.aaa1115910.bv.util.swapListWithMainContext
 import dev.aaa1115910.bv.util.toast
 import dev.aaa1115910.bv.viewmodel.video.VideoDetailViewModel
@@ -230,25 +229,10 @@ fun VideoInfoScreen(
         }
     }
 
-    var favorited by remember { mutableStateOf(false) }
-    // local copies for like / coin sync
-    var liked by remember { mutableStateOf(false) }
-    var isCoin by remember { mutableStateOf(false) }
-    val videoInFavoriteFolderIds = remember { mutableStateListOf<Long>() }
-
     // subscribe shared action state by aid
     val aid = videoDetailViewModel.videoDetail?.aid ?: 0L
     val sharedActionStateFlow = remember(aid) { getStateFlow(aid, Prefs.uid) }
     val sharedState by sharedActionStateFlow.collectAsState()
-
-    // keep local copies in sync with shared state
-    LaunchedEffect(sharedState) {
-        // sync favorite/like/coin from shared manager
-        favorited = sharedState.favorited
-        liked = sharedState.liked
-        isCoin = sharedState.coin
-        videoInFavoriteFolderIds.swapList(sharedState.favoriteFolderIds)
-    }
 
     val setHistory = {
         logger.info { "play history: ${videoDetailViewModel.videoDetail?.history}" }
@@ -337,14 +321,9 @@ fun VideoInfoScreen(
     }
 
     val updateVideoUserActionData: suspend () -> Unit = {
-        // update shared state from loaded data
+        // 详情加载后用统一的 ensureStateLoaded 拉取点赞/收藏/投币状态与收藏夹归属
         val configAid = videoDetailViewModel.videoDetail?.aid ?: 0L
-        VideoUserActionManager.updateFromLoadedData(
-            configAid,
-            liked = videoDetailViewModel.videoDetail?.userActions?.like ?: false,
-            favorited = videoDetailViewModel.videoDetail?.userActions?.favorite ?: false,
-            coin = videoDetailViewModel.videoDetail?.userActions?.coin ?: false
-        )
+        VideoUserActionManager.ensureStateLoaded(configAid, Prefs.uid)
     }
 
     val updateUgcSeasonSectionVideoList: (Int) -> Unit = { sectionIndex ->
@@ -732,8 +711,8 @@ fun VideoInfoScreen(
                             showFollowButton = showFollowButton,
                             isFollowing = isFollowing,
                             tags = videoDetailViewModel.videoDetail!!.tags,
-                            isFavorite = favorited,
-                            favoriteFolderIds = videoInFavoriteFolderIds,
+                            isFavorite = sharedState.favorited,
+                            favoriteFolderIds = sharedState.favoriteFolderIds,
                             onClickCover = {
                                 logger.fInfo { "Click video cover" }
                                 var title = ""
@@ -848,25 +827,21 @@ fun VideoInfoScreen(
                             },
                             onAddToDefaultFavoriteFolder = {
                                 addVideoToDefaultFavoriteFolder()
-                                favorited = true
                                 "已添加到默认收藏夹".toast(context)
                             },
                             onUpdateFavoriteFolders = {
                                 updateVideoFavoriteData(it)
-                                favorited = it.isNotEmpty()
-                                videoInFavoriteFolderIds.swapList(it)
                                 if (it.isNotEmpty()) {
                                     "收藏成功".toast(context)
                                 } else {
                                     "已取消收藏".toast(context)
                                 }
                             },
-                            isLike = liked,
+                            isLike = sharedState.liked,
                             onAddLike = {
                                 screenScope.launch {
-                                    if (!liked) {
+                                    if (!sharedState.liked) {
                                         if (addVideoLike()) {
-                                            liked = true
                                             "点赞成功".toast(context)
                                         } else {
                                             "点赞失败".toast(context)
@@ -876,9 +851,8 @@ fun VideoInfoScreen(
                             },
                             onDelLike = {
                                 screenScope.launch {
-                                    if (liked) {
+                                    if (sharedState.liked) {
                                         if (delVideoLike()) {
-                                            liked = false
                                             "已取消点赞".toast(context)
                                         } else {
                                             "取消点赞失败".toast(context)
@@ -886,12 +860,11 @@ fun VideoInfoScreen(
                                     }
                                 }
                             },
-                            isCoin = isCoin,
+                            isCoin = sharedState.coin,
                             onAddCoin = {
                                 screenScope.launch {
-                                    if (!isCoin) {
+                                    if (!sharedState.coin) {
                                         if (addVideoCoin()) {
-                                            isCoin = true
                                             "投币成功".toast(context)
                                         } else {
                                             "投币失败".toast(context)

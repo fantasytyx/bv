@@ -253,7 +253,7 @@ fun CardCover(
                                     color = Color.Black.copy(0.3f),
                                     shape = MaterialTheme.shapes.extraSmall
                                 )
-                                .padding(vertical = 1.dp, horizontal = 2.dp),
+                                .padding(2.dp),
                             text = badge,
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White,

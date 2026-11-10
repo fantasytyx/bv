@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.manager.VideoUserActionManager
@@ -44,7 +45,7 @@ data class VideoActionMenuExtraItem(
 )
 
 /**
- * UGC 视频卡片操作菜单
+ * UGC 视频和 PGC 收藏卡片操作菜单
  *
  * @param show 是否显示
  * @param aid 视频 aid
@@ -55,6 +56,10 @@ data class VideoActionMenuExtraItem(
  * @param onDelete 删除操作回调，不为 null 时显示删除菜单项
  * @param deleteLabel 删除菜单项文案，默认"删除"
  * @param extraItems 额外的操作项，按各自 index 插入到固定菜单项之间
+ * @param showUpInfoAction 是否显示"UP 主页"菜单项
+ * @param onDetailClick 自定义"详情"动作；为 null 时打开视频详情页
+ * @param resourceType 收藏操作的资源类型，必须与传入内容的实际类型一致（登录后会显示收藏项）
+ * @param onFavoriteFoldersUpdated 收藏夹变更成功后的回调，参数为最新的收藏夹 id 列表
  */
 @Composable
 fun VideoActionMenu(
@@ -66,50 +71,68 @@ fun VideoActionMenu(
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
     deleteLabel: String = "删除",
-    extraItems: List<VideoActionMenuExtraItem> = emptyList()
+    extraItems: List<VideoActionMenuExtraItem> = emptyList(),
+    showUpInfoAction: Boolean = true,
+    onDetailClick: (() -> Unit)? = null,
+    resourceType: FavoriteResourceType,
+    onFavoriteFoldersUpdated: ((List<Long>) -> Unit)? = null
 ) {
     if (!show) return
 
     val context = LocalContext.current
-    val scope = remember { CoroutineScope(SupervisorJob()) }
+    // 协程内会回调 UI（如刷新收藏列表），固定在主线程，避免在后台线程修改 Compose 状态
+    val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 
     // 菜单打开时对登录态取快照，不响应运行时登出
     val isLogin = remember { Prefs.isLogin }
 
     // 惰性加载操作状态（仅首次打开菜单时触发）
-    LaunchedEffect(aid) {
+    LaunchedEffect(aid, resourceType) {
         if (isLogin) {
-            VideoUserActionManager.ensureStateLoaded(aid)
+            VideoUserActionManager.ensureStateLoaded(
+                aid = aid,
+                resourceType = resourceType
+            )
         }
     }
 
     // 获取当前操作状态
-    val actionState by VideoUserActionManager.getStateFlow(aid).collectAsState()
+    val actionState by VideoUserActionManager
+        .getStateFlow(aid)
+        .collectAsState()
 
     // 收藏夹选择对话框状态
     var showFavoriteFolderDialog by remember { mutableStateOf(false) }
-    val favoriteFolders by VideoUserActionManager.getFavoriteFoldersFlow().collectAsState()
+    val favoriteFolders by VideoUserActionManager
+        .getFavoriteFoldersFlow(resourceType = resourceType)
+        .collectAsState()
 
     CardActionMenu(
         show = show,
         onDismiss = onDismiss,
         items = buildList {
-            add(
-                CardActionMenuItem(
-                    icon = Icons.Rounded.Person,
-                    text = "UP 主页"
-                ) {
-                    if (upId > 0) {
-                        UpInfoActivity.actionStart(context, mid = upId, name = upName, face = upFace)
+            if (resourceType == FavoriteResourceType.Video && showUpInfoAction) {
+                add(
+                    CardActionMenuItem(
+                        icon = Icons.Rounded.Person,
+                        text = "UP 主页"
+                    ) {
+                        if (upId > 0) {
+                            UpInfoActivity.actionStart(context, mid = upId, name = upName, face = upFace)
+                        }
                     }
-                }
-            )
+                )
+            }
             add(
                 CardActionMenuItem(
                     icon = Icons.Rounded.Info,
                     text = "详情"
                 ) {
-                    VideoInfoActivity.actionStart(context, aid = aid, forceShowDetail = true)
+                    if (onDetailClick != null) {
+                        onDetailClick()
+                    } else {
+                        VideoInfoActivity.actionStart(context, aid = aid, forceShowDetail = true)
+                    }
                 }
             )
             if (isLogin) {
@@ -152,18 +175,20 @@ fun VideoActionMenu(
                         }
                     }
                 )
-                add(
-                    CardActionMenuItem(
-                        icon = Icons.Rounded.WatchLater,
-                        text = "稍后再看"
-                    ) {
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                VideoUserActionManager.addToView(aid)
+                if (resourceType == FavoriteResourceType.Video) {
+                    add(
+                        CardActionMenuItem(
+                            icon = Icons.Rounded.WatchLater,
+                            text = "稍后再看"
+                        ) {
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    VideoUserActionManager.addToView(aid)
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
             if (onDelete != null) {
                 add(
@@ -189,12 +214,14 @@ fun VideoActionMenu(
                     favoriteFolderIds = actionState.favoriteFolderIds,
                     onUpdateFavoriteFolders = { folderIds ->
                         scope.launch {
-                            withContext(Dispatchers.IO) {
+                            val updated = withContext(Dispatchers.IO) {
                                 VideoUserActionManager.updateVideoFavoriteFolders(
                                     aid = aid,
-                                    folderIds = folderIds
+                                    folderIds = folderIds,
+                                    resourceType = resourceType
                                 )
                             }
+                            if (updated) onFavoriteFoldersUpdated?.invoke(folderIds.toList())
                         }
                     }
                 )

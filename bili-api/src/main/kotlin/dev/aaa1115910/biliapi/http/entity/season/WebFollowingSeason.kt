@@ -192,7 +192,7 @@ data class WebFollowingSeason(
         val banAreaShow: Int? = null,
         val copyright: String,
         @SerialName("episode_ids")
-        val episodeIds: List<Int>,
+        val episodeIds: List<Int> = emptyList(),
         @SerialName("limit_group")
         val limitGroup: Int,
         @SerialName("season_id")

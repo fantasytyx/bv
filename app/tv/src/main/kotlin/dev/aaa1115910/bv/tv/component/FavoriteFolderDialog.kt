@@ -132,7 +132,8 @@ fun FavoriteFolderDialog(
                                     selectedFavoriteFolderIds.add(folder.id)
                                     folder.mediaCount += 1
                                 }
-                                onUpdateFavoriteFolders(selectedFavoriteFolderIds)
+                                // 传快照，避免把 Compose 的可变选择列表泄漏给上游状态
+                                onUpdateFavoriteFolders(selectedFavoriteFolderIds.toList())
                                 touch()
                             },
                             leadingIcon = {

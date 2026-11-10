@@ -1,11 +1,12 @@
 package dev.aaa1115910.bv.tv.manager
 
+import dev.aaa1115910.biliapi.entity.FavoriteFolderChange
 import dev.aaa1115910.biliapi.entity.FavoriteFolderMetadata
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.biliapi.repositories.CoinRepository
 import dev.aaa1115910.biliapi.repositories.FavoriteRepository
 import dev.aaa1115910.biliapi.repositories.LikeRepository
 import dev.aaa1115910.biliapi.repositories.ToViewRepository
-import dev.aaa1115910.biliapi.repositories.VideoDetailRepository
 import dev.aaa1115910.bv.util.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,27 +23,26 @@ import java.util.concurrent.ConcurrentHashMap
 
 data class VideoActionState(
     val liked: Boolean = false,
-    val favorited: Boolean = false,
     val coin: Boolean = false,
     val favoriteFolderIds: List<Long> = emptyList()
-)
+) {
+    /** 收藏状态由归属收藏夹是否为空推导，避免维护两份可能不一致的状态 */
+    val favorited: Boolean get() = favoriteFolderIds.isNotEmpty()
+}
 
 /**
- * Simple in-memory manager for video user actions (like/favorite/coin).
- * Keyed by aid. Exposes a StateFlow per aid so UI can collect and share state across screens.
+ * In-memory manager for video user actions (like/favorite/coin).
+ * State is keyed by user and canonical aid; favorite resource types are only used for API requests.
  * Network operations delegate to repositories from Koin and update the corresponding flow on success.
  */
 object VideoUserActionManager {
-    // key = Pair(uid, aid)
     private val stateMap = ConcurrentHashMap<Pair<Long, Long>, MutableStateFlow<VideoActionState>>()
-    // key = uid, favorite folders are user-global
     private val favoriteFoldersMap = ConcurrentHashMap<Long, MutableStateFlow<List<FavoriteFolderMetadata>>>()
     private val fetchMutexMap = ConcurrentHashMap<Long, Mutex>()
-    /** Tracks which (uid, aid) pairs have been populated via either lazy fetch or gRPC loaded data. */
+    /** Tracks which (uid, aid) pairs already have action state loaded. */
     // ConcurrentHashMap.newKeySet 需 API 24，minSdk 23 上会 NoSuchMethodError，改用 API 9 起的 newSetFromMap
     private val loadedKeys: MutableSet<Pair<Long, Long>> =
         Collections.newSetFromMap(ConcurrentHashMap<Pair<Long, Long>, Boolean>())
-    /** Per-(uid,aid) mutex for lazy fetch to prevent duplicate concurrent requests. */
     private val stateFetchMutexMap = ConcurrentHashMap<Pair<Long, Long>, Mutex>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -59,7 +59,10 @@ object VideoUserActionManager {
 
     fun getStateFlow(aid: Long, uid: Long = Prefs.uid): StateFlow<VideoActionState> = ensure(aid, uid)
 
-    private fun ensureFavoriteFolders(uid: Long = Prefs.uid): MutableStateFlow<List<FavoriteFolderMetadata>> {
+    fun getFavoriteFoldersFlow(
+        uid: Long = Prefs.uid,
+        resourceType: FavoriteResourceType = FavoriteResourceType.Video
+    ): StateFlow<List<FavoriteFolderMetadata>> {
         val flow = favoriteFoldersMap.getOrPut(uid) { MutableStateFlow(emptyList()) }
         if (flow.value.isEmpty()) {
             scope.launch {
@@ -68,7 +71,11 @@ object VideoUserActionManager {
                     if (flow.value.isNotEmpty()) return@launch
                     runCatching {
                         flow.value = get<FavoriteRepository>(FavoriteRepository::class.java)
-                            .getAllFavoriteFolderMetadataList(mid = uid, preferApiType = Prefs.apiType)
+                            .getAllFavoriteFolderMetadataList(
+                                mid = uid,
+                                resourceType = resourceType,
+                                preferApiType = Prefs.apiType
+                            )
                     }
                 }
             }
@@ -76,16 +83,21 @@ object VideoUserActionManager {
         return flow
     }
 
-    fun getFavoriteFoldersFlow(uid: Long = Prefs.uid): StateFlow<List<FavoriteFolderMetadata>> = ensureFavoriteFolders(uid)
-
     /**
-     * Lazy-load video action state (like/favorite/coin) via individual check APIs.
+     * Lazy-load video action state (like/favorite/coin) and favorite folder membership.
      * Only the first consumer triggers the request; subsequent consumers read the cached StateFlow.
-     * Skips if already loaded via [updateFromLoadedData] or a prior [ensureStateLoaded] call.
+     *
+     * 收藏状态与收藏夹归属都取自带 `rid` 的收藏夹列表（`favState` 标记内容是否在该收藏夹中），
+     * 因此不再单独请求 `checkVideoFavoured`；该列表同时写入收藏夹缓存，供收藏夹选择弹窗复用。
      */
-    suspend fun ensureStateLoaded(aid: Long, uid: Long = Prefs.uid) {
+    suspend fun ensureStateLoaded(
+        aid: Long,
+        uid: Long = Prefs.uid,
+        resourceType: FavoriteResourceType = FavoriteResourceType.Video
+    ) {
         val k = key(uid, aid)
-        if (k in loadedKeys || aid <= 0 || !Prefs.isLogin) return
+        if (aid <= 0 || !Prefs.isLogin) return
+        if (k in loadedKeys) return
 
         val mutex = stateFetchMutexMap.getOrPut(k) { Mutex() }
         mutex.withLock {
@@ -98,28 +110,21 @@ object VideoUserActionManager {
                 withContext(Dispatchers.IO) {
                     val liked = likeRepo.checkVideoLike(aid)
                     val coin = coinRepo.checkVideoCoin(aid)
-                    val favored = favRepo.checkVideoFavoured(aid)
+                    val folders = favRepo.getAllFavoriteFolderMetadataList(
+                        mid = uid,
+                        rid = aid,
+                        resourceType = resourceType,
+                        preferApiType = Prefs.apiType
+                    )
+                    val folderIds = folders.filter { it.videoInThisFav }.map { it.id }
 
-                    // 将结果推入 VideoDetailRepository 缓存，避免 getVideoDetail 重复请求
-                    get<VideoDetailRepository>(VideoDetailRepository::class.java)
-                        .setCachedUserActions(aid, liked, favored, coin)
-
+                    favoriteFoldersMap.getOrPut(uid) { MutableStateFlow(emptyList()) }.value = folders
                     val flow = ensure(aid, uid)
-                    flow.value = flow.value.copy(liked = liked, coin = coin, favorited = favored)
-
-                    if (favored) {
-                        runCatching {
-                            val folders = favRepo.getAllFavoriteFolderMetadataList(
-                                mid = uid,
-                                rid = aid,
-                                preferApiType = Prefs.apiType
-                            )
-                            favoriteFoldersMap.getOrPut(uid) { MutableStateFlow(emptyList()) }.value = folders
-                            flow.value = flow.value.copy(
-                                favoriteFolderIds = folders.filter { it.videoInThisFav }.map { it.id }
-                            )
-                        }
-                    }
+                    flow.value = flow.value.copy(
+                        liked = liked,
+                        coin = coin,
+                        favoriteFolderIds = folderIds
+                    )
                 }
             }.isSuccess
             if (success) {
@@ -128,38 +133,10 @@ object VideoUserActionManager {
         }
     }
 
-    suspend fun updateFromLoadedData(aid: Long, liked: Boolean, favorited: Boolean, coin: Boolean, uid: Long = Prefs.uid) {
-        val k = key(uid, aid)
-        // If already loaded via lazy fetch (e.g. from menu), skip to avoid stale snapshot overwrite
-        if (k in loadedKeys) return
-
-        val flow = ensure(aid, uid)
-        flow.value = flow.value.copy(liked = liked, favorited = favorited, coin = coin)
-        loadedKeys.add(k)
-
-        // load favorite folder ids for this video
-        if (aid <= 0 || !Prefs.isLogin) return
-        val favoriteRepository: FavoriteRepository = get(FavoriteRepository::class.java)
-        val mutex = fetchMutexMap.getOrPut(uid) { Mutex() }
-        mutex.withLock {
-            runCatching {
-                val folders = withContext(Dispatchers.IO) {
-                    favoriteRepository.getAllFavoriteFolderMetadataList(
-                        mid = uid,
-                        rid = aid,
-                        preferApiType = Prefs.apiType
-                    )
-                }
-                // update folder list cache (superset of the no-rid call)
-                favoriteFoldersMap.getOrPut(uid) { MutableStateFlow(emptyList()) }.value = folders
-                // update video action state with folder ids
-                val folderIds = folders.filter { it.videoInThisFav }.map { it.id }
-                flow.value = flow.value.copy(favoriteFolderIds = folderIds)
-            }
-        }
-    }
-
-    suspend fun addLike(aid: Long, uid: Long = Prefs.uid): Boolean {
+    suspend fun addLike(
+        aid: Long,
+        uid: Long = Prefs.uid
+    ): Boolean {
         if (aid <= 0) return false
         val likeRepository: LikeRepository = get(LikeRepository::class.java)
         return try {
@@ -171,7 +148,10 @@ object VideoUserActionManager {
         }
     }
 
-    suspend fun delLike(aid: Long, uid: Long = Prefs.uid): Boolean {
+    suspend fun delLike(
+        aid: Long,
+        uid: Long = Prefs.uid
+    ): Boolean {
         if (aid <= 0) return false
         val likeRepository: LikeRepository = get(LikeRepository::class.java)
         return try {
@@ -183,7 +163,10 @@ object VideoUserActionManager {
         }
     }
 
-    suspend fun addCoin(aid: Long, uid: Long = Prefs.uid): Boolean {
+    suspend fun addCoin(
+        aid: Long,
+        uid: Long = Prefs.uid
+    ): Boolean {
         if (aid <= 0) return false
         val coinRepository: CoinRepository = get(CoinRepository::class.java)
         return try {
@@ -210,30 +193,45 @@ object VideoUserActionManager {
         }
     }
 
-    suspend fun updateVideoFavoriteFolders(aid: Long, folderIds: List<Long>, uid: Long = Prefs.uid): Boolean {
+    suspend fun updateVideoFavoriteFolders(
+        aid: Long,
+        folderIds: List<Long>,
+        uid: Long = Prefs.uid,
+        resourceType: FavoriteResourceType = FavoriteResourceType.Video
+    ): Boolean {
         if (aid <= 0) return false
         val favoriteRepository: FavoriteRepository = get(FavoriteRepository::class.java)
-        val currentFolders = ensureFavoriteFolders(uid).value
+        val flow = ensure(aid, uid)
+        // 调用方可能传入可变列表（弹窗的 SnapshotStateList），必须快照后再比较与保存，
+        // 否则状态里会持有调用方的活列表，后续 UI 增删会就地改写"当前收藏夹"，增量变更永远算不出来
+        val targetFolderIds = folderIds.toList()
+        val change = FavoriteFolderChange.between(
+            currentFolderIds = flow.value.favoriteFolderIds.toList(),
+            targetFolderIds = targetFolderIds
+        )
+        if (change.isEmpty) return true
         return try {
             withContext(Dispatchers.IO) {
-                require(currentFolders.isNotEmpty())
                 favoriteRepository.updateVideoToFavoriteFolder(
                     aid = aid,
-                    addMediaIds = folderIds,
-                    delMediaIds = currentFolders.map { it.id } - folderIds.toSet()
+                    addMediaIds = change.addMediaIds,
+                    delMediaIds = change.delMediaIds,
+                    resourceType = resourceType
                 )
             }
-            ensure(aid, uid).value = ensure(aid, uid).value.copy(
-                favoriteFolderIds = folderIds,
-                favorited = folderIds.isNotEmpty()
-            )
+            flow.value = flow.value.copy(favoriteFolderIds = targetFolderIds)
             true
         } catch (_: Exception) {
             false
         }
     }
 
-    suspend fun delVideoFromFavoriteFolder(aid: Long, folderId: Long, uid: Long = Prefs.uid): Boolean {
+    suspend fun delVideoFromFavoriteFolder(
+        aid: Long,
+        folderId: Long,
+        resourceType: FavoriteResourceType = FavoriteResourceType.Video,
+        uid: Long = Prefs.uid
+    ): Boolean {
         if (aid <= 0) return false
         val favoriteRepository: FavoriteRepository = get(FavoriteRepository::class.java)
         return try {
@@ -241,14 +239,13 @@ object VideoUserActionManager {
                 favoriteRepository.delVideoFromFavoriteFolder(
                     aid = aid,
                     delMediaIds = listOf(folderId),
+                    resourceType = resourceType,
                     preferApiType = Prefs.apiType
                 )
             }
             val flow = ensure(aid, uid)
-            val updatedIds = flow.value.favoriteFolderIds - folderId
             flow.value = flow.value.copy(
-                favoriteFolderIds = updatedIds,
-                favorited = updatedIds.isNotEmpty()
+                favoriteFolderIds = flow.value.favoriteFolderIds - folderId
             )
             true
         } catch (_: Exception) {
@@ -256,11 +253,14 @@ object VideoUserActionManager {
         }
     }
 
-    suspend fun addToDefaultFavoriteFolder(aid: Long, uid: Long = Prefs.uid): Boolean {
+    suspend fun addToDefaultFavoriteFolder(
+        aid: Long,
+        uid: Long = Prefs.uid,
+        resourceType: FavoriteResourceType = FavoriteResourceType.Video
+    ): Boolean {
         if (aid <= 0) return false
-        val flow = ensure(aid, uid)
-        val default = ensureFavoriteFolders(uid).value.firstOrNull { it.title == "默认收藏夹" }
-            ?: return false
-        return updateVideoFavoriteFolders(aid, listOf(default.id), uid)
+        val default = getFavoriteFoldersFlow(uid, resourceType).value
+            .firstOrNull { it.title == "默认收藏夹" } ?: return false
+        return updateVideoFavoriteFolders(aid, listOf(default.id), uid, resourceType)
     }
 }

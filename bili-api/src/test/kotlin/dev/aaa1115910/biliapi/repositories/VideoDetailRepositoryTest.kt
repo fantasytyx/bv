@@ -32,17 +32,7 @@ class VideoDetailRepositoryTest {
 
     private val channelRepository = ChannelRepository()
     private val authRepository = AuthRepository()
-    private val favoriteRepository = FavoriteRepository(authRepository)
-    private val likeRepository = LikeRepository(authRepository)
-    private val coinRepository = CoinRepository(authRepository)
-    private val videoDetailRepository =
-        VideoDetailRepository(
-            authRepository,
-            channelRepository,
-            favoriteRepository,
-            likeRepository,
-            coinRepository
-        )
+    private val videoDetailRepository = VideoDetailRepository(authRepository, channelRepository)
 
     init {
         channelRepository.initDefaultChannel(

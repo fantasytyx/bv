@@ -26,6 +26,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.biliapi.entity.ugc.UgcItem
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
@@ -167,6 +168,7 @@ fun RecommendScreen(
         upId = menuUpId,
         upName = menuUpName,
         upFace = menuUpFace,
-        onDismiss = { showVideoActionMenu = false }
+        onDismiss = { showVideoActionMenu = false },
+        resourceType = FavoriteResourceType.Video
     )
 }

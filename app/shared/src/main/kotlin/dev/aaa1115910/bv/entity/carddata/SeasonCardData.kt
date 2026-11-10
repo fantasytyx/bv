@@ -10,7 +10,7 @@ data class SeasonCardData(
     val subTitle: String? = null,
     val cover: String,
     val rating: String? = null,
-    val badge: SearchMediaResult.Badge? = null,
+    val badge: SearchMediaResult.Badge? = null
 ) {
     companion object {
         fun fromPgcItem(pgcItem: dev.aaa1115910.biliapi.entity.pgc.PgcItem): SeasonCardData {

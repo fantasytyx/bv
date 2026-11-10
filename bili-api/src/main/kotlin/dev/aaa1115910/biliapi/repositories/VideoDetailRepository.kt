@@ -24,15 +24,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
-import java.util.concurrent.ConcurrentHashMap
 
 @Single
 class VideoDetailRepository(
     private val authRepository: AuthRepository,
-    private val channelRepository: ChannelRepository,
-    private val favoriteRepository: FavoriteRepository,
-    private val likeRepository: LikeRepository,
-    private val coinRepository: CoinRepository
+    private val channelRepository: ChannelRepository
 ) {
     private val viewStub
         get() = runCatching {
@@ -42,25 +38,6 @@ class VideoDetailRepository(
         get() = runCatching {
             ReplyGrpcKt.ReplyCoroutineStub(channelRepository.defaultChannel!!)
         }.getOrNull()
-
-    /**
-     * Cache for user action status (like/favorite/coin), keyed by aid.
-     * Populated by [ensureStateLoaded] (via [setCachedUserActions]) or the first call
-     * to [getVideoDetail] with [withUserActions]=true. Subsequent consumers read from
-     * cache, avoiding duplicate network requests.
-     */
-    private val userActionsCache = ConcurrentHashMap<Long, Triple<Boolean, Boolean, Boolean>>()
-
-    /**
-     * Cache user action results that were already fetched externally (e.g. by [VideoUserActionManager]).
-     * Subsequent [getVideoDetail] calls for the same [aid] will read from cache instead of re-fetching.
-     */
-    fun setCachedUserActions(aid: Long, liked: Boolean, favored: Boolean, coined: Boolean) {
-        // putIfAbsent 需 API 24，minSdk 23 上会 NoSuchMethodError
-        synchronized(userActionsCache) {
-            if (!userActionsCache.containsKey(aid)) userActionsCache[aid] = Triple(liked, favored, coined)
-        }
-    }
 
     private suspend fun fillInteractiveInfo(
         videoDetail: VideoDetail,
@@ -116,14 +93,13 @@ class VideoDetailRepository(
 
     suspend fun getVideoDetail(
         aid: Long,
-        preferApiType: ApiType = ApiType.Web,
-        withUserActions: Boolean = true
+        preferApiType: ApiType = ApiType.Web
     ): VideoDetail {
         return when (preferApiType) {
             ApiType.Web -> {
                 withContext(Dispatchers.IO) {
                     // 串行执行：获取视频详情
-                    val videoDetailWithoutUserActions = run {
+                    val videoDetail = run {
                         val httpVideoDetail = BiliHttpApi.getVideoDetail(
                             // 使用 bvid 发起请求，相比 aid 更贴近 web 端行为，降低被风控的概率
                             bv = AvBvConverter.av2bv(aid),
@@ -133,42 +109,11 @@ class VideoDetailRepository(
                         VideoDetail.fromVideoDetail(httpVideoDetail)
                     }
 
-                    // 声明变量
-                    var isLiked = false
-                    var isFavoured = false
-                    var isCoined = false
-
-                    if (withUserActions) {
-                        // 未登录时跳过点赞/收藏/投币状态请求，减少对风控接口的触发
-                        val hasWebSession = !authRepository.sessionData.isNullOrBlank()
-                        val cached = if (hasWebSession) {
-                            // 从缓存读取（缓存由 ensureStateLoaded 或本方法的首次调用填充）
-                            userActionsCache.getOrPut(aid) {
-                                Triple(
-                                    runCatching { likeRepository.checkVideoLike(aid, preferApiType = ApiType.Web) }
-                                        .onFailure { println("Check video liked failed: $it") }
-                                        .getOrDefault(false),
-                                    runCatching { favoriteRepository.checkVideoFavoured(aid, preferApiType = ApiType.Web) }
-                                        .onFailure { println("Check video favoured failed: $it") }
-                                        .getOrDefault(false),
-                                    runCatching { coinRepository.checkVideoCoin(aid, preferApiType = ApiType.Web) }
-                                        .onFailure { println("Check video coin failed: $it") }
-                                        .getOrDefault(false)
-                                )
-                            }
-                        } else {
-                            Triple(false, false, false)
-                        }
-                        isLiked = cached.first
-                        isFavoured = cached.second
-                        isCoined = cached.third
-                    }
-
                     // 串行执行：获取历史和播放器图标
                     val (history, playerIcon) = runCatching {
                         val videoModeInfo = BiliHttpApi.getVideoMoreInfo(
                             bvid = AvBvConverter.av2bv(aid),
-                            cid = videoDetailWithoutUserActions.cid,
+                            cid = videoDetail.cid,
                             sessData = authRepository.sessionData ?: "",
                             buvid3 = authRepository.buvid3 ?: ""
                         ).getResponseData()
@@ -184,10 +129,7 @@ class VideoDetailRepository(
                     }.getOrDefault(VideoDetail.History(0, 0) to null)
 
                     // 更新并返回结果
-                    videoDetailWithoutUserActions.apply {
-                        userActions.like = isLiked
-                        userActions.coin = isCoined
-                        userActions.favorite = isFavoured
+                    videoDetail.apply {
                         this.history = history
                         this.playerIcon = playerIcon
                         fillInteractiveInfo(this, knownInteractive = this.isInteractive)
@@ -238,7 +180,9 @@ class VideoDetailRepository(
                     sessData = authRepository.sessionData ?: ""
                 ).getResponseData()
                 webSeasonData.userStatus = BiliHttpApi.getSeasonUserStatus(
-                    seasonId = seasonId!!,
+                    // 只带 epId 打开剧集页时（如稍后再看的 PGC 条目）seasonId 为空，
+                    // 用番剧信息响应里回带的 season_id 补上
+                    seasonId = seasonId ?: webSeasonData.seasonId,
                     sessData = authRepository.sessionData ?: ""
                 ).getResponseData()
                 val seasonDetail = SeasonDetail.fromSeasonData(webSeasonData)

@@ -718,7 +718,7 @@ object BiliHttpApi {
         // viewAt: Long = 0,
         // pageSize: Int = 20,
         sessData: String = ""
-    ): BiliResponse<ToViewData> = client.get("/x/v2/history/toview") {
+    ): BiliResponse<ToViewData> = client.get("/x/v2/history/toview/web") {
         // parameter("max", max)
         // parameter("business", business)
         // parameter("view_at", viewAt)

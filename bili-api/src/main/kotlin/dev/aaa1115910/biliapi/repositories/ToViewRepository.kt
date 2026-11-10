@@ -4,7 +4,6 @@ import bilibili.app.interfaces.v1.HistoryGrpcKt
 import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.entity.user.ToViewData
 import dev.aaa1115910.biliapi.http.BiliHttpApi
-import dev.aaa1115910.biliapi.util.AvBvConverter
 import org.koin.core.annotation.Single
 
 @Single
@@ -76,8 +75,9 @@ class ToViewRepository(
         return runCatching {
             when (preferApiType) {
                 ApiType.Web, ApiType.App -> {
+                    // 用 aid 而不是由 aid 反推的 bvid：PGC 剧集同样按剧集 aid 添加
                     BiliHttpApi.addToView(
-                        bvid = AvBvConverter.av2bv(avid),
+                        avid = avid,
                         csrf = authRepository.biliJct!!,
                         sessData = authRepository.sessionData!!
                     ).code == 0

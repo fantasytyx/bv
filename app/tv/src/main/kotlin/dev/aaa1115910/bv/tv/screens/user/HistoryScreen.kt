@@ -45,6 +45,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
@@ -99,6 +100,8 @@ fun HistoryScreen(
     var menuUpFace by remember { mutableStateOf("") }
     var menuHistoryBusiness by remember { mutableStateOf<String?>(null) }
     var menuHistoryKid by remember { mutableLongStateOf(0L) }
+    var menuResourceType by remember { mutableStateOf(FavoriteResourceType.Video) }
+    var menuVideo by remember { mutableStateOf<VideoCardData?>(null) }
 
     val focusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     fun getFocusRequester(index: Int): FocusRequester {
@@ -112,7 +115,28 @@ fun HistoryScreen(
         menuUpFace = video.upFace
         menuHistoryBusiness = video.historyBusiness
         menuHistoryKid = video.historyKid ?: 0L
+        menuResourceType = video.favoriteResourceType
+        menuVideo = video
         showVideoActionMenu = true
+    }
+
+    val openDetail: (VideoCardData) -> Unit = { video ->
+        videoInfoRepository.setPreloadedVideoList(historyViewModel.histories)
+        val proxyArea = ProxyArea.checkProxyArea(video.title)
+        if (video.jumpToSeason) {
+            SeasonInfoActivity.actionStart(
+                context = context,
+                epId = video.epId,
+                seasonId = video.seasonId,
+                proxyArea = proxyArea
+            )
+        } else {
+            VideoInfoActivity.actionStart(
+                context = context,
+                aid = video.avid,
+                proxyArea = proxyArea
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -232,21 +256,7 @@ fun HistoryScreen(
                                         selectedIndex = index
                                         showDeleteConfirmDialog = true
                                     } else {
-                                        videoInfoRepository.setPreloadedVideoList(historyViewModel.histories)
-                                        if (history.jumpToSeason) {
-                                            SeasonInfoActivity.actionStart(
-                                                context = context,
-                                                epId = history.epId,
-                                                seasonId = history.seasonId,
-                                                proxyArea = ProxyArea.checkProxyArea(history.title)
-                                            )
-                                        } else {
-                                            VideoInfoActivity.actionStart(
-                                                context = context,
-                                                aid = history.avid,
-                                                proxyArea = ProxyArea.checkProxyArea(history.title)
-                                            )
-                                        }
+                                        openDetail(history)
                                     }
                                 },
                                 onLongClick = {
@@ -340,6 +350,9 @@ fun HistoryScreen(
         upName = menuUpName,
         upFace = menuUpFace,
         onDismiss = { showVideoActionMenu = false },
+        showUpInfoAction = menuHistoryBusiness != "pgc",
+        onDetailClick = { menuVideo?.let(openDetail) },
+        resourceType = menuResourceType,
         extraItems = listOf(
             VideoActionMenuExtraItem(
                 CardActionMenuItem(icon = Icons.Rounded.DeleteSweep, text = "批量删除") { deleteMode = true }

@@ -66,6 +66,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import dev.aaa1115910.biliapi.entity.season.FollowingSeasonStatus
 import dev.aaa1115910.biliapi.entity.season.FollowingSeasonType
+import dev.aaa1115910.biliapi.entity.FavoriteItemType
 import dev.aaa1115910.biliapi.entity.user.HistoryItemType
 import dev.aaa1115910.biliapi.http.entity.AuthFailureException
 import dev.aaa1115910.biliapi.repositories.FavoriteRepository
@@ -75,6 +76,7 @@ import dev.aaa1115910.biliapi.repositories.UserRepository
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.SeasonCardData
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
+import dev.aaa1115910.bv.entity.carddata.toVideoCardDataOrNull
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.activities.user.FavoriteActivity
 import dev.aaa1115910.bv.tv.activities.user.FollowActivity
@@ -228,7 +230,9 @@ fun UserInfoScreen(
                 ).medias
                 favorites.clear()
                 favoriteItems.forEach { favoriteItem ->
-                    favorites.add(
+                    val cardData = if (favoriteItem.type == FavoriteItemType.Pgc) {
+                        favoriteItem.toVideoCardDataOrNull()
+                    } else {
                         VideoCardData(
                             avid = favoriteItem.id,
                             title = favoriteItem.title,
@@ -236,7 +240,14 @@ fun UserInfoScreen(
                             upName = favoriteItem.upper.name,
                             time = favoriteItem.duration.toLong() * 1000
                         )
-                    )
+                    }
+                    if (cardData != null) {
+                        favorites.add(cardData)
+                    } else if (favoriteItem.type == FavoriteItemType.Pgc) {
+                        logger.fWarn {
+                            "Skip PGC favorite without a valid episode or season: ${favoriteItem.id}"
+                        }
+                    }
                 }
             }.onFailure {
                 logger.fWarn { "Load favorite items failed: ${it.stackTraceToString()}" }

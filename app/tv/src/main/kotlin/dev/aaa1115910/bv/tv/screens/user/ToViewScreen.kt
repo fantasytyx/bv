@@ -45,13 +45,15 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
+import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
+import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
-import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.VideoActionMenuExtraItem
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.onMenuKeyDown
@@ -96,6 +98,8 @@ fun ToViewScreen(
     var menuUpId by remember { mutableLongStateOf(0L) }
     var menuUpName by remember { mutableStateOf("") }
     var menuUpFace by remember { mutableStateOf("") }
+    var menuResourceType by remember { mutableStateOf(FavoriteResourceType.Video) }
+    var menuVideo by remember { mutableStateOf<VideoCardData?>(null) }
 
     val focusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     fun getFocusRequester(index: Int): FocusRequester {
@@ -107,7 +111,29 @@ fun ToViewScreen(
         menuUpId = video.upId
         menuUpName = video.upName
         menuUpFace = video.upFace
+        menuResourceType = video.favoriteResourceType
+        menuVideo = video
         showVideoActionMenu = true
+    }
+
+    val openDetail: (VideoCardData) -> Unit = { video ->
+        val proxyArea = ProxyArea.checkProxyArea(video.title)
+        if (video.jumpToSeason && (video.epId != null || video.seasonId != null)) {
+            // PGC 条目只有 ep/season id 有意义，按 aid 打开视频详情会跳错页面
+            SeasonInfoActivity.actionStart(
+                context = context,
+                epId = video.epId,
+                seasonId = video.seasonId,
+                proxyArea = proxyArea
+            )
+        } else {
+            videoInfoRepository.setPreloadedVideoList(toViewViewModel.histories)
+            VideoInfoActivity.actionStart(
+                context = context,
+                aid = video.avid,
+                proxyArea = proxyArea
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -227,12 +253,7 @@ fun ToViewScreen(
                                     selectedIndex = index
                                     showDeleteConfirmDialog = true
                                 } else {
-                                    videoInfoRepository.setPreloadedVideoList(toViewViewModel.histories)
-                                    VideoInfoActivity.actionStart(
-                                        context = context,
-                                        aid = item.avid,
-                                        proxyArea = ProxyArea.checkProxyArea(item.title)
-                                    )
+                                    openDetail(item)
                                 }
                             },
                             onLongClick = {
@@ -325,6 +346,8 @@ fun ToViewScreen(
         upName = menuUpName,
         upFace = menuUpFace,
         onDismiss = { showVideoActionMenu = false },
+        resourceType = menuResourceType,
+        onDetailClick = { menuVideo?.let(openDetail) },
         extraItems = listOf(
             VideoActionMenuExtraItem(
                 CardActionMenuItem(icon = Icons.Rounded.DeleteSweep, text = "批量删除") { deleteMode = true }

@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
  * 收藏夹内容
  *
  * @param id 内容id 视频稿件：视频稿件avid 音频：音频auid 视频合集：视频合集id
- * @param type 内容类型 2：视频稿件 12：音频 21：视频合集
+ * @param type 内容类型 2：视频稿件 12：音频 21：视频合集 24：PGC 内容
  * @param title 标题
  * @param cover 封面url
  * @param intro 简介
@@ -41,6 +41,17 @@ data class FavoriteItem(
     @SerialName("fav_time")
     val favTime: Long,
     val bvid: String,
+    val ogv: Ogv? = null
+)
+
+@Serializable
+data class Ogv(
+    @SerialName("type_name")
+    val typeName: String,
+    @SerialName("type_id")
+    val typeId: Int,
+    @SerialName("season_id")
+    val seasonId: Int? = null
 )
 
 @Serializable

@@ -51,18 +51,19 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import dev.aaa1115910.biliapi.entity.FavoriteFolderMetadata
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.entity.NavSwitchMode
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.repository.VideoInfoRepository
 import dev.aaa1115910.bv.tv.activities.video.SeasonInfoActivity
+import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.component.VideoActionMenuExtraItem
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
-import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.manager.VideoUserActionManager
 import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.component.TopNavItem
@@ -116,6 +117,10 @@ fun FavoriteScreen(
     var menuUpId by remember { mutableLongStateOf(0L) }
     var menuUpName by remember { mutableStateOf("") }
     var menuUpFace by remember { mutableStateOf("") }
+    var menuResourceType by remember { mutableStateOf(FavoriteResourceType.Video) }
+    var menuVideo by remember { mutableStateOf<VideoCardData?>(null) }
+    // 在收藏夹弹窗里取消当前收藏夹后，等菜单关闭再从列表移除，避免菜单打开期间列表重排
+    var pendingRemovedAid by remember { mutableStateOf<Long?>(null) }
 
     val focusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
     fun getFocusRequester(index: Int): FocusRequester {
@@ -127,7 +132,28 @@ fun FavoriteScreen(
         menuUpId = video.upId
         menuUpName = video.upName
         menuUpFace = video.upFace
+        menuResourceType = video.favoriteResourceType
+        menuVideo = video
         showVideoActionMenu = true
+    }
+
+    val openDetail: (VideoCardData) -> Unit = { video ->
+        videoInfoRepository.setPreloadedVideoList(favoriteViewModel.favorites)
+        val proxyArea = ProxyArea.checkProxyArea(video.title)
+        if (video.jumpToSeason) {
+            SeasonInfoActivity.actionStart(
+                context = context,
+                epId = video.epId,
+                seasonId = video.seasonId,
+                proxyArea = proxyArea
+            )
+        } else {
+            VideoInfoActivity.actionStart(
+                context = context,
+                aid = video.avid,
+                proxyArea = proxyArea
+            )
+        }
     }
 
     val updateCurrentFavoriteFolder: (folderMetadata: FavoriteFolderMetadata) -> Unit =
@@ -305,21 +331,7 @@ fun FavoriteScreen(
                                     selectedIndex = index
                                     showDeleteConfirmDialog = true
                                 } else {
-                                    videoInfoRepository.setPreloadedVideoList(favoriteViewModel.favorites)
-                                    if (history.jumpToSeason) {
-                                        SeasonInfoActivity.actionStart(
-                                            context = context,
-                                            epId = history.epId,
-                                            seasonId = history.seasonId,
-                                            proxyArea = ProxyArea.checkProxyArea(history.title)
-                                        )
-                                    } else {
-                                        VideoInfoActivity.actionStart(
-                                            context = context,
-                                            aid = history.avid,
-                                            proxyArea = ProxyArea.checkProxyArea(history.title)
-                                        )
-                                    }
+                                    openDetail(history)
                                 }
                             },
                             onLongClick = {
@@ -330,7 +342,11 @@ fun FavoriteScreen(
                                     val folderId = favoriteViewModel.currentFavoriteFolderMetadata?.id
                                     scope.launch {
                                         if (folderId != null) {
-                                            val success = VideoUserActionManager.delVideoFromFavoriteFolder(aid = aid, folderId = folderId)
+                                            val success = VideoUserActionManager.delVideoFromFavoriteFolder(
+                                                aid = aid,
+                                                folderId = folderId,
+                                                resourceType = history.favoriteResourceType
+                                            )
                                             if (success) {
                                                 favoriteViewModel.removeFavoriteFromList(aid)
                                                 focusTopTabIfListEmpty()
@@ -386,12 +402,17 @@ fun FavoriteScreen(
                 val nextIndex = if (selectedIndex < favoriteViewModel.favorites.size - 1) selectedIndex + 1 else selectedIndex - 1
                 if (nextIndex >= 0) runCatching { getFocusRequester(nextIndex).requestFocus() }
                 val aid = selectedVideo!!.avid
+                val resourceType = selectedVideo!!.favoriteResourceType
                 val folderId = favoriteViewModel.currentFavoriteFolderMetadata?.id
                 showDeleteConfirmDialog = false
                 selectedVideo = null
                 scope.launch {
                     if (folderId != null) {
-                        val success = VideoUserActionManager.delVideoFromFavoriteFolder(aid = aid, folderId = folderId)
+                        val success = VideoUserActionManager.delVideoFromFavoriteFolder(
+                            aid = aid,
+                            folderId = folderId,
+                            resourceType = resourceType
+                        )
                         if (success) {
                             favoriteViewModel.removeFavoriteFromList(aid)
                             focusTopTabIfListEmpty()
@@ -418,7 +439,21 @@ fun FavoriteScreen(
         upId = menuUpId,
         upName = menuUpName,
         upFace = menuUpFace,
-        onDismiss = { showVideoActionMenu = false },
+        onDismiss = {
+            showVideoActionMenu = false
+            pendingRemovedAid?.let { aid ->
+                pendingRemovedAid = null
+                favoriteViewModel.removeFavoriteFromList(aid)
+                focusTopTabIfListEmpty()
+            }
+        },
+        onDetailClick = { menuVideo?.let(openDetail) },
+        resourceType = menuResourceType,
+        onFavoriteFoldersUpdated = { folderIds ->
+            val currentFolderId = favoriteViewModel.currentFavoriteFolderMetadata?.id
+            pendingRemovedAid =
+                if (currentFolderId != null && currentFolderId !in folderIds) menuAid else null
+        },
         deleteLabel = "取消收藏",
         extraItems = listOf(
             VideoActionMenuExtraItem(
@@ -426,13 +461,26 @@ fun FavoriteScreen(
             )
         ),
         onDelete = {
-            val nextIndex = if (currentIndex < favoriteViewModel.favorites.size - 1) currentIndex + 1 else currentIndex - 1
+            val nextIndex =
+                if (currentIndex < favoriteViewModel.favorites.size - 1) currentIndex + 1
+                else currentIndex - 1
             if (nextIndex >= 0) runCatching { getFocusRequester(nextIndex).requestFocus() }
             val folderId = favoriteViewModel.currentFavoriteFolderMetadata?.id
             scope.launch {
                 if (folderId != null) {
-                    VideoUserActionManager.delVideoFromFavoriteFolder(aid = menuAid, folderId = folderId)
-                    favoriteViewModel.removeFavoriteFromList(menuAid)
+                    val deleted = VideoUserActionManager.delVideoFromFavoriteFolder(
+                        aid = menuAid,
+                        folderId = folderId,
+                        resourceType = menuResourceType
+                    )
+                    if (deleted || menuResourceType == FavoriteResourceType.Video) {
+                        favoriteViewModel.removeFavoriteFromList(menuAid)
+                        if (menuResourceType == FavoriteResourceType.Pgc) {
+                            context.getString(R.string.favorite_delete_success).toast(context)
+                        }
+                    } else if (menuResourceType == FavoriteResourceType.Pgc) {
+                        context.getString(R.string.favorite_delete_failed).toast(context)
+                    }
                 }
             }
         }

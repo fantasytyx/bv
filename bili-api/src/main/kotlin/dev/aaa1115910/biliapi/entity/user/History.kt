@@ -40,7 +40,8 @@ data class HistoryItem(
     val duration: Int,
     val progress: Int,
     val type: HistoryItemType,
-    val viewAt: Long
+    val viewAt: Long,
+    val badge: String = ""
 ) {
     companion object {
         fun fromHistoryItem(item: dev.aaa1115910.biliapi.http.entity.history.HistoryItem) =
@@ -67,7 +68,8 @@ data class HistoryItem(
                     "pgc" -> HistoryItemType.Pgc
                     else -> HistoryItemType.Unknown
                 },
-                viewAt = item.viewAt
+                viewAt = item.viewAt,
+                badge = item.badge
             )
 
         @Suppress("RemoveRedundantQualifierName")

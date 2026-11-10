@@ -43,34 +43,47 @@ data class ToViewItem(
     val type: ToViewItemType,
     val pubdate: Long,
     val play: Long,
-    val danmaku: Int
+    val danmaku: Int,
+    /** PGC 条目的类型角标，如「番剧」「电影」 */
+    val pgcLabel: String = ""
 ) {
     companion object {
-        fun fromToViewItem(item: dev.aaa1115910.biliapi.http.entity.toview.ToViewItem) =
-            ToViewItem(
+        /** PGC 条目的播放页地址形如 `https://www.bilibili.com/bangumi/play/ep123456` */
+        private val pgcPlayUrlRegex = Regex("""/play/(ep|ss)(\d+)""")
+
+        fun fromToViewItem(item: dev.aaa1115910.biliapi.http.entity.toview.ToViewItem): ToViewItem {
+            val playUrlMatch = pgcPlayUrlRegex.find(item.redirectUrl)
+            val epIdFromUrl = playUrlMatch
+                ?.takeIf { it.groupValues[1] == "ep" }
+                ?.groupValues?.get(2)?.toIntOrNull()
+            val seasonIdFromUrl = playUrlMatch
+                ?.takeIf { it.groupValues[1] == "ss" }
+                ?.groupValues?.get(2)?.toIntOrNull()
+            val epid = item.bangumi?.epId?.takeIf { it > 0 } ?: epIdFromUrl
+            val seasonId = item.bangumi?.season?.seasonId?.takeIf { it > 0 } ?: seasonIdFromUrl
+            // 部分接口版本的 PGC 条目没有 bangumi 字段，只有 pgc_label / redirect_url 可以判定
+            val isPgc = item.isPgc || item.bangumi != null || item.pgcLabel.isNotBlank() || epid != null
+            return ToViewItem(
                 oid = item.aid,
                 bvid = item.bvid,
                 cid = item.cid,
                 kid = 0,
-                epid = 0,
-                seasonId = null,
+                epid = epid,
+                seasonId = seasonId,
                 title = item.title,
                 cover = item.pic,
-                author = item.owner.name,
-                authorId = item.owner.mid,
-                authorFace = item.owner.face,
+                author = item.owner?.name ?: "",
+                authorId = item.owner?.mid ?: 0,
+                authorFace = item.owner?.face ?: "",
                 duration = item.duration,
                 progress = item.progress,
-                type = ToViewItemType.Archive,
+                type = if (isPgc) ToViewItemType.Pgc else ToViewItemType.Archive,
                 pubdate = item.pubdate,
-                play = item.stat.view,
-                danmaku = item.stat.danmaku
-                // type = when (item.history.business) {
-                //     "archive" -> HistoryItemType.Archive
-                //     "pgc" -> HistoryItemType.Pgc
-                //     else -> HistoryItemType.Unknown
-                // }
+                play = item.stat?.view ?: -1,
+                danmaku = item.stat?.danmaku ?: -1,
+                pgcLabel = item.pgcLabel
             )
+        }
 
         @Suppress("RemoveRedundantQualifierName")
         fun fromToViewItem(item: bilibili.app.interfaces.v1.CursorItem) = ToViewItem(

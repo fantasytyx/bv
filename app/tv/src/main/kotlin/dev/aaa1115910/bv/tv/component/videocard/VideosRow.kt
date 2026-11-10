@@ -31,6 +31,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import dev.aaa1115910.biliapi.entity.FavoriteResourceType
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.tv.component.VideoActionMenu
 import dev.aaa1115910.bv.tv.util.onMenuKeyDown
@@ -65,12 +66,16 @@ fun VideosRow(
     var menuUpId by remember { mutableLongStateOf(0L) }
     var menuUpName by remember { mutableStateOf("") }
     var menuUpFace by remember { mutableStateOf("") }
+    var menuResourceType by remember { mutableStateOf(FavoriteResourceType.Video) }
+    var menuVideo by remember { mutableStateOf<VideoCardData?>(null) }
 
     val onLongClickVideo: (VideoCardData) -> Unit = { videoCard ->
         menuAid = videoCard.avid
         menuUpId = videoCard.upId
         menuUpName = videoCard.upName
         menuUpFace = videoCard.upFace
+        menuResourceType = videoCard.favoriteResourceType
+        menuVideo = videoCard
         showVideoActionMenu = true
     }
 
@@ -142,6 +147,8 @@ fun VideosRow(
         upId = menuUpId,
         upName = menuUpName,
         upFace = menuUpFace,
-        onDismiss = { showVideoActionMenu = false }
+        onDismiss = { showVideoActionMenu = false },
+        onDetailClick = { menuVideo?.let { if (it.jumpToSeason) onOpenSeasonInfo(it) else onOpenVideoInfo(it) } },
+        resourceType = menuResourceType
     )
 }

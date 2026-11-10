@@ -92,7 +92,7 @@ data class HistoryItem(
     @SerialName("view_at")
     val viewAt: Long,
     val progress: Int,
-    val badge: String,
+    val badge: String = "",
     @SerialName("show_title")
     val showTitle: String,
     val duration: Int,
