@@ -26,6 +26,21 @@ class LikeRepository(
         }
     }
 
+    suspend fun setDynamicLike(
+        dynId: String,
+        like: Boolean
+    ) {
+        val (success, message) = BiliHttpApi.likeDynamic(
+            dynId = dynId,
+            like = like,
+            csrf = authRepository.biliJct ?: "",
+            sessData = authRepository.sessionData ?: ""
+        )
+        if (!success) {
+            throw Exception("${if (like) "点赞" else "取消点赞"}失败: $message")
+        }
+    }
+
     suspend fun addVideoLike(
         aid: Long,
         preferApiType: ApiType = ApiType.Web

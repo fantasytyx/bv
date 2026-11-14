@@ -62,4 +62,5 @@ java {
 dependencies {
     implementation(project(":app:shared"))
     implementation(libs.ui.util)
+    testImplementation(kotlin("test-junit"))
 }

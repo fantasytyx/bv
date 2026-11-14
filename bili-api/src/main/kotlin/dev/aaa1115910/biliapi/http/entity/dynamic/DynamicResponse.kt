@@ -193,10 +193,18 @@ data class DynamicItem(
                     val cover: String = "",
                     @SerialName("desc_second")
                     val descSecond: String = "",
+                    val duration: String = "",
                     @SerialName("jump_url")
                     val jumpUrl: String = "",
+                    val stat: Stat? = null,
                     val title: String = ""
-                )
+                ) {
+                    @Serializable
+                    data class Stat(
+                        val danmaku: String = "",
+                        val play: String = ""
+                    )
+                }
 
                 @Serializable
                 data class Goods(

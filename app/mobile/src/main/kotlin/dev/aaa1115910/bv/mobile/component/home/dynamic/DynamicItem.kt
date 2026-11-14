@@ -216,7 +216,7 @@ fun DynamicVideoContent(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    Color.Black.copy(alpha = 0.3f)
+                                    Color.Black.copy(alpha = 0.35f)
                                 )
                             )
                         )
@@ -687,7 +687,7 @@ fun DynamicLiveRcmd(
                             Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    Color.Black.copy(alpha = 0.3f)
+                                    Color.Black.copy(alpha = 0.35f)
                                 )
                             )
                         )

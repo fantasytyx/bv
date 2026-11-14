@@ -40,8 +40,13 @@ import dev.aaa1115910.biliapi.http.entity.user.AppSpaceVideoData
 import dev.aaa1115910.biliapi.http.entity.user.FollowAction
 import dev.aaa1115910.biliapi.http.entity.user.FollowActionSource
 import dev.aaa1115910.biliapi.http.entity.user.MyInfoData
+import dev.aaa1115910.biliapi.http.entity.user.OpusDetailData
 import dev.aaa1115910.biliapi.http.entity.user.RelationData
 import dev.aaa1115910.biliapi.http.entity.user.RelationStat
+import dev.aaa1115910.biliapi.http.entity.user.SpaceArticleData
+import dev.aaa1115910.biliapi.http.entity.user.SpaceSeasonArchivesData
+import dev.aaa1115910.biliapi.http.entity.user.SpaceSeasonSeriesData
+import dev.aaa1115910.biliapi.http.entity.user.SpaceSeriesArchivesData
 import dev.aaa1115910.biliapi.http.entity.user.UserCardData
 import dev.aaa1115910.biliapi.http.entity.user.UserFollowData
 import dev.aaa1115910.biliapi.http.entity.user.UserInfoData
@@ -91,7 +96,9 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
+import io.ktor.http.ContentType
 import io.ktor.http.Parameters
+import io.ktor.http.content.TextContent
 import io.ktor.utils.io.InternalAPI
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.CoroutineScope
@@ -100,10 +107,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.jsoup.nodes.Document
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.parsers.DocumentBuilderFactory
@@ -137,6 +148,22 @@ object BiliHttpApi {
     private val videoMoreInfoCache = ConcurrentHashMap<String, CacheEntry<BiliResponse<VideoMoreInfo>>>()
     private const val VIDEO_MORE_INFO_CACHE_TTL_MILLIS = 30_000L
     private const val WBI_REFRESH_INTERVAL_MILLIS = 2 * 60 * 60 * 1000L
+
+    /**
+     * UP 空间动态端点。
+     *
+     * 不能用 `/feed/all`：那是「关注的人」的动态流，带 `host_mid` 也只会返回关注列表内的
+     * 内容，未关注的 UP 会拿到空列表。空间页固定走 `/feed/space`。
+     */
+    internal const val UpSpaceDynamicFeedPath = "/x/polymer/web-dynamic/v1/feed/space"
+
+    /**
+     * 图文（opus）详情端点。
+     *
+     * 不能用 `/web-dynamic/v1/detail` 代替：那个接口的 `module_stat` 只有转发/评论/点赞，
+     * 没有 `favorite`，图文详情页的收藏数会一直是 0。
+     */
+    internal const val OpusDetailPath = "/x/polymer/web-dynamic/v1/opus/detail"
 
     init {
         createClient()
@@ -181,8 +208,93 @@ object BiliHttpApi {
         buvid3?.takeIf { it.isNotBlank() }?.let { cookieParts.add("buvid3=$it") }
         gaiaVtoken?.takeIf { it.isNotBlank() }?.let { cookieParts.add("x-bili-gaia-vtoken=$it") }
         if (cookieParts.isNotEmpty()) {
-            header("Cookie", cookieParts.joinToString(";") + ";")
+            header("Cookie", cookieParts.joinToString("; "))
         }
+    }
+
+    internal fun HttpRequestBuilder.configureDynamicFeedRequest(
+        timezoneOffset: Int,
+        type: String,
+        page: Int,
+        offset: String?,
+        sessData: String,
+        hostMid: Long?,
+        dedeUserID: Long?,
+        dedeUserIDCkMd5: String?,
+        features: String? = null
+    ) {
+        parameter("timezone_offset", timezoneOffset)
+        parameter("type", type)
+        parameter("page", page)
+        offset?.let { parameter("offset", it) }
+        // 与网页端一致：带 features 后图文会以 opus 形态返回，充电专属动态才会带上 blocked 载荷
+        features?.let { parameter("features", it) }
+        if (hostMid != null) {
+            parameter("host_mid", hostMid)
+            appendWebCookie(
+                sessData = sessData,
+                dedeUserID = dedeUserID,
+                dedeUserIDCkMd5 = dedeUserIDCkMd5
+            )
+        } else {
+            header("Cookie", "SESSDATA=$sessData;")
+        }
+    }
+
+    /**
+     * 空间动态请求（`/feed/space`）。
+     *
+     * 与 `/feed/all` 的区别：`/feed/all` 是「关注的人」的动态流，带 `host_mid` 也只会返回
+     * 关注列表内的内容；空间页必须走 `/feed/space` 才会返回该 UP 自己的全部动态。
+     * 该端点只接受 offset 翻页，不接受 `page` / `type`。
+     */
+    internal fun HttpRequestBuilder.configureSpaceDynamicFeedRequest(
+        timezoneOffset: Int,
+        offset: String?,
+        sessData: String,
+        hostMid: Long,
+        dedeUserID: Long?,
+        dedeUserIDCkMd5: String?,
+        features: String? = null,
+        spaceLoginGroup: Int? = 2,
+        platform: String? = "web"
+    ) {
+        timezoneOffset.let { parameter("timezone_offset", it) }
+        parameter("host_mid", hostMid)
+        // 网页端首屏也会带一个空的 offset（`...&offset=&host_mid=...`），保持一致
+        parameter("offset", offset.orEmpty())
+        spaceLoginGroup?.let { parameter("space_login_group", it) }
+        platform?.let { parameter("platform", it) }
+        features?.let { parameter("features", it) }
+        appendWebCookie(
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
+    }
+
+    /**
+     * 图文（opus）详情请求。
+     *
+     * `features` 必须与网页端一致（`htmlNewStyle`），否则 `module_content` 里的段落结构
+     * 不是富文本形态；Cookie 带上登录态才能拿到 `module_stat.favorite.status`。
+     */
+    internal fun HttpRequestBuilder.configureOpusDetailRequest(
+        timezoneOffset: Int,
+        opusId: String,
+        sessData: String,
+        dedeUserID: Long?,
+        dedeUserIDCkMd5: String?
+    ) {
+        parameter("timezone_offset", timezoneOffset)
+        parameter("id", opusId)
+        parameter("features", "htmlNewStyle")
+        appendWebCookie(
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
+        header("referer", "https://www.bilibili.com/")
     }
 
     /**
@@ -610,13 +722,156 @@ object BiliHttpApi {
         type: String = "all",
         page: Int = 1,
         offset: String? = null,
-        sessData: String = ""
+        sessData: String = "",
+        hostMid: Long? = null,
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null,
+        features: String? = null
     ): BiliResponse<DynamicData> = client.get("/x/polymer/web-dynamic/v1/feed/all") {
-        parameter("timezone_offset", timezoneOffset)
-        parameter("type", type)
-        parameter("page", page)
-        offset?.let { parameter("offset", offset) }
-        header("Cookie", "SESSDATA=$sessData;")
+        configureDynamicFeedRequest(
+            timezoneOffset = timezoneOffset,
+            type = type,
+            page = page,
+            offset = offset,
+            sessData = sessData,
+            hostMid = hostMid,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5,
+            features = features
+        )
+    }.body()
+
+    /** 获取某个 UP 的空间动态（该 UP 自己的全部动态，而不是「我关注的人」的动态流） */
+    suspend fun getUpSpaceDynamicList(
+        mid: Long,
+        offset: String = "",
+        timezoneOffset: Int = -480,
+        sessData: String = "",
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null,
+        features: String? = null
+    ): BiliResponse<DynamicData> = client.get(UpSpaceDynamicFeedPath) {
+        configureSpaceDynamicFeedRequest(
+            timezoneOffset = timezoneOffset,
+            offset = offset,
+            sessData = sessData,
+            hostMid = mid,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5,
+            features = features
+        )
+    }.body()
+
+    suspend fun getWebUserSpaceArticles(
+        mid: Long,
+        pageNumber: Int,
+        offset: String,
+        sessData: String,
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<SpaceArticleData> = client.get("/x/polymer/web-dynamic/v1/opus/feed/space") {
+        parameter("host_mid", mid)
+        parameter("page", pageNumber)
+        parameter("offset", offset)
+        parameter("type", "all")
+        parameter("web_location", "333.1387")
+        appendWebCookie(
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
+        header("referer", "https://space.bilibili.com/$mid/upload/opus")
+    }.body()
+
+    /**
+     * 获取图文（opus）详情。
+     *
+     * 图文详情页只用这一个接口：正文/图片、附带视频、互动数（含**收藏**）与评论 id
+     * 都在同一份响应里，不需要再配一次 `/web-dynamic/v1/detail`。
+     *
+     * @param opusId 图文 id（动态 id）
+     */
+    suspend fun getOpusDetail(
+        timezoneOffset: Int = -480,
+        opusId: String,
+        sessData: String = "",
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<OpusDetailData> = client.get(OpusDetailPath) {
+        configureOpusDetailRequest(
+            timezoneOffset = timezoneOffset,
+            opusId = opusId,
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
+    }.body()
+
+    suspend fun getSpaceSeasonSeries(
+        mid: Long,
+        pageNumber: Int,
+        pageSize: Int,
+        sessData: String,
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<SpaceSeasonSeriesData> = client.get("/x/polymer/web-space/seasons_series_list") {
+        parameter("mid", mid)
+        parameter("page_size", pageSize)
+        parameter("page_num", pageNumber)
+        parameter("web_location", "333.1387")
+        appendWebCookie(
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
+    }.body()
+
+    suspend fun getSeasonArchives(
+        mid: Long,
+        seasonId: Long,
+        pageNumber: Int,
+        pageSize: Int,
+        sessData: String,
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<SpaceSeasonArchivesData> =
+        client.get("/x/polymer/web-space/seasons_archives_list") {
+            parameter("mid", mid)
+            parameter("season_id", seasonId)
+            parameter("sort_reverse", "false")
+            parameter("page_size", pageSize)
+            parameter("page_num", pageNumber)
+            parameter("web_location", "333.1387")
+            appendWebCookie(
+                sessData = sessData,
+                dedeUserID = dedeUserID,
+                dedeUserIDCkMd5 = dedeUserIDCkMd5
+            )
+        }.body()
+
+    suspend fun getSeriesArchives(
+        mid: Long,
+        currentMid: Long,
+        seriesId: Long,
+        pageNumber: Int,
+        pageSize: Int,
+        sessData: String,
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<SpaceSeriesArchivesData> = client.get("/x/series/archives") {
+        parameter("mid", mid)
+        parameter("current_mid", currentMid)
+        parameter("series_id", seriesId)
+        parameter("only_normal", "true")
+        parameter("sort", "desc")
+        parameter("ps", pageSize)
+        parameter("pn", pageNumber)
+        parameter("web_location", "333.1387")
+        appendWebCookie(
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
     }.body()
 
     /**
@@ -634,6 +889,7 @@ object BiliHttpApi {
         parameter("id", id)
         features?.let { parameter("features", it) }
         header("Cookie", "SESSDATA=$sessData;")
+        header("referer", "https://www.bilibili.com/")
     }.body()
 
     /**
@@ -1259,6 +1515,125 @@ object BiliHttpApi {
                 ))
             sessData?.let { header("Cookie", "SESSDATA=$it;") }
         }.body<BiliResponse<SetVideoFavorite>>()
+        check(response.code == 0) { response.message }
+    }
+
+    /**
+     * 为动态/图文[dynId]点赞或取消赞
+     */
+    suspend fun likeDynamic(
+        dynId: String,
+        like: Boolean,
+        csrf: String,
+        sessData: String
+    ): Pair<Boolean, String> {
+        val response = client.post("/x/dynamic/feed/dyn/thumb") {
+            parameter("csrf", csrf)
+            setBody(
+                TextContent(
+                    """{"dyn_id_str":"$dynId","up":${if (like) 1 else 2}}""",
+                    ContentType.Application.Json
+                )
+            )
+            header("Cookie", "SESSDATA=$sessData;")
+            header("referer", "https://www.bilibili.com/")
+        }.body<BiliResponseWithoutData>()
+        return Pair(response.code == 0, response.message)
+    }
+
+    /**
+     * 组装 cosmo `simple_action` 的 JSON body。
+     *
+     * 三段结构（`meta` / `entity` / `action`）与网页端一致。必须走序列化而不是字符串拼接：
+     * 手拼极易漏 key，服务端只会回一个笼统的 code，表现为「收藏失败」。
+     */
+    internal fun buildOpusActionBody(
+        opusId: String,
+        favorite: Boolean,
+        spmid: String = "333.1369.0.0",
+        fromSpmid: String = "333.1387.0.0"
+    ): String = json.encodeToString(
+        JsonObject.serializer(),
+        buildJsonObject {
+            putJsonObject("meta") {
+                put("spmid", spmid)
+                put("from_spmid", fromSpmid)
+                put("from", "unknown")
+            }
+            putJsonObject("entity") {
+                put("object_id_str", opusId)
+                putJsonObject("type") { put("biz", 2) }
+            }
+            put("action", if (favorite) 3 else 4)
+        }
+    )
+
+    /**
+     * 收藏或取消收藏图文[opusId]。
+     *
+     * 图文收藏只能走这个端点（网页端同款）。服务端把图文放进**独立的「图文收藏」**，
+     * 而不是用户创建的收藏夹：网页端空间页在「其他收藏 › 图文收藏夹」里单列，
+     * 条目列表对应 `/x/polymer/web-dynamic/v1/opus/feed/fav`，与收藏夹列表接口互不相通。
+     * 收藏夹接口 `/x/v3/fav/resource/deal` 对图文不生效（不会入库）。
+     *
+     * @param favorite true：收藏（action=3），false：取消收藏（action=4）
+     * @param csrf bili_jct，与网页端一致以 query 参数携带（`chainProxy` 的 `BUILT_IN_CSRF` 把 csrf 放 query 而非 body）
+     */
+    suspend fun setOpusFavorite(
+        opusId: String,
+        favorite: Boolean,
+        csrf: String,
+        sessData: String,
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null,
+        spmid: String = "333.1369.0.0",
+        fromSpmid: String = "333.1387.0.0"
+    ) {
+        val body = buildOpusActionBody(
+            opusId = opusId,
+            favorite = favorite,
+            spmid = spmid,
+            fromSpmid = fromSpmid
+        )
+        val response = client.post("/x/community/cosmo/interface/simple_action") {
+            parameter("csrf", csrf)
+            setBody(TextContent(body, ContentType.Application.Json))
+            header("referer", "https://www.bilibili.com/opus/$opusId")
+            appendWebCookie(
+                sessData = sessData,
+                dedeUserID = dedeUserID,
+                dedeUserIDCkMd5 = dedeUserIDCkMd5,
+                biliJct = csrf
+            )
+        }.body<BiliResponseWithoutData>()
+        check(response.code == 0) { "图文收藏失败: ${response.message} (code: ${response.code})" }
+    }
+
+    /**
+     * 订阅或取消订阅合集[seasonId]
+     *
+     * 合集订阅没有收藏夹选择参数，由服务端放进默认收藏夹。
+     */
+    suspend fun subscribeSeason(
+        seasonId: Long,
+        subscribe: Boolean,
+        csrf: String,
+        sessData: String
+    ) {
+        val response = client.post(
+            if (subscribe) "/x/v3/fav/season/fav" else "/x/v3/fav/season/unfav"
+        ) {
+            setBody(
+                FormDataContent(
+                    Parameters.build {
+                        append("platform", "web")
+                        append("season_id", "$seasonId")
+                        append("csrf", csrf)
+                    }
+                )
+            )
+            header("Cookie", "SESSDATA=$sessData;")
+        }.body<BiliResponseWithoutData>()
         check(response.code == 0) { response.message }
     }
 
@@ -2360,7 +2735,7 @@ object BiliHttpApi {
             dedeUserID?.let { cookieParts.add("DedeUserID=$it") }
             buvid3?.takeIf { it.isNotBlank() }?.let { cookieParts.add("buvid3=$it") }
             if (cookieParts.isNotEmpty()) {
-                header("Cookie", cookieParts.joinToString(";") + ";")
+                header("Cookie", cookieParts.joinToString(";"))
             }
         }.body()
 
@@ -2386,7 +2761,7 @@ object BiliHttpApi {
             dedeUserID?.let { cookieParts.add("DedeUserID=$it") }
             buvid3?.takeIf { it.isNotBlank() }?.let { cookieParts.add("buvid3=$it") }
             if (cookieParts.isNotEmpty()) {
-                header("Cookie", cookieParts.joinToString(";") + ";")
+                header("Cookie", cookieParts.joinToString(";"))
             }
         }
         // println(response.bodyAsText())

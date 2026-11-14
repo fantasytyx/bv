@@ -77,7 +77,7 @@ fun SmallVideoCard(
                             Text(
                                 modifier = Modifier
                                     .clip(MaterialTheme.shapes.extraSmall)
-                                    .background(Color.Black.copy(alpha = 0.3f))
+                                    .background(Color.Black.copy(alpha = 0.35f))
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
                                 text = badge,
                                 style = MaterialTheme.typography.labelSmall,

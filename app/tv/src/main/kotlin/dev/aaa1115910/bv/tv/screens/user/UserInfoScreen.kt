@@ -147,6 +147,8 @@ fun UserInfoScreen(
                             title = historyItem.title,
                             cover = historyItem.cover,
                             upName = historyItem.author,
+                            upId = historyItem.authorId,
+                            upFace = historyItem.authorFace,
                             timeString = if (historyItem.progress == -1) context.getString(R.string.play_time_finish)
                             else context.getString(
                                 R.string.play_time_history,
@@ -156,6 +158,7 @@ fun UserInfoScreen(
                             jumpToSeason = isPgc,
                             epId = historyItem.epid,
                             seasonId = historyItem.seasonId ?: if (isPgc) historyItem.kid.toInt() else null,
+                            favoriteItemType = if (isPgc) FavoriteItemType.Pgc else FavoriteItemType.Video
                         )
                     )
                 }
@@ -238,7 +241,10 @@ fun UserInfoScreen(
                             title = favoriteItem.title,
                             cover = favoriteItem.cover,
                             upName = favoriteItem.upper.name,
-                            time = favoriteItem.duration.toLong() * 1000
+                            upId = favoriteItem.upper.mid,
+                            upFace = favoriteItem.upper.face,
+                            time = favoriteItem.duration.toLong() * 1000,
+                            favoriteItemType = favoriteItem.type
                         )
                     }
                     if (cardData != null) {

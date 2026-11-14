@@ -543,7 +543,7 @@ fun VideoPlayerController(
                     .align(Alignment.TopStart)
                     .padding(8.dp)
                     .clip(MaterialTheme.shapes.medium)
-                    .background(Color.Black.copy(alpha = 0.3f))
+                    .background(Color.Black.copy(alpha = 0.35f))
             ) {
                 Text(
                     modifier = Modifier.padding(8.dp),

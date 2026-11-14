@@ -6,6 +6,7 @@ import bilibili.app.dynamic.v2.ModuleDynamic.ModuleItemCase
 import bilibili.app.dynamic.v2.Paragraph
 import bilibili.app.dynamic.v2.VideoType
 import dev.aaa1115910.biliapi.entity.Picture
+import dev.aaa1115910.biliapi.util.extractArchiveId
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -50,7 +51,11 @@ data class DynamicData(
                             }
                         }
 
-                        DynamicItem.fromDynamicItem(it)
+                        runCatching { DynamicItem.fromDynamicItem(it) }
+                            .onFailure { exception ->
+                                logger.warn(exception) { "map dynamic ${it.idStr} type ${it.type} failed, skipping" }
+                            }
+                            .getOrNull()
                     },
                 hasMore = data.hasMore,
                 historyOffset = data.offset,
@@ -71,14 +76,22 @@ data class DynamicData(
                     if (it.cardType == bilibili.app.dynamic.v2.DynamicType.forward) {
                         // source not exist
                         if (it.getItemNullModule() != null) {
-                            return@mapNotNull DynamicItem.fromDynamicItem(it)
+                            return@mapNotNull runCatching { DynamicItem.fromDynamicItem(it) }
+                                .onFailure { exception ->
+                                    logger.warn(exception) { "map app dynamic ${it.extend.dynIdStr} failed, skipping" }
+                                }
+                                .getOrNull()
                         } else if (!availableAppDynamicTypes.contains(it.getDynamicModule()?.dynForward?.item?.cardType)) {
                             logger.warn { "unknown dynamic forward type ${it.getDynamicModule()?.dynForward?.item?.cardType}, up: ${it.getAuthorModule()?.author?.name}, date: ${it.getAuthorModule()?.ptimeLabelText}" }
                             return@mapNotNull null
                         }
                     }
 
-                    DynamicItem.fromDynamicItem(it)
+                    runCatching { DynamicItem.fromDynamicItem(it) }
+                        .onFailure { exception ->
+                            logger.warn(exception) { "map app dynamic ${it.extend.dynIdStr} failed, skipping" }
+                        }
+                        .getOrNull()
                 },
             hasMore = data.dynamicList.hasMore,
             historyOffset = data.dynamicList.historyOffset,
@@ -95,57 +108,134 @@ data class DynamicItem(
     var commentId: Long = 0,
     var commentType: Long = 0,
     var type: DynamicType,
+    /**
+     * 内容类型（`module_dynamic.major.type`），见 [DynamicMajorType]。
+     *
+     * 外层 [type] 是卡片的声明类型，这里才是实际内容；gRPC 接口没有这个字符串，此时为空。
+     */
+    var majorType: String = "",
     val author: DynamicAuthorModule,
     var video: DynamicVideoModule? = null,
     var draw: DynamicDrawModule? = null,
     var word: DynamicWordModule? = null,
+    /**
+     * 动态自身的正文（`module_dynamic.desc.text`）。
+     *
+     * 视频动态里它和视频简介（`archive.desc` → `video.text`）不是一回事：网页端把正文放在封面上方、
+     * 视频标题放在封面下方。
+     */
+    var bodyText: String = "",
     var liveRcmd: DynamicLiveRcmdModule? = null,
     var pgc: DynamicPgcModule? = null,
     var article: DynamicArticleModule? = null,
     var none: DynamicNoneModule? = null,
+    var blocked: DynamicBlockedModule? = null,
     val footer: DynamicFooterModule? = null,
     var orig: DynamicItem? = null,
     var jumpUrl: String? = null
 ) {
     companion object {
+        /**
+         * 容错映射：空间动态一页里混着十几种卡片，任何一条载荷缺字段都不能让整页失败。
+         * 内容模块缺失时宁可少渲染一块，也不要抛异常。
+         */
         fun fromDynamicItem(item: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem): DynamicItem {
-            val dynamicType = DynamicType.fromWebValue(item.type)
+            val dynamicType = DynamicType.fromWebValueOrNull(item.type) ?: DynamicType.None
+            val moduleDynamic = item.modules.moduleDynamic
             val dynamicItem = DynamicItem(
                 id = item.idStr,
                 commentId = item.basic.commentIdStr.toLongOrDefault(0),
                 commentType = item.basic.commentType,
                 type = dynamicType,
-                author = DynamicAuthorModule.fromModuleAuthor(item.modules.moduleAuthor!!),
-                footer = DynamicFooterModule.fromModuleStat(item.modules.moduleStat)
+                majorType = moduleDynamic.major?.type.orEmpty(),
+                author = item.modules.moduleAuthor?.let(DynamicAuthorModule::fromModuleAuthor)
+                    ?: DynamicAuthorModule("", "", 0, "", ""),
+                bodyText = moduleDynamic.desc?.text.orEmpty(),
+                footer = DynamicFooterModule.fromModuleStat(item.modules.moduleStat),
+                jumpUrl = item.basic.jumpUrl ?: item.jumpUrl
             )
+            // 被屏蔽的动态（如充电专属）没有对应的内容模块，必须提前返回，
+            // 否则下面的内容模块取值会直接抛 NPE
+            val blockedModule = moduleDynamic.major
+                ?.let(DynamicBlockedModule::fromModuleDynamic)
+            if (blockedModule != null) {
+                dynamicItem.blocked = blockedModule
+                return dynamicItem
+            }
             when (dynamicType) {
-                DynamicType.Av -> dynamicItem.video =
-                    DynamicVideoModule.fromModuleArchive(item.modules.moduleDynamic.major!!.archive!!)
+                DynamicType.Av -> {
+                    val archive = moduleDynamic.major?.archive
+                    if (archive != null) {
+                        dynamicItem.video = DynamicVideoModule.fromModuleArchive(archive)
+                    } else {
+                        // 载荷缺失（失效/受限的视频动态）时退回正文，卡片至少还有内容
+                        dynamicItem.word = DynamicWordModule.fromModuleDynamic(moduleDynamic)
+                    }
+                }
 
-                DynamicType.UgcSeason -> TODO()
+                DynamicType.UgcSeason -> dynamicItem.video =
+                    moduleDynamic.major?.ugcSeason?.let {
+                        DynamicVideoModule.fromModuleUgcSeason(it)
+                    }
+
                 DynamicType.Forward -> dynamicItem.apply {
-                    word = DynamicWordModule.fromModuleDynamic(item.modules.moduleDynamic)
-                    orig = fromDynamicItem(item.orig!!)
-                    jumpUrl = item.orig?.basic?.jumpUrl
+                    word = DynamicWordModule.fromModuleDynamic(moduleDynamic)
+                    orig = item.orig?.let { fromDynamicItem(it) }
                 }
 
                 DynamicType.Word -> dynamicItem.word =
-                    DynamicWordModule.fromModuleDynamic(item.modules.moduleDynamic)
+                    DynamicWordModule.fromModuleDynamic(moduleDynamic)
 
                 DynamicType.Draw -> dynamicItem.draw =
-                    DynamicDrawModule.fromModuleDynamic(item.modules.moduleDynamic)
+                    DynamicDrawModule.fromModuleDynamic(moduleDynamic)
 
-                DynamicType.LiveRcmd -> dynamicItem.liveRcmd =
-                    DynamicLiveRcmdModule.fromModuleDynamic(item.modules.moduleDynamic)
+                DynamicType.LiveRcmd -> {
+                    val liveRcmd = moduleDynamic.major?.liveRcmd
+                    dynamicItem.liveRcmd = if (liveRcmd != null) {
+                        DynamicLiveRcmdModule.fromModuleDynamic(moduleDynamic)
+                    } else {
+                        // 部分卡片下发的是旧版 major.live 载荷
+                        moduleDynamic.major?.live?.let(DynamicLiveRcmdModule::fromModuleLive)
+                    }
+                }
 
-                DynamicType.Pgc -> dynamicItem.pgc =
-                    DynamicPgcModule.fromModulePgc(item.modules.moduleDynamic.major!!.pgc!!)
+                DynamicType.Pgc -> {
+                    val pgc = moduleDynamic.major?.pgc
+                    if (pgc != null) {
+                        dynamicItem.pgc = DynamicPgcModule.fromModulePgc(pgc)
+                    } else {
+                        dynamicItem.word = DynamicWordModule.fromModuleDynamic(moduleDynamic)
+                    }
+                }
 
-                DynamicType.Article -> dynamicItem.article =
-                    DynamicArticleModule.fromModuleArticle(item.modules.moduleDynamic.major!!.article!!)
+                DynamicType.Article -> {
+                    val article = moduleDynamic.major?.article
+                    if (article != null) {
+                        dynamicItem.article = DynamicArticleModule.fromModuleArticle(article)
+                    } else {
+                        // 「投稿了文章」动态可能用 MAJOR_TYPE_OPUS 下发内容，此时 major.article 为 null，
+                        // 标题/正文/封面都在 major.opus 里（jump_url 指向 /opus/{动态id}）
+                        val draw = DynamicDrawModule.fromModuleDynamic(moduleDynamic)
+                        if (moduleDynamic.major?.opus != null || moduleDynamic.major?.draw != null) {
+                            dynamicItem.draw = draw
+                        } else {
+                            dynamicItem.word = DynamicWordModule.fromModuleDynamic(moduleDynamic)
+                        }
+                        dynamicItem.article = DynamicArticleModule.fromOpus(
+                            draw = draw,
+                            jumpUrl = moduleDynamic.major?.opus?.jumpUrl.orEmpty()
+                        )
+                    }
+                }
 
                 DynamicType.None -> dynamicItem.none =
-                    DynamicNoneModule.fromModuleDynamic(item.modules.moduleDynamic.major!!.none!!)
+                    moduleDynamic.major?.none?.let(DynamicNoneModule::fromModuleDynamic)
+            }
+            // 图文/动态附带的视频卡片走 additional.ugc（如 B 站手机端发布的图文视频）
+            if (dynamicItem.video == null) {
+                moduleDynamic.additional?.ugc?.let { ugc ->
+                    dynamicItem.video = DynamicVideoModule.fromAdditionalUgc(ugc)
+                }
             }
             return dynamicItem
         }
@@ -189,6 +279,7 @@ data class DynamicItem(
                         text = item.getDescModule()?.text ?: ""
                     }
                 },
+                bodyText = item.getDescModule()?.text.orEmpty(),
                 footer = if (!isForwardItem) {
                     // 获取动态详情时 module_list 中没有 module_stat，但 module_bottom 中包含了 module_stat
                     DynamicFooterModule.fromModuleStat(
@@ -204,7 +295,10 @@ data class DynamicItem(
                     }
                 }
 
-                DynamicType.UgcSeason -> TODO()
+                DynamicType.UgcSeason -> dynamicItem.video = item.getDynamicModule()?.dynUgcSeason?.let {
+                    DynamicVideoModule.fromModuleUgcSeason(it)
+                }
+
                 DynamicType.Draw -> dynamicItem.draw =
                     item.getOpusSummaryModule()?.let { opusSummaryModule ->
                         DynamicDrawModule.fromModuleOpusSummaryAndModuleDynamic(
@@ -248,8 +342,50 @@ data class DynamicItem(
                 DynamicType.Pgc -> dynamicItem.pgc =
                     DynamicPgcModule.fromModulePgc(item.getDynamicModule()!!.dynPgc)
 
-                DynamicType.Article -> dynamicItem.article =
-                    DynamicArticleModule.fromModuleArticle(item.getDynamicModule()!!.dynArticle)
+                DynamicType.Article -> {
+                    val dynamicModule = item.getDynamicModule()
+                    val article = dynamicModule?.dynArticle
+                    if (article != null) {
+                        dynamicItem.article = DynamicArticleModule.fromModuleArticle(article)
+                    } else {
+                        // 新版文章动态走 opus 摘要模块，内容不在 dyn_article 里
+                        val opusSummary = item.getOpusSummaryModule()
+                        if (opusSummary != null) {
+                            val draw = DynamicDrawModule.fromModuleOpusSummaryAndModuleDynamic(
+                                opusSummary,
+                                dynamicModule
+                            ).let { draw ->
+                                // 文章封面有时只出现在 ModuleOpusSummary.covers 里
+                                if (draw.images.isNotEmpty()) {
+                                    draw
+                                } else {
+                                    draw.copy(
+                                        images = opusSummary.coversList
+                                            .map(Picture::fromPicture)
+                                            .filter { it.url.isNotBlank() }
+                                            .distinctBy { it.url }
+                                    )
+                                }
+                            }
+                            dynamicItem.draw = draw
+                            dynamicItem.article = DynamicArticleModule.fromOpus(
+                                draw = draw,
+                                jumpUrl = dynamicModule?.dynDraw?.uri.orEmpty()
+                            )
+                        } else {
+                            val word = item.getDescModule()?.let(DynamicWordModule::fromModuleDesc)
+                            dynamicItem.word = word
+                            dynamicItem.article = DynamicArticleModule.fromOpus(
+                                draw = DynamicDrawModule(
+                                    title = null,
+                                    text = word?.text.orEmpty(),
+                                    images = emptyList()
+                                ),
+                                jumpUrl = dynamicModule?.dynDraw?.uri.orEmpty()
+                            )
+                        }
+                    }
+                }
 
                 DynamicType.None -> dynamicItem.none =
                     DynamicNoneModule.fromModuleDynamic(item.getItemNullModule()!!)
@@ -311,12 +447,39 @@ data class DynamicItem(
         val duration: String,
         val play: String,
         val danmaku: String,
-        val isChargingArc: Boolean = false,
-        val chargingArcBadge: String = ""
+        /** 角标文案（动态视频/合作视频/充电专属…），接口原值，卡片右上角直接展示 */
+        val badgeText: String = "",
+        val playCount: Long = 0L,
+        val danmakuCount: Int = 0,
+        val durationSeconds: Int = 0
     ) {
         companion object {
+            fun fromAdditionalUgc(
+                ugc: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Additional.Ugc
+            ): DynamicVideoModule? {
+                val aid = extractArchiveId(ugc.jumpUrl) ?: return null
+                // `desc_second` 是「4.1万观看 53弹幕」这类统计文案，不是时长；
+                // 时长在 `duration`（`02:50`），播放/弹幕在 `stat`。
+                val play = ugc.stat?.play.orEmpty()
+                val danmaku = ugc.stat?.danmaku.orEmpty()
+                return DynamicVideoModule(
+                    aid = aid,
+                    cid = 0,
+                    title = ugc.title,
+                    text = "",
+                    cover = ugc.cover,
+                    duration = ugc.duration,
+                    play = play,
+                    danmaku = danmaku,
+                    playCount = convertStringPlayCountToNumberPlayCount(play),
+                    danmakuCount = convertStringPlayCountToNumberPlayCount(danmaku).toInt(),
+                    durationSeconds = convertStringTimeToSeconds(ugc.duration)
+                )
+            }
+
             fun fromModuleArchive(moduleArchive: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Major.Archive): DynamicVideoModule {
-                val isChargingArc = moduleArchive.badge?.text?.contains("充电") == true || moduleArchive.badge?.text?.contains("限时免费") == true
+                val play = moduleArchive.stat?.play ?: ""
+                val danmaku = moduleArchive.stat?.danmaku ?: ""
                 return DynamicVideoModule(
                     aid = moduleArchive.aid.toLong(),
                     bvid = moduleArchive.bvid,
@@ -325,16 +488,17 @@ data class DynamicItem(
                     text = moduleArchive.desc,
                     cover = moduleArchive.cover,
                     duration = moduleArchive.durationText,
-                    play = moduleArchive.stat?.play ?: "",
-                    danmaku = moduleArchive.stat?.danmaku ?: "",
-                    isChargingArc = isChargingArc,
-                    chargingArcBadge = if (isChargingArc) moduleArchive.badge?.text ?: "" else ""
+                    play = play,
+                    danmaku = danmaku,
+                    badgeText = moduleArchive.badge?.text.orEmpty(),
+                    playCount = convertStringPlayCountToNumberPlayCount(play),
+                    danmakuCount = convertStringPlayCountToNumberPlayCount(danmaku).toInt(),
+                    durationSeconds = convertStringTimeToSeconds(moduleArchive.durationText)
                 )
             }
 
             fun fromModuleArchive(moduleArchive: bilibili.app.dynamic.v2.MdlDynArchive): DynamicVideoModule {
                 val badgeText = moduleArchive.badgeList.firstOrNull()?.text ?: ""
-                val isChargingArc = badgeText.contains("充电") || badgeText.contains("限时免费")
                 return DynamicVideoModule(
                     aid = moduleArchive.avid,
                     bvid = moduleArchive.bvid,
@@ -347,17 +511,60 @@ data class DynamicItem(
                     duration = moduleArchive.coverLeftText1,
                     play = moduleArchive.coverLeftText2,
                     danmaku = moduleArchive.coverLeftText3,
-                    isChargingArc = isChargingArc,
-                    chargingArcBadge = if (isChargingArc) badgeText else ""
+                    badgeText = badgeText,
+                    playCount = convertStringPlayCountToNumberPlayCount(moduleArchive.coverLeftText2),
+                    danmakuCount = convertStringPlayCountToNumberPlayCount(moduleArchive.coverLeftText3).toInt(),
+                    durationSeconds = moduleArchive.duration.toInt().takeIf { it > 0 }
+                        ?: convertStringTimeToSeconds(moduleArchive.coverLeftText1)
                 )
             }
+
+            fun fromModuleUgcSeason(ugcSeason: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Major.UgcSeason): DynamicVideoModule {
+                val play = ugcSeason.stat?.play ?: ""
+                val danmaku = ugcSeason.stat?.danmaku ?: ""
+                return DynamicVideoModule(
+                    aid = ugcSeason.aid,
+                    bvid = ugcSeason.bvid,
+                    cid = 0,
+                    title = ugcSeason.title,
+                    text = ugcSeason.desc,
+                    cover = ugcSeason.cover,
+                    duration = ugcSeason.durationText,
+                    play = play,
+                    danmaku = danmaku,
+                    badgeText = ugcSeason.badge?.text.orEmpty(),
+                    playCount = convertStringPlayCountToNumberPlayCount(play),
+                    danmakuCount = convertStringPlayCountToNumberPlayCount(danmaku).toInt(),
+                    durationSeconds = convertStringTimeToSeconds(ugcSeason.durationText)
+                )
+            }
+
+            fun fromModuleUgcSeason(ugcSeason: bilibili.app.dynamic.v2.MdlDynUGCSeason): DynamicVideoModule =
+                DynamicVideoModule(
+                    aid = ugcSeason.avid,
+                    bvid = null,
+                    cid = ugcSeason.cid,
+                    title = ugcSeason.title,
+                    text = "",
+                    cover = ugcSeason.cover,
+                    duration = ugcSeason.coverLeftText1,
+                    play = ugcSeason.coverLeftText2,
+                    danmaku = ugcSeason.coverLeftText3,
+                    playCount = convertStringPlayCountToNumberPlayCount(ugcSeason.coverLeftText2),
+                    danmakuCount = convertStringPlayCountToNumberPlayCount(ugcSeason.coverLeftText3).toInt(),
+                    durationSeconds = ugcSeason.duration.toInt().takeIf { it > 0 }
+                        ?: convertStringTimeToSeconds(ugcSeason.coverLeftText1)
+                )
         }
     }
 
     data class DynamicFooterModule(
         val like: Int,
         val comment: Int,
-        val share: Int
+        val share: Int,
+        val liked: Boolean = false,
+        val favorite: Int = 0,
+        val favorited: Boolean = false
     ) {
         companion object {
             fun fromModuleStat(moduleStat: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Stat?) =
@@ -365,7 +572,10 @@ data class DynamicItem(
                     DynamicFooterModule(
                         like = moduleStat.like?.count ?: 0,
                         comment = moduleStat.comment?.count ?: 0,
-                        share = moduleStat.forward?.count ?: 0
+                        share = moduleStat.forward?.count ?: 0,
+                        liked = moduleStat.like?.status == true,
+                        favorite = moduleStat.favorite?.count ?: 0,
+                        favorited = moduleStat.favorite?.status == true
                     )
                 }
 
@@ -373,11 +583,69 @@ data class DynamicItem(
                 DynamicFooterModule(
                     like = moduleStat.like.toInt(),
                     comment = moduleStat.reply.toInt(),
-                    share = moduleStat.repost.toInt()
+                    share = moduleStat.repost.toInt(),
+                    liked = moduleStat.likeInfo.isLike
                 )
 
             fun fromModuleBottom(moduleButtom: bilibili.app.dynamic.v2.ModuleButtom) =
                 fromModuleStat(moduleButtom.moduleStat)
+        }
+    }
+
+    data class DynamicBlockedModule(
+        val title: String,
+        val hintMessage: String,
+        val iconUrl: String,
+        val bgImageUrl: String = "",
+        val buttonText: String = "",
+        val jumpUrl: String = ""
+    ) {
+        companion object {
+            fun fromModuleBlocked(blocked: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Major.Blocked) =
+                DynamicBlockedModule(
+                    title = blocked.title,
+                    hintMessage = blocked.hintMessage,
+                    iconUrl = blocked.icon?.imgDark?.takeIf { it.isNotBlank() }
+                        ?: blocked.icon?.imgDay.orEmpty(),
+                    bgImageUrl = blocked.bgImg?.imgDark?.takeIf { it.isNotBlank() }
+                        ?: blocked.bgImg?.imgDay.orEmpty(),
+                    buttonText = blocked.button?.text.orEmpty(),
+                    jumpUrl = blocked.button?.jumpUrl.orEmpty()
+                )
+
+            /**
+             * 被屏蔽的动态（充电专属等）没有内容模块。
+             *
+             * 部分接口只把 `major.type` 标成 `MAJOR_TYPE_BLOCKED`，`blocked` 载荷缺失，
+             * 此时退回 `bg_img`、`none.tips` 与图文内容取封面/标题，避免卡片只剩一个类型角标。
+             */
+            fun fromModuleDynamic(
+                major: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Major
+            ): DynamicBlockedModule? {
+                val blocked = major.blocked
+                if (blocked == null && major.type != DynamicMajorType.Blocked) return null
+                val base = blocked?.let(::fromModuleBlocked)
+                val iconUrl = base?.iconUrl?.takeIf { it.isNotBlank() }
+                    ?: listOfNotNull(
+                        blocked?.bgImg?.imgDark,
+                        blocked?.bgImg?.imgDay,
+                        major.opus?.pics?.firstOrNull()?.url,
+                        major.draw?.items?.firstOrNull()?.src
+                    ).firstOrNull { it.isNotBlank() }.orEmpty()
+                val hintMessage = base?.hintMessage.orEmpty().trim()
+                    .ifBlank { major.none?.tips.orEmpty().trim() }
+                return DynamicBlockedModule(
+                    // 卡片优先展示 hint_message，两者都缺失时兜底一个可读标题
+                    title = base?.title.orEmpty().trim().ifBlank {
+                        if (hintMessage.isBlank()) "充电专属动态" else ""
+                    },
+                    hintMessage = hintMessage,
+                    iconUrl = iconUrl,
+                    bgImageUrl = base?.bgImageUrl.orEmpty(),
+                    buttonText = base?.buttonText.orEmpty(),
+                    jumpUrl = base?.jumpUrl.orEmpty()
+                )
+            }
         }
     }
 
@@ -389,15 +657,34 @@ data class DynamicItem(
         companion object {
             fun fromModuleDynamic(moduleDynamic: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic) =
                 DynamicDrawModule(
-                    title = null,
-                    text = moduleDynamic.desc?.text
-                        ?: moduleDynamic.major?.opus?.summary?.text
-                        ?: "empty text",
-                    images = (moduleDynamic.major?.draw?.items?.map(Picture::fromPicture)
-                        ?: moduleDynamic.major?.opus?.pics?.map(Picture::fromPicture))
-                        ?.distinctBy { it.url }
-                        ?: emptyList()
+                    title = moduleDynamic.major?.opus?.title?.takeIf { it.isNotBlank() },
+                    text = moduleDynamic.desc?.text?.takeIf { it.isNotBlank() }
+                        ?: moduleDynamic.major?.opus?.summary?.text.orEmpty(),
+                    images = drawImages(moduleDynamic)
                 )
+
+            /**
+             * `major.draw.items` 是旧结构，opus 的图片在 `opus.pics`。
+             * 少数图文把图片只放在富文本节点里（`rich_text_nodes[].pics`/`dyn_pic`），
+             * `pics` 为空时用它们兜底，否则引用块会只剩一段文字。
+             * 注意不能和 `pics` 合并：视频节点的 `pics` 是视频封面，混进图片行会多出一张图。
+             */
+            private fun drawImages(
+                moduleDynamic: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic
+            ): List<Picture> {
+                val drawImages = moduleDynamic.major?.draw?.items
+                    ?.map(Picture::fromPicture)
+                    .orEmpty()
+                val opusImages = moduleDynamic.major?.opus?.let { opus ->
+                    val pics = opus.pics.ifEmpty {
+                        opus.summary.richTextNodes.flatMap { node -> node.pics + node.dynPic }
+                    }
+                    pics.map(Picture::fromPicture)
+                }.orEmpty()
+                return drawImages.ifEmpty { opusImages }
+                    .filter { it.url.isNotBlank() }
+                    .distinctBy { it.url }
+            }
 
             fun fromModuleOpusSummaryAndModuleDynamic(
                 moduleOpusSummary: bilibili.app.dynamic.v2.ModuleOpusSummary,
@@ -485,7 +772,7 @@ data class DynamicItem(
                 DynamicWordModule(
                     text = moduleDynamic.major?.opus?.summary?.text
                         ?: moduleDynamic.desc?.text
-                        ?: "empty content"
+                        ?: ""
                 )
 
             fun fromModuleOpusSummary(moduleOpusSummary: bilibili.app.dynamic.v2.ModuleOpusSummary) =
@@ -504,7 +791,13 @@ data class DynamicItem(
     data class DynamicLiveRcmdModule(
         val title: String,
         val cover: String,
-        val roomId: Int
+        val roomId: Int,
+        val areaName: String = "",
+        val parentAreaName: String = "",
+        val online: Int = 0,
+        val liveStatus: Int = 0,
+        val watchedText: String = "",
+        val link: String = ""
     ) {
         companion object {
             private val json = Json {
@@ -513,23 +806,41 @@ data class DynamicItem(
                 prettyPrint = true
             }
 
-            fun fromModuleDynamic(moduleDynamic: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic): DynamicLiveRcmdModule {
-                val liveRcmdContent =
-                    json.decodeFromString<LiveRcmdContent>(moduleDynamic.major!!.liveRcmd!!.content)
-                return DynamicLiveRcmdModule(
-                    title = liveRcmdContent.livePlayInfo.title,
-                    cover = liveRcmdContent.livePlayInfo.cover,
-                    roomId = liveRcmdContent.livePlayInfo.roomId
-                )
+            fun fromModuleDynamic(moduleDynamic: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic): DynamicLiveRcmdModule? {
+                val content = moduleDynamic.major?.liveRcmd?.content ?: return null
+                return decodeLiveRcmdContent(content)
             }
 
-            fun fromModuleDynamic(moduleDynamic: bilibili.app.dynamic.v2.ModuleDynamic): DynamicLiveRcmdModule {
-                val liveRcmdContent =
-                    json.decodeFromString<LiveRcmdContent>(moduleDynamic.dynLiveRcmd.content)
+            fun fromModuleDynamic(moduleDynamic: bilibili.app.dynamic.v2.ModuleDynamic): DynamicLiveRcmdModule? =
+                decodeLiveRcmdContent(moduleDynamic.dynLiveRcmd.content)
+
+            /** 旧版直播动态用 major.live 下发，没有 live_rcmd 加密内容 */
+            fun fromModuleLive(
+                live: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Major.Live
+            ) = DynamicLiveRcmdModule(
+                title = live.title,
+                cover = live.cover,
+                roomId = live.id.toInt(),
+                areaName = live.descFirst,
+                liveStatus = live.liveState,
+                link = live.jumpUrl
+            )
+
+            private fun decodeLiveRcmdContent(content: String): DynamicLiveRcmdModule? {
+                val liveRcmdContent = runCatching {
+                    json.decodeFromString<LiveRcmdContent>(content)
+                }.getOrNull() ?: return null
+                val livePlayInfo = liveRcmdContent.livePlayInfo ?: return null
                 return DynamicLiveRcmdModule(
-                    title = liveRcmdContent.livePlayInfo.title,
-                    cover = liveRcmdContent.livePlayInfo.cover,
-                    roomId = liveRcmdContent.livePlayInfo.roomId
+                    title = livePlayInfo.title,
+                    cover = livePlayInfo.cover,
+                    roomId = livePlayInfo.roomId,
+                    areaName = livePlayInfo.areaName,
+                    parentAreaName = livePlayInfo.parentAreaName,
+                    online = livePlayInfo.online,
+                    liveStatus = livePlayInfo.liveStatus,
+                    watchedText = livePlayInfo.watchedShow?.textLarge.orEmpty(),
+                    link = livePlayInfo.link
                 )
             }
         }
@@ -537,59 +848,59 @@ data class DynamicItem(
         @Serializable
         private data class LiveRcmdContent(
             @SerialName("live_play_info")
-            val livePlayInfo: LivePlayInfo,
+            val livePlayInfo: LivePlayInfo? = null,
             @SerialName("live_record_info")
             val liveRecordInfo: JsonElement? = null,
-            val type: Int
+            val type: Int = 0
         ) {
             @Serializable
             data class LivePlayInfo(
-                val title: String,
+                val title: String = "",
                 @SerialName("parent_area_name")
-                val parentAreaName: String,
-                val cover: String,
-                val online: Int,
+                val parentAreaName: String = "",
+                val cover: String = "",
+                val online: Int = 0,
                 @SerialName("parent_area_id")
-                val parentAreaId: Int,
+                val parentAreaId: Int = 0,
                 @SerialName("live_start_time")
-                val liveStartTime: Long,
+                val liveStartTime: Long = 0,
                 @SerialName("room_id")
-                val roomId: Int,
+                val roomId: Int = 0,
                 @SerialName("live_status")
-                val liveStatus: Int,
+                val liveStatus: Int = 0,
                 @SerialName("room_type")
-                val roomType: Int,
+                val roomType: Int = 0,
                 @SerialName("play_type")
-                val playType: Int,
-                val link: String,
+                val playType: Int = 0,
+                val link: String = "",
                 @SerialName("area_id")
-                val areaId: Int,
+                val areaId: Int = 0,
                 @SerialName("area_name")
-                val areaName: String,
+                val areaName: String = "",
                 @SerialName("watched_show")
-                val watchedShow: WatchedShow,
+                val watchedShow: WatchedShow? = null,
                 @SerialName("room_paid_type")
-                val roomPaidType: Int,
-                val uid: Long,
+                val roomPaidType: Int = 0,
+                val uid: Long = 0,
                 @SerialName("live_screen_type")
-                val liveScreenType: Int,
+                val liveScreenType: Int = 0,
                 @SerialName("live_id")
-                val liveId: Long,
-                val pendants: Pendants
+                val liveId: Long = 0,
+                val pendants: Pendants? = null
             ) {
                 @Serializable
                 data class WatchedShow(
-                    val num: Int,
+                    val num: Int = 0,
                     @SerialName("text_small")
-                    val textSmall: String,
+                    val textSmall: String = "",
                     @SerialName("text_large")
-                    val textLarge: String,
-                    val icon: String,
+                    val textLarge: String = "",
+                    val icon: String = "",
                     @SerialName("icon_location")
-                    val iconLocation: String,
+                    val iconLocation: String = "",
                     @SerialName("icon_web")
-                    val iconWeb: String,
-                    val switch: Boolean
+                    val iconWeb: String = "",
+                    val switch: Boolean = false
                 )
 
                 @Serializable
@@ -641,6 +952,20 @@ data class DynamicItem(
         val covers: List<String>
     ) {
         companion object {
+            /**
+             * 新版文章动态（`DYNAMIC_TYPE_ARTICLE` + `MAJOR_TYPE_OPUS`）没有 `major.article`，
+             * 标题/正文/封面都在 opus 里，这里转成文章模块，卡片与详情页才能共用展示逻辑。
+             */
+            fun fromOpus(draw: DynamicDrawModule, jumpUrl: String) =
+                DynamicArticleModule(
+                    title = draw.title.orEmpty(),
+                    text = draw.text,
+                    url = jumpUrl,
+                    label = "",
+                    id = 0,
+                    covers = draw.images.map { it.url }
+                )
+
             fun fromModuleArticle(moduleDynamic: dev.aaa1115910.biliapi.http.entity.dynamic.DynamicItem.Modules.Dynamic.Major.Article) =
                 DynamicArticleModule(
                     title = moduleDynamic.title,
@@ -877,12 +1202,16 @@ data class DynamicVideo(
 private fun convertStringTimeToSeconds(time: String): Int {
     //部分稿件可能没有时长，Web 接口返回 NaN:NaN:NaN，App 接口返回空字符串
     if (time.startsWith("NaN") || time.isBlank()) return 0
-
-    val parts = time.split(":")
-    val hours = if (parts.size == 3) parts[0].toInt() else 0
-    val minutes = parts[parts.size - 2].toInt()
-    val seconds = parts[parts.size - 1].toInt()
-    return (hours * 3600) + (minutes * 60) + seconds
+    // 时长字段偶尔会塞进别的文案（如图文附带视频的 desc_second），
+    // 解析失败只能让时长归零，不能让整条动态被丢掉
+    return runCatching {
+        val parts = time.split(":")
+        if (parts.size < 2) return@runCatching 0
+        val hours = if (parts.size >= 3) parts[parts.size - 3].toInt() else 0
+        val minutes = parts[parts.size - 2].toInt()
+        val seconds = parts[parts.size - 1].toInt()
+        (hours * 3600) + (minutes * 60) + seconds
+    }.getOrDefault(0)
 }
 
 //web 接口获取到的是“xx万”，而 grpc 接口获取到的是“xx.x万播放”
@@ -918,10 +1247,32 @@ enum class DynamicType(val webValue: String, val appValue: bilibili.app.dynamic.
         fun fromWebValue(webValue: String) = entries.firstOrNull { it.webValue == webValue }
             ?: throw IllegalArgumentException("unknown type $webValue")
 
+        fun fromWebValueOrNull(webValue: String?): DynamicType? =
+            entries.firstOrNull { it.webValue == webValue }
+
         fun fromAppValue(appValue: bilibili.app.dynamic.v2.DynamicType) =
             entries.firstOrNull { it.appValue == appValue }
                 ?: throw IllegalArgumentException("unknown type ${appValue.name}")
     }
+}
+
+/**
+ * 内容类型（`module_dynamic.major.type`）。
+ *
+ * 外层 [DynamicType] 是卡片的声明类型，这里才是实际内容：同样是 `DYNAMIC_TYPE_DRAW`，
+ * 可能是 `MAJOR_TYPE_OPUS`，也可能是 `MAJOR_TYPE_BLOCKED`（充电专属）。
+ * gRPC 接口没有这个字符串，此时 [DynamicItem.majorType] 为空。
+ */
+object DynamicMajorType {
+    const val None = "MAJOR_TYPE_NONE"
+    const val Archive = "MAJOR_TYPE_ARCHIVE"
+    const val Opus = "MAJOR_TYPE_OPUS"
+    const val Draw = "MAJOR_TYPE_DRAW"
+    const val Article = "MAJOR_TYPE_ARTICLE"
+    const val Pgc = "MAJOR_TYPE_PGC"
+    const val Live = "MAJOR_TYPE_LIVE"
+    const val LiveRcmd = "MAJOR_TYPE_LIVE_RCMD"
+    const val Blocked = "MAJOR_TYPE_BLOCKED"
 }
 
 private fun Module.isAuthorModule() = moduleType == DynModuleType.module_author

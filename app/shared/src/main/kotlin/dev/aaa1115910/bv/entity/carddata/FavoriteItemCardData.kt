@@ -48,7 +48,10 @@ fun FavoriteItem.toVideoCardDataOrNull(pubTime: String? = null): VideoCardData? 
         }
 
         FavoriteItemType.All,
+        FavoriteItemType.Dynamic,
+        FavoriteItemType.Opus,
         FavoriteItemType.Audio,
-        FavoriteItemType.VideoCollection -> null
+        FavoriteItemType.VideoCollection,
+        FavoriteItemType.Other -> null
     }
 }

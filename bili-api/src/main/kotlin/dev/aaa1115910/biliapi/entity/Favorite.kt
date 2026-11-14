@@ -23,23 +23,38 @@ data class FavoriteFolderItemId(
 enum class FavoriteItemType(val value: Int) {
     All(0),
     Video(2),
+    Dynamic(11),
     Audio(12),
+    Opus(13),
     VideoCollection(21),
-    Pgc(24);
+    Pgc(24),
+    Other(-1);
 
     companion object {
-        fun fromValue(typeId: Int) = entries.first { it.value == typeId }
+        fun fromValue(typeId: Int) = entries.firstOrNull { it.value == typeId } ?: Other
     }
 }
 
 enum class FavoriteResourceType(val value: Int) {
     Video(2),
-    Pgc(42);
+    VideoCollection(21),
+    Pgc(42),
+
+    /**
+     * 图文/动态收藏。B 站未公开文档，条目类型 11 / 13 都可能出现。
+     *
+     * 收藏/取消收藏图文走 cosmo 的 `simple_action`，内容进的是独立的「图文收藏」，
+     * 不在用户创建的收藏夹里，条目列表接口是 `/x/polymer/web-dynamic/v1/opus/feed/fav`。
+     * 见 [dev.aaa1115910.biliapi.repositories.FavoriteRepository.setOpusFavorite]。
+     */
+    Opus(13);
 
     companion object {
         fun fromFavoriteItemType(type: FavoriteItemType): FavoriteResourceType = when (type) {
             FavoriteItemType.Video -> Video
+            FavoriteItemType.VideoCollection -> VideoCollection
             FavoriteItemType.Pgc -> Pgc
+            FavoriteItemType.Dynamic, FavoriteItemType.Opus -> Opus
             else -> throw IllegalArgumentException("Unsupported favorite item type: $type")
         }
     }

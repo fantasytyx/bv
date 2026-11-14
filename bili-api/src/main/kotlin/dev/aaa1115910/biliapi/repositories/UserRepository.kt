@@ -10,7 +10,11 @@ import dev.aaa1115910.biliapi.entity.ApiType
 import dev.aaa1115910.biliapi.entity.user.DynamicData
 import dev.aaa1115910.biliapi.entity.user.DynamicItem
 import dev.aaa1115910.biliapi.entity.user.DynamicVideoData
+import dev.aaa1115910.biliapi.entity.user.ArticleViewData
 import dev.aaa1115910.biliapi.entity.user.FollowedUser
+import dev.aaa1115910.biliapi.entity.user.SpaceArticlePage
+import dev.aaa1115910.biliapi.entity.user.SpaceArchivePage
+import dev.aaa1115910.biliapi.entity.user.SpaceSeasonSeriesPage
 import dev.aaa1115910.biliapi.entity.user.SpaceVideoData
 import dev.aaa1115910.biliapi.entity.user.SpaceVideoOrder
 import dev.aaa1115910.biliapi.entity.user.SpaceVideoPage
@@ -27,6 +31,15 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Single
 import kotlin.math.ceil
+
+/**
+ * 与网页端空间动态页一致的 features，决定图文以 opus 形态返回、充电专属动态带 blocked 载荷。
+ * 少传会被部分 UP 的空间接口当成异常请求，导致整页动态加载失败。
+ */
+private const val SpaceDynamicFeatures =
+    "itemOpusStyle,listOnlyfans,opusBigCover,onlyfansVote,forwardListHidden,decorationCard," +
+        "commentsNewVersion,onlyfansAssetsV2,ugcDelete,onlyfansQaCard,avatarAutoTheme,sunflowerStyle," +
+        "cardsEnhance,eva3CardOpus,eva3CardVideo,eva3CardComment,eva3CardUser"
 
 @Single
 class UserRepository(
@@ -277,6 +290,107 @@ class UserRepository(
                 result!!
             }
         }
+    }
+
+    suspend fun getDynamicsByUp(
+        mid: Long,
+        offset: String
+    ): DynamicData {
+        val responseData = BiliHttpApi.getUpSpaceDynamicList(
+            mid = mid,
+            offset = offset,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5,
+            features = SpaceDynamicFeatures
+        ).getResponseData()
+        return DynamicData.fromDynamicData(responseData)
+    }
+
+    suspend fun getSpaceArticles(
+        mid: Long,
+        page: Int,
+        offset: String = ""
+    ): SpaceArticlePage {
+        val responseData = BiliHttpApi.getWebUserSpaceArticles(
+            mid = mid,
+            pageNumber = page,
+            offset = offset,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return SpaceArticlePage.fromWebSpaceArticleData(responseData)
+    }
+
+    /**
+     * 图文详情。
+     *
+     * 只请求 opus 详情一个接口：正文/图片、附带视频、互动数与评论 id 都在里面。
+     * 不能用动态详情（`/web-dynamic/v1/detail`）代替——那个接口的 `module_stat` 没有
+     * `favorite`，收藏数与「我已收藏」会一直是 0。
+     */
+    suspend fun getSpaceArticle(id: Long): ArticleViewData {
+        val responseData = BiliHttpApi.getOpusDetail(
+            opusId = id.toString(),
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return ArticleViewData.fromOpusDetail(responseData)
+    }
+
+    suspend fun getSpaceSeasonSeries(
+        mid: Long,
+        page: Int,
+        pageSize: Int = 18
+    ): SpaceSeasonSeriesPage {
+        val responseData = BiliHttpApi.getSpaceSeasonSeries(
+            mid = mid,
+            pageNumber = page,
+            pageSize = pageSize,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return SpaceSeasonSeriesPage.fromWebData(responseData)
+    }
+
+    suspend fun getSeasonArchives(
+        mid: Long,
+        seasonId: Long,
+        page: Int,
+        pageSize: Int = 30
+    ): SpaceArchivePage {
+        val responseData = BiliHttpApi.getSeasonArchives(
+            mid = mid,
+            seasonId = seasonId,
+            pageNumber = page,
+            pageSize = pageSize,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return SpaceArchivePage.fromSeasonArchivesData(responseData, mid)
+    }
+
+    suspend fun getSeriesArchives(
+        mid: Long,
+        seriesId: Long,
+        page: Int,
+        pageSize: Int = 30
+    ): SpaceArchivePage {
+        val responseData = BiliHttpApi.getSeriesArchives(
+            mid = mid,
+            currentMid = authRepository.mid ?: 0L,
+            seriesId = seriesId,
+            pageNumber = page,
+            pageSize = pageSize,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return SpaceArchivePage.fromSeriesArchivesData(responseData, mid)
     }
 
     suspend fun getDynamicDetail(
