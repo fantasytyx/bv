@@ -22,9 +22,11 @@ import kotlin.math.abs
  * 2. If the focused element is in the upper, align its top edge with container top
  * 3. If the focused element is in the lower, align its bottom edge with container bottom
  *
- * @param padding 容器上下左右预留的内边距。单位是dp
- *     注意：延迟列表默认只组合可见项，必须留边距露出一点点下一行用来确保将要获得焦点的项已被组合，否则下移的时候焦点会选中下一行的第一个，上移的时候焦点会选中上一行的最后一个（焦点乱跳的问题）
- *     另外，本应用列表用的视频卡片组件有发光效果，不留边距会没显示不全。
+ * @param padding 焦点项停靠时与容器边缘保留的间距（不是 LazyList 的 contentPadding）。单位是dp
+ *     注意：延迟列表默认只组合可见项。焦点移出视口时，默认焦点搜索会走 beyond-bounds 只补组合
+ *     视口外的少量 item；在网格里向下补到的是下一行第一个、向上补到的是上一行最后一个，
+ *     所以按 DOWN/UP 会跳到行首/行尾（跳列）。留出间距让下一行/上一行露出一条，整行进入
+ *     正常组合后，默认的几何焦点搜索才能选到同列。
  * @param topPadding 容器上边距。默认与 [padding] 相同
  * @param bottomPadding 容器下边距。默认与 [padding] 相同
  * @param content 包含在 LazyList 中的内容

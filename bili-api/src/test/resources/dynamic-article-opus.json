@@ -1,0 +1,737 @@
+{
+  "id_str": "1270363713172406309",
+  "type": "DYNAMIC_TYPE_ARTICLE",
+  "basic": {
+    "rid_str": "53842372",
+    "comment_type": 12,
+    "comment_id_str": "53842372",
+    "like_icon": {
+      "id": "0",
+      "start_url": "",
+      "action_url": "",
+      "end_url": ""
+    },
+    "in_audit": false,
+    "is_only_fans": false,
+    "editable": false,
+    "open_app_extra": "",
+    "jump_url": "//www.bilibili.com/opus/1270363713172406309",
+    "aigc": false
+  },
+  "visible": true,
+  "modules": {
+    "module_tag": null,
+    "module_author": {
+      "type": "AUTHOR_TYPE_NORMAL",
+      "avatar": {
+        "container_size": {
+          "width": 1.35,
+          "height": 1.35
+        },
+        "layers": [],
+        "fallback_layers": {
+          "group_id": "",
+          "layers": [
+            {
+              "layer_id": "",
+              "visible": true,
+              "general_spec": {
+                "pos_spec": {
+                  "coordinate_pos": 2,
+                  "axis_x": 0.675,
+                  "axis_y": 0.675
+                },
+                "size_spec": {
+                  "width": 1,
+                  "height": 1
+                },
+                "render_spec": {
+                  "opacity": 1
+                }
+              },
+              "layer_config": {
+                "tags": {
+                  "AVATAR_LAYER": {
+                    "config_type": 0
+                  },
+                  "GENERAL_CFG": {
+                    "config_type": 1,
+                    "general_config": {
+                      "web_css_style": {
+                        "borderRadius": "50%"
+                      }
+                    }
+                  }
+                },
+                "is_critical": true,
+                "allow_over_paint": false,
+                "layer_mask": null
+              },
+              "resource": {
+                "res_type": 3,
+                "res_image": {
+                  "image_src": {
+                    "src_type": 1,
+                    "placeholder": 6,
+                    "remote": {
+                      "url": "https://i0.hdslb.com/bfs/face/0b2413b88411add4a793ef1843772e59e9e04b3e.jpg",
+                      "bfs_style": "widget-layer-avatar"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "layer_id": "",
+              "visible": true,
+              "general_spec": {
+                "pos_spec": {
+                  "coordinate_pos": 1,
+                  "axis_x": 0.8000000000000002,
+                  "axis_y": 0.8000000000000002
+                },
+                "size_spec": {
+                  "width": 0.41666666666666663,
+                  "height": 0.41666666666666663
+                },
+                "render_spec": {
+                  "opacity": 1
+                }
+              },
+              "layer_config": {
+                "tags": {
+                  "GENERAL_CFG": {
+                    "config_type": 1,
+                    "general_config": {
+                      "web_css_style": {
+                        "background-color": "var(--bg1)",
+                        "border": "2px solid var(--bg1)",
+                        "borderRadius": "50%",
+                        "boxSizing": "border-box"
+                      }
+                    }
+                  },
+                  "ICON_LAYER": {
+                    "config_type": 0
+                  }
+                },
+                "is_critical": false,
+                "allow_over_paint": false,
+                "layer_mask": null
+              },
+              "resource": {
+                "res_type": 3,
+                "res_image": {
+                  "image_src": {
+                    "src_type": 2,
+                    "placeholder": 0,
+                    "local": 3
+                  }
+                }
+              }
+            }
+          ],
+          "group_mask": null,
+          "is_critical_group": true
+        },
+        "mid": "409793037"
+      },
+      "face": "https://i0.hdslb.com/bfs/face/0b2413b88411add4a793ef1843772e59e9e04b3e.jpg",
+      "face_nft": false,
+      "nft_info": null,
+      "name": "-阿猫_",
+      "name_render": null,
+      "label": "",
+      "mid": 409793037,
+      "jump_url": "//space.bilibili.com/409793037/dynamic",
+      "following": false,
+      "pub_ts": "1794618001",
+      "pub_time": "1小时前",
+      "pub_action": "投稿了文章",
+      "pub_location_text": "",
+      "pendant": {
+        "pid": 0,
+        "name": "",
+        "image": "",
+        "expire": "0",
+        "image_enhance": "",
+        "image_enhance_frame": "",
+        "n_pid": "0"
+      },
+      "vip": {
+        "type": 2,
+        "status": 1,
+        "due_date": "1827590400000",
+        "vip_pay_type": 1,
+        "theme_type": 0,
+        "label": {
+          "path": "http://i0.hdslb.com/bfs/vip/label_annual.png",
+          "text": "年度大会员",
+          "label_theme": "annual_vip",
+          "text_color": "#FFFFFF",
+          "bg_style": 1,
+          "bg_color": "#FB7299",
+          "border_color": "",
+          "use_img_label": true,
+          "img_label_uri_hans": "https://i0.hdslb.com/bfs/activity-plat/static/20220608/e369244d0b14644f5e1a06431e22a4d5/0DFy9BHgwE.gif",
+          "img_label_uri_hant": "",
+          "img_label_uri_hans_static": "https://i0.hdslb.com/bfs/vip/8d7e624d13d3e134251e4174a7318c19a8edbd71.png",
+          "img_label_uri_hant_static": "https://i0.hdslb.com/bfs/activity-plat/static/20220614/e369244d0b14644f5e1a06431e22a4d5/uckjAv3Npy.png"
+        },
+        "avatar_subscript": 1,
+        "nickname_color": "#FB7299",
+        "role": "3",
+        "avatar_subscript_url": "",
+        "tv_vip_status": 1,
+        "tv_vip_pay_type": 0,
+        "tv_due_date": "1822406400",
+        "avatar_icon": {
+          "icon_type": 1,
+          "icon_resource": {
+            "type": 0,
+            "url": ""
+          }
+        }
+      },
+      "official_verify": {
+        "type": 0,
+        "desc": ""
+      },
+      "decorate": null,
+      "decoration_card": {
+        "id": "66959",
+        "item_id": "66959",
+        "name": "玛萨咪勋章",
+        "card_url": "https://i0.hdslb.com/bfs/archive/6079620a1f1a398f3dc10d9c6740323bb6b4ced5.png",
+        "big_card_url": "https://i0.hdslb.com/bfs/archive/6079620a1f1a398f3dc10d9c6740323bb6b4ced5.png",
+        "card_type": "2",
+        "expire_time": "0",
+        "card_type_name": "免费",
+        "jump_url": "https://www.bilibili.com/h5/mall/digital-card/home?act_id=101069&lottery_id=0&hybrid_set_header=2&anchor_task=1&navhide=1&f_source=garb&from=post&window_params=%7B%22type%22%3A2%2C%22mid%22%3A409793037%7D",
+        "fan": {
+          "is_fan": "1",
+          "number": "37",
+          "color": "#E5B261",
+          "name": "XXXX",
+          "num_desc": "000037",
+          "num_prefix": "",
+          "color_format": {
+            "start_point": "0,0",
+            "end_point": "100,100",
+            "colors": [
+              "#E29D2FFF",
+              "#FDC773FF",
+              "#FDC773FF",
+              "#E19B2EFF"
+            ],
+            "gradients": [
+              "0",
+              "33",
+              "67",
+              "100"
+            ]
+          }
+        },
+        "image_enhance": "https://i0.hdslb.com/bfs/archive/6079620a1f1a398f3dc10d9c6740323bb6b4ced5.png",
+        "image_group": null
+      },
+      "is_top": false,
+      "icon_badge": null,
+      "views_text": "",
+      "official": null,
+      "more": null,
+      "decorate_card": {
+        "id": "66959",
+        "item_id": "66959",
+        "name": "玛萨咪勋章",
+        "card_url": "https://i0.hdslb.com/bfs/archive/6079620a1f1a398f3dc10d9c6740323bb6b4ced5.png",
+        "big_card_url": "https://i0.hdslb.com/bfs/archive/6079620a1f1a398f3dc10d9c6740323bb6b4ced5.png",
+        "card_type": "2",
+        "expire_time": "0",
+        "card_type_name": "免费",
+        "jump_url": "https://www.bilibili.com/h5/mall/digital-card/home?act_id=101069&lottery_id=0&hybrid_set_header=2&anchor_task=1&navhide=1&f_source=garb&from=post&window_params=%7B%22type%22%3A2%2C%22mid%22%3A409793037%7D",
+        "fan": {
+          "is_fan": "1",
+          "number": "37",
+          "color": "#E5B261",
+          "name": "XXXX",
+          "num_desc": "000037",
+          "num_prefix": "",
+          "color_format": {
+            "start_point": "0,0",
+            "end_point": "100,100",
+            "colors": [
+              "#E29D2FFF",
+              "#FDC773FF",
+              "#FDC773FF",
+              "#E19B2EFF"
+            ],
+            "gradients": [
+              "0",
+              "33",
+              "67",
+              "100"
+            ]
+          }
+        },
+        "image_enhance": "https://i0.hdslb.com/bfs/archive/6079620a1f1a398f3dc10d9c6740323bb6b4ced5.png",
+        "image_group": null
+      },
+      "identity_badges": []
+    },
+    "module_more": {
+      "rcmd_text": "",
+      "three_point_items": [
+        {
+          "label": "举报",
+          "type": "THREE_POINT_REPORT",
+          "params": {},
+          "modal": null,
+          "jump_url": ""
+        }
+      ]
+    },
+    "module_dispute": null,
+    "module_dynamic": {
+      "topic": null,
+      "desc": null,
+      "major": {
+        "type": "MAJOR_TYPE_OPUS",
+        "none": null,
+        "blocked": null,
+        "archive": null,
+        "pgc": null,
+        "courses": null,
+        "draw": null,
+        "article": null,
+        "music": null,
+        "common": null,
+        "upower_common": null,
+        "live": null,
+        "live_rcmd": null,
+        "medialist": null,
+        "subscription": null,
+        "ugc_season": null,
+        "subscription_new": null,
+        "opus": {
+          "jump_url": "//www.bilibili.com/opus/1270363713172406309",
+          "title": "美团/淘宝APP闪购嗖：233233，直接领29-20神券，亲测有效",
+          "summary": {
+            "text": "B站这个密令靠谱，我自己用好久了\n现在还时不时发个大红包，经常点外卖的，\n用这个密令越用越大！\n美团/淘宝APP闪购嗖：233233\n[图片]",
+            "rich_text_nodes": [
+              {
+                "text": "B站这个密令靠谱，我自己用好久了",
+                "orig_text": "B站这个密令靠谱，我自己用好久了",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "\n",
+                "orig_text": "\n",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "现在还时不时发个大红包，经常点外卖的，",
+                "orig_text": "现在还时不时发个大红包，经常点外卖的，",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "\n",
+                "orig_text": "\n",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "用这个密令越用越大！",
+                "orig_text": "用这个密令越用越大！",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "\n",
+                "orig_text": "\n",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "美团/淘宝APP闪购嗖：233233",
+                "orig_text": "美团/淘宝APP闪购嗖：233233",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "\n",
+                "orig_text": "\n",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              },
+              {
+                "text": "[图片]",
+                "orig_text": "[图片]",
+                "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                "jump_url": "",
+                "icon_url": "",
+                "icon_name": "",
+                "rid": "",
+                "emoji": null,
+                "goods": null,
+                "style": null,
+                "pics": [],
+                "video": null
+              }
+            ],
+            "paragraphs": [
+              {
+                "para_type": 1,
+                "align": 0,
+                "format": {
+                  "align": 0,
+                  "indent": null
+                },
+                "text": {
+                  "nodes": [
+                    {
+                      "type": "TEXT_NODE_TYPE_WORD",
+                      "word": {
+                        "words": "B站这个密令靠谱，我自己用好久了",
+                        "font_size": 0,
+                        "color": "",
+                        "dark_color": "",
+                        "style": {
+                          "bold": false,
+                          "italic": false,
+                          "strikethrough": false,
+                          "underline": false,
+                          "background": ""
+                        },
+                        "font_level": "regular",
+                        "translated_words": "",
+                        "bili_theme": "",
+                        "bg_style": null
+                      },
+                      "rich": null,
+                      "formula": null,
+                      "user": null
+                    }
+                  ]
+                },
+                "pic": null,
+                "line": null,
+                "list": null,
+                "link_card": null,
+                "code": null,
+                "heading": null,
+                "blockquote": null
+              },
+              {
+                "para_type": 1,
+                "align": 0,
+                "format": {
+                  "align": 0,
+                  "indent": null
+                },
+                "text": {
+                  "nodes": [
+                    {
+                      "type": "TEXT_NODE_TYPE_WORD",
+                      "word": {
+                        "words": "现在还时不时发个大红包，经常点外卖的，",
+                        "font_size": 0,
+                        "color": "",
+                        "dark_color": "",
+                        "style": {
+                          "bold": false,
+                          "italic": false,
+                          "strikethrough": false,
+                          "underline": false,
+                          "background": ""
+                        },
+                        "font_level": "regular",
+                        "translated_words": "",
+                        "bili_theme": "",
+                        "bg_style": null
+                      },
+                      "rich": null,
+                      "formula": null,
+                      "user": null
+                    }
+                  ]
+                },
+                "pic": null,
+                "line": null,
+                "list": null,
+                "link_card": null,
+                "code": null,
+                "heading": null,
+                "blockquote": null
+              },
+              {
+                "para_type": 1,
+                "align": 0,
+                "format": {
+                  "align": 0,
+                  "indent": null
+                },
+                "text": {
+                  "nodes": [
+                    {
+                      "type": "TEXT_NODE_TYPE_WORD",
+                      "word": {
+                        "words": "用这个密令越用越大！",
+                        "font_size": 0,
+                        "color": "",
+                        "dark_color": "",
+                        "style": {
+                          "bold": false,
+                          "italic": false,
+                          "strikethrough": false,
+                          "underline": false,
+                          "background": ""
+                        },
+                        "font_level": "regular",
+                        "translated_words": "",
+                        "bili_theme": "",
+                        "bg_style": null
+                      },
+                      "rich": null,
+                      "formula": null,
+                      "user": null
+                    }
+                  ]
+                },
+                "pic": null,
+                "line": null,
+                "list": null,
+                "link_card": null,
+                "code": null,
+                "heading": null,
+                "blockquote": null
+              },
+              {
+                "para_type": 1,
+                "align": 0,
+                "format": {
+                  "align": 0,
+                  "indent": null
+                },
+                "text": {
+                  "nodes": [
+                    {
+                      "type": "TEXT_NODE_TYPE_WORD",
+                      "word": {
+                        "words": "美团/淘宝APP闪购嗖：233233",
+                        "font_size": 0,
+                        "color": "",
+                        "dark_color": "",
+                        "style": {
+                          "bold": false,
+                          "italic": false,
+                          "strikethrough": false,
+                          "underline": false,
+                          "background": ""
+                        },
+                        "font_level": "regular",
+                        "translated_words": "",
+                        "bili_theme": "",
+                        "bg_style": null
+                      },
+                      "rich": null,
+                      "formula": null,
+                      "user": null
+                    }
+                  ]
+                },
+                "pic": null,
+                "line": null,
+                "list": null,
+                "link_card": null,
+                "code": null,
+                "heading": null,
+                "blockquote": null
+              },
+              {
+                "para_type": 1,
+                "align": 0,
+                "format": {
+                  "align": 0,
+                  "indent": null
+                },
+                "text": {
+                  "nodes": [
+                    {
+                      "type": "TEXT_NODE_TYPE_WORD",
+                      "word": {
+                        "words": "[图片]",
+                        "font_size": 0,
+                        "color": "",
+                        "dark_color": "",
+                        "style": {
+                          "bold": false,
+                          "italic": false,
+                          "strikethrough": false,
+                          "underline": false,
+                          "background": ""
+                        },
+                        "font_level": "regular",
+                        "translated_words": "",
+                        "bili_theme": "",
+                        "bg_style": null
+                      },
+                      "rich": null,
+                      "formula": null,
+                      "user": null
+                    },
+                    {
+                      "type": "TEXT_NODE_TYPE_RICH",
+                      "word": null,
+                      "rich": {
+                        "text": "...",
+                        "orig_text": "...",
+                        "type": "RICH_TEXT_NODE_TYPE_TEXT",
+                        "jump_url": "",
+                        "icon_url": "",
+                        "icon_name": "",
+                        "rid": "",
+                        "emoji": null,
+                        "goods": null,
+                        "style": null,
+                        "pics": [],
+                        "video": null
+                      },
+                      "formula": null,
+                      "user": null
+                    }
+                  ]
+                },
+                "pic": null,
+                "line": null,
+                "list": null,
+                "link_card": null,
+                "code": null,
+                "heading": null,
+                "blockquote": null
+              }
+            ],
+            "has_more": true
+          },
+          "style": 0,
+          "pics": [
+            {
+              "url": "http://i0.hdslb.com/bfs/new_dyn/5b449b93edd0dd2495d29f0750bc9145409793037.png",
+              "width": 1078,
+              "height": 606,
+              "size": 680.423,
+              "live_url": "",
+              "aigc": 0,
+              "warning": null
+            }
+          ],
+          "fold_action": [
+            "全文"
+          ],
+          "paywall": null
+        }
+      },
+      "additional": null
+    },
+    "module_extend": null,
+    "module_stat": {
+      "forward": {
+        "status": false,
+        "count": 0,
+        "forbidden": false,
+        "disabled": false,
+        "silent": false,
+        "hidden": false
+      },
+      "comment": {
+        "status": false,
+        "count": 0,
+        "forbidden": false,
+        "disabled": false,
+        "silent": false,
+        "hidden": false
+      },
+      "like": {
+        "status": false,
+        "count": 41,
+        "forbidden": false,
+        "disabled": false,
+        "silent": false,
+        "hidden": false
+      },
+      "coin": null,
+      "favorite": null
+    },
+    "module_interaction": null,
+    "module_share_info": null,
+    "module_fold": null
+  },
+  "orig": null
+}

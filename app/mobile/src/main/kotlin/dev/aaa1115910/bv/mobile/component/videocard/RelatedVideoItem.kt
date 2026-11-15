@@ -64,7 +64,7 @@ fun RelatedVideoItem(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(4.dp),
-                    color = Color.Black.copy(alpha = 0.3f),
+                    color = Color.Black.copy(alpha = 0.35f),
                     shape = MaterialTheme.shapes.extraSmall
                 ) {
                     Text(

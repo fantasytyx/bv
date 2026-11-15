@@ -67,7 +67,8 @@ fun FavoriteFolderDialog(
     LaunchedEffect(show) {
         if (show) {
             selectedFavoriteFolderIds.swapList(favoriteFolderIds)
-            defaultFocusRequester.requestFocus()
+            // 收藏夹列表为空时没有任何 chip 承载这个 requester，直接调用会抛 IllegalStateException
+            runCatching { defaultFocusRequester.requestFocus() }
             touch()
         }
     }

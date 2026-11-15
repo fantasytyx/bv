@@ -230,7 +230,7 @@ fun CardCover(
                                     color = Color.Black.copy(0.3f),
                                     shape = RoundedCornerShape(4.dp)
                                 )
-                                .padding(vertical = 1.dp, horizontal = 4.dp),
+                                .padding(horizontal = 4.dp, vertical = 0.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
@@ -253,7 +253,7 @@ fun CardCover(
                                     color = Color.Black.copy(0.3f),
                                     shape = MaterialTheme.shapes.extraSmall
                                 )
-                                .padding(2.dp),
+                                .padding(horizontal = 4.dp, vertical = 0.dp),
                             text = badge,
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White,

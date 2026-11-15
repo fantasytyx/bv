@@ -159,10 +159,10 @@ fun FullscreenImageViewer(
                         else -> {
                             if (scale > 1f) {
                                 when {
-                                    event.isDpadLeft() -> offsetX -= panStepPx
-                                    event.isDpadRight() -> offsetX += panStepPx
-                                    event.isDpadUp() -> offsetY -= panStepPx
-                                    event.isDpadDown() -> offsetY += panStepPx
+                                    event.isDpadLeft() -> offsetX += panStepPx
+                                    event.isDpadRight() -> offsetX -= panStepPx
+                                    event.isDpadUp() -> offsetY += panStepPx
+                                    event.isDpadDown() -> offsetY -= panStepPx
                                     else -> return@onPreviewKeyEvent false
                                 }
                                 clampOffset()
@@ -213,7 +213,7 @@ fun FullscreenImageViewer(
                     if (painterState is AsyncImagePainter.State.Loading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(36.dp),
-                            color = Color.White
+                            color = Color.White.copy(alpha = 0.8f)
                         )
                     }
                 }

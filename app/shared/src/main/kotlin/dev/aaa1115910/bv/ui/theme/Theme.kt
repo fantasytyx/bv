@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
-import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
 import androidx.tv.material3.lightColorScheme
 import dev.aaa1115910.bv.component.FpsMonitor
@@ -61,7 +60,7 @@ fun BVTheme(
         ThemeType.Light -> mobileLightColorScheme
     }
     val typographyTv =
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) android6AndBelowTypographyTv else Typography()
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) android6AndBelowTypographyTv else tvTypography
     val typographyCommon =
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) android6AndBelowTypographyCommon else androidx.compose.material3.Typography()
 

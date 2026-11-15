@@ -107,4 +107,13 @@ class FavoriteItemMappingTest {
 
         assertEquals(null, FavoriteItem.fromHttpFavoriteItem(item).ogv?.seasonId)
     }
+
+    @Test
+    fun videoCollectionMapsToFavoriteType21() {
+        assertEquals(21, FavoriteResourceType.VideoCollection.value)
+        assertEquals(
+            FavoriteResourceType.VideoCollection,
+            FavoriteResourceType.fromFavoriteItemType(FavoriteItemType.VideoCollection)
+        )
+    }
 }

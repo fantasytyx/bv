@@ -100,7 +100,7 @@ abstract class PgcViewModel(
             // 由于未知原因，注入的 PgcRepository 可能获取到的对象为 null
             var maxRetry = 10
             while (pgcRepository == null && maxRetry > 0) {
-                delay(10)
+                delay(30)
                 maxRetry--
             }
             if (BuildConfig.DEBUG && maxRetry != 10) {

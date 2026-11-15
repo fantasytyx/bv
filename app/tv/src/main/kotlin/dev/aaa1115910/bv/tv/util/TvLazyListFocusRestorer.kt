@@ -13,6 +13,23 @@ fun VideoCardData.stableItemKey(): Any {
     }
 }
 
+internal fun gridFocusItemCount(
+    contentItemCount: Int,
+    footerFocusable: Boolean,
+    columnCount: Int,
+    leadingItemCount: Int = 0
+) = contentItemCount + leadingItemCount + if (footerFocusable) columnCount else 0
+
+internal fun shouldBlockDownFocusExit(
+    currentIndex: Int,
+    itemCount: Int,
+    columnCount: Int
+): Boolean {
+    val hasNextRow = itemCount > 0 && currentIndex >= 0 &&
+        currentIndex + columnCount < itemCount
+    return !hasNextRow
+}
+
 /** 数据还在加载、末尾行下面暂无内容时消费 DOWN，避免焦点被甩到别的列或左侧导航栏 */
 fun Modifier.blockDownFocusExitAtGridEnd(
     currentIndexProvider: () -> Int,
@@ -26,8 +43,10 @@ fun Modifier.blockDownFocusExitAtGridEnd(
             return@onPreviewKeyEvent false
         }
 
-        val currentIndex = currentIndexProvider()
-        val hasNextRow = itemCount > 0 && currentIndex >= 0 && currentIndex + columnCount < itemCount
-        !hasNextRow
+        shouldBlockDownFocusExit(
+            currentIndex = currentIndexProvider(),
+            itemCount = itemCount,
+            columnCount = columnCount
+        )
     }
 }

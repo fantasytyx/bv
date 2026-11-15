@@ -19,6 +19,14 @@ _Avoid_: 番剧、影视
 由交互节点和选择项构成的非线性视频。用户在分支点做出选择，决定后续剧情走向。
 _Avoid_: 分支视频
 
+**动态视频（Dynamic Video）**：
+以动态形式发布的视频，播放入口与普通投稿一致，动态卡片上标注「动态视频」。
+_Avoid_: 动态稿件
+
+**联合创作（Collab Video）**：
+由多个 UP 主联合投稿的视频，动态卡片上标注「联合创作」。
+_Avoid_: 联合投稿
+
 ## 内容结构
 
 **分区（UGC）**：
@@ -193,6 +201,17 @@ _Avoid_: 打赏
 用户将视频加入/移出指定收藏夹。支持多文件夹。
 _Avoid_: 加收藏、收藏夹
 
+**图文收藏（Opus Favorite）**：
+图文（opus/动态）的收藏状态，与用户创建的收藏夹**互不相通**：内容不进任何收藏夹，而是进服务端独立的「图文收藏」，网页端在空间页「其他收藏 › 图文收藏夹」单列。
+收藏/取消走 cosmo `/x/community/cosmo/interface/simple_action`（`action` 3=收藏 4=取消，body 里 `entity.type.biz=2`，`csrf` 在 query）；
+条目列表是 `/x/polymer/web-dynamic/v1/opus/feed/fav`，计数在 `/x/space/fav/nav` 的 `opus` 字段。
+收藏夹接口 `/x/v3/fav/resource/deal` 对图文不生效（不会入库）。
+_Avoid_: 图文收藏夹（容易和用户收藏夹混淆）、默认收藏夹
+
+**合集订阅（Collection Subscription）**：
+用户订阅/取消订阅 UP 主的单个合集，接口为 `/x/v3/fav/season/fav`（取消是 `/x/v3/fav/season/unfav`），由服务端放进默认收藏夹。只有合集支持订阅，系列不支持。
+_Avoid_: 收藏合集、订阅系列
+
 **稍后再看（ToView）**：
 用户将视频标记为稍后再看，加入稍后再看列表。
 _Avoid_: 待看
@@ -219,6 +238,10 @@ _Avoid_: 订阅番剧
 **动态**：
 UP 主发布内容的时间线流。包含视频投稿、转发、图文、直播推荐、PGC 更新、专栏文章。
 _Avoid_: 动态流、timeline
+
+**充电专属（Charging-only）**：
+UP 主设置的付费解锁内容（图文、动态、视频）。未充电时服务端只下发锁定面板（`module_blocked` / `major.blocked`：标题、提示、图标、按钮文案与充电页地址），没有正文。TV 上无法完成支付，点击锁定面板改为显示充电页地址的二维码。
+_Avoid_: 充电视频、付费动态
 
 ## 界面
 

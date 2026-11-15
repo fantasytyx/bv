@@ -88,7 +88,7 @@ fun UgcListItem(
                             Text(
                                 modifier = Modifier
                                     .clip(MaterialTheme.shapes.extraSmall)
-                                    .background(Color.Black.copy(alpha = 0.3f))
+                                    .background(Color.Black.copy(alpha = 0.35f))
                                     .padding(horizontal = 4.dp, vertical = 1.dp),
                                 text = badge,
                                 color = Color.White,

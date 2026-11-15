@@ -158,7 +158,9 @@ fun HttpClient.encApiSign() = plugin(HttpSend)
                 val isWbiRequest = request.url.encodedPath.contains("wbi") ||
                         request.url.encodedPath.contains("/pgc/player/web/playurl") ||
                         request.url.encodedPath.contains("/pgc/player/web/v2/playurl") ||
-                        request.url.encodedPath.contains("/ogv/player/playview")
+                        request.url.encodedPath.contains("/ogv/player/playview") ||
+                        request.url.encodedPath.contains("/x/polymer/web-dynamic/v1/opus/feed/space") ||
+                        request.url.encodedPath.contains("/x/polymer/web-dynamic/v1/opus/detail")
                 if (isWbiRequest) {
                     println("Enc wbi for get request: ${getUrlWithoutAccessToken(request.url)}")
                     request.encWbi()
@@ -171,7 +173,9 @@ fun HttpClient.encApiSign() = plugin(HttpSend)
 
             HttpMethod.Post -> {
                 if (request.body is EmptyContent) return@intercept execute(request)
-                val parameters = (request.body as FormDataContent).formData
+                // 动态点赞等接口用 JSON 请求体，app sign 只针对表单请求
+                val parameters = (request.body as? FormDataContent)?.formData
+                    ?: return@intercept execute(request)
                 val isParametersContainKeywords = parameters.contains("access_key")
                 val isPathContainKeywords = request.url.encodedPath.contains("passport")
                 if (isParametersContainKeywords || isPathContainKeywords) {
@@ -182,4 +186,3 @@ fun HttpClient.encApiSign() = plugin(HttpSend)
         }
         execute(request)
     }
-

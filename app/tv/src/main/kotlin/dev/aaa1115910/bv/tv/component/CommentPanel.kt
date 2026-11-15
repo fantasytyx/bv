@@ -86,7 +86,8 @@ import org.koin.compose.getKoin
  * 评论浮层组件
  *
  * @param show 是否显示浮层
- * @param oid 视频 aid
+ * @param oid 视频 aid 或图文评论 oid
+ * @param commentType 评论类型，视频为 1，图文/动态为 11
  * @param onHide 关闭浮层回调
  * @param episodes 正片剧集列表（用于选集切换）
  * @param sections 章节选集列表（用于选集切换）
@@ -98,6 +99,7 @@ fun CommentPanel(
     show: Boolean,
     oid: Long,
     onHide: () -> Unit,
+    commentType: Long = 1L,
     episodes: List<Episode> = emptyList(),
     sections: List<Section> = emptyList(),
     initialEpisodeId: Int = -1,
@@ -223,7 +225,7 @@ fun CommentPanel(
                 val page = if (reset) CommentPage() else currentPage
                 val data = commentRepository.getComments(
                     id = currentOid,
-                    type = 1L, // 视频评论
+                    type = commentType,
                     sort = commentSort,
                     page = page,
                     preferApiType = Prefs.apiType

@@ -138,6 +138,16 @@
             android:label="@string/title_activity_user_info"
             android:theme="@style/Theme.BV.TV" />
         <activity
+            android:name=".activities.user.ArticleActivity"
+            android:enableOnBackInvokedCallback="false"
+            android:exported="false"
+            android:theme="@style/Theme.BV.TV" />
+        <activity
+            android:name=".activities.dynamic.DynamicDetailActivity"
+            android:enableOnBackInvokedCallback="false"
+            android:exported="false"
+            android:theme="@style/Theme.BV.TV" />
+        <activity
             android:name=".activities.user.LoginActivity"
             android:enableOnBackInvokedCallback="false"
             android:exported="false"
