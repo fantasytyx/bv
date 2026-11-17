@@ -11,6 +11,7 @@ import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.dao.AppDatabase
 import dev.aaa1115910.bv.entity.AuthData
 import dev.aaa1115910.bv.entity.db.UserDB
+import dev.aaa1115910.bv.util.FollowedUpCache
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.toast
@@ -111,6 +112,8 @@ class UserRepository(
         } ?: let {
             logger.info { "Not found user $uid in user db" }
         }
+        // 账号级缓存跟着登出清掉：多账号切换后不会留下上一个账号的关注列表
+        FollowedUpCache.clear(uid)
         clearAuth()
     }
 

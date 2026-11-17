@@ -145,6 +145,7 @@ import dev.aaa1115910.bv.tv.util.launchPlayerActivity
 import dev.aaa1115910.bv.tv.manager.FollowStateManager
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.FollowedUp
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.fWarn
 import dev.aaa1115910.bv.util.focusedBorder
@@ -276,9 +277,14 @@ fun VideoInfoScreen(
                 preferApiType = Prefs.apiType
             )
             logger.fInfo { "Add follow result: $success" }
-            // 更新缓存状态
+            // 更新关注状态，并把新关注的 UP 同步进已关注列表缓存
             if (success) {
-                FollowStateManager.updateFollowState(userMid, true)
+                val author = videoDetailViewModel.videoDetail?.author
+                FollowStateManager.applyFollowChange(
+                    mid = userMid,
+                    isFollowing = true,
+                    up = author?.let { FollowedUp(it.mid, it.name, it.face, "") }
+                )
             }
             afterModify(success)
         }
@@ -293,9 +299,9 @@ fun VideoInfoScreen(
                 preferApiType = Prefs.apiType
             )
             logger.fInfo { "Del follow result: $success" }
-            // 更新缓存状态
+            // 更新关注状态，并从已关注列表缓存里移除
             if (success) {
-                FollowStateManager.updateFollowState(userMid, false)
+                FollowStateManager.applyFollowChange(mid = userMid, isFollowing = false)
             }
             afterModify(success)
         }

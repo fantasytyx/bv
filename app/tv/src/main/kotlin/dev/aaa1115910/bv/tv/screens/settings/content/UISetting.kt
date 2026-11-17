@@ -100,6 +100,7 @@ fun UISetting(
     val interfaceMode = remember { Prefs.interfaceMode }
     val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
     var showUGCVideoInfo by remember { mutableStateOf(Prefs.showUGCVideoInfo) }
+    var showFollowedUpsInDynamics by remember { mutableStateOf(Prefs.showFollowedUpsInDynamics) }
     var videoInfoHistoryIncludeFromPlayer by remember { mutableStateOf(Prefs.videoInfoHistoryIncludeFromPlayer) }
     var ugcVideoInfoHistoryCount by remember { mutableIntStateOf(Prefs.ugcVideoInfoHistoryCount) }
     var ugcVideoPlayerHistoryCount by remember { mutableIntStateOf(Prefs.ugcVideoPlayerHistoryCount) }
@@ -185,6 +186,17 @@ fun UISetting(
                         title = stringResource(R.string.settings_ui_live_nav_items_title),
                         supportText = stringResource(R.string.settings_ui_live_nav_items_text),
                         onClick = { showLiveNavItemsDialog = true }
+                    )
+                }
+                item {
+                    SettingSwitchListItem(
+                        title = "动态页显示已关注 UP 列表",
+                        supportText = "左侧显示已关注 UP，可按 UP 过滤动态（视频 tab 变 3 列）",
+                        checked = showFollowedUpsInDynamics,
+                        onCheckedChange = {
+                            showFollowedUpsInDynamics = it
+                            Prefs.showFollowedUpsInDynamics = it
+                        }
                     )
                 }
                 item {

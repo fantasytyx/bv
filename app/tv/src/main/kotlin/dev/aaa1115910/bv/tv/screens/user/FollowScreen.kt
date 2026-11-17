@@ -63,6 +63,7 @@ import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.ui.theme.BVTheme
+import dev.aaa1115910.bv.util.matchesUpKeyword
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.viewmodel.user.FollowViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -88,16 +89,7 @@ fun FollowScreen(
         derivedStateOf {
             val keyword = searchState.text.toString().trim()
             if (keyword.isEmpty()) followViewModel.followedUsers
-            else {
-                // 按字符匹配：关键字中的每个非空白字符都必须在用户名或签名中出现
-                val chars = keyword.filter { !it.isWhitespace() }.map { it.toString() }
-                followViewModel.followedUsers.filter { up ->
-                    chars.all { ch ->
-                        up.name.contains(ch, ignoreCase = true) ||
-                                up.sign.contains(ch, ignoreCase = true)
-                    }
-                }
-            }
+            else followViewModel.followedUsers.filter { up -> matchesUpKeyword(keyword, up.name, up.sign) }
         }
     }
 

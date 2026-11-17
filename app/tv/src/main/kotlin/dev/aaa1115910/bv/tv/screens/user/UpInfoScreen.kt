@@ -3,11 +3,9 @@ package dev.aaa1115910.bv.tv.screens.user
 import android.app.Activity
 import android.content.Context
 import android.content.res.Configuration
-import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,10 +22,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed as staggeredItemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -46,7 +40,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,9 +54,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
@@ -80,9 +71,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import dev.aaa1115910.biliapi.repositories.UserRepository
 import dev.aaa1115910.bv.R
-import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
-import dev.aaa1115910.bv.tv.activities.dynamic.DynamicDetailActivity
 import dev.aaa1115910.bv.tv.activities.user.ArticleActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.TopNav
@@ -93,17 +82,11 @@ import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.tv.util.archiveFocusIndex
 import dev.aaa1115910.bv.tv.util.blockDownFocusExitAtGridEnd
 import dev.aaa1115910.bv.tv.util.gridFocusItemCount
-import dev.aaa1115910.bv.tv.util.GridItemBox
-import dev.aaa1115910.bv.tv.util.GridVertical
-import dev.aaa1115910.bv.tv.util.VerticalMove
-import dev.aaa1115910.bv.tv.util.revealScrollStep
-import dev.aaa1115910.bv.tv.util.sameColumnNeighbor
 import dev.aaa1115910.bv.tv.util.stableItemKey
-import dev.aaa1115910.bv.tv.util.verticalMove
 import dev.aaa1115910.bv.tv.util.requestFocusWithRetry
-import dev.aaa1115910.bv.tv.util.verticalScrollStep
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.Prefs
+import dev.aaa1115910.bv.util.FollowedUp
 import dev.aaa1115910.bv.util.collectAsStateLazily
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.toast
@@ -180,105 +163,8 @@ fun UpSpaceScreen(
     val lazyGridState = rememberLazyGridState()
     val archiveGridState = rememberLazyGridState()
     val dynamicGridState = rememberLazyStaggeredGridState()
-    val dynamicColumnCount = 3
-    val dynamicFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
-    val dynamicFocusRequesterFor: (Int) -> FocusRequester = { index ->
-        dynamicFocusRequesters.getOrPut(index) { FocusRequester() }
-    }
-    // 动态卡片是唯一的上下移动来源：-1 表示焦点不在卡片上（例如在底部「加载更多」）
-    var focusedDynamicIndex by remember { mutableIntStateOf(-1) }
-    var dynamicViewportHeightPx by remember { mutableIntStateOf(0) }
-    var pendingVerticalMove by remember { mutableStateOf<GridItemBox?>(null) }
-    var pendingVerticalDirection by remember { mutableStateOf<GridVertical?>(null) }
     val tabItems = remember { UserSpaceTab.entries.map(::UpSpaceTopNavItem) }
     val navSwitchMode by Prefs.navSwitchModeFlow.collectAsStateLazily { Prefs.navSwitchMode }
-    val density = LocalDensity.current
-    val dynamicVerticalSpacingPx = with(density) { DynamicCardSpacing.roundToPx() }
-
-    fun dynamicItemBoxes(): List<GridItemBox> = dynamicGridState.layoutInfo.visibleItemsInfo.map {
-        GridItemBox(
-            index = it.index,
-            left = it.offset.x,
-            top = it.offset.y,
-            right = it.offset.x + it.size.width,
-            bottom = it.offset.y + it.size.height
-        )
-    }
-
-    // 上下移动时目标卡可能还没组合出来：先滚过「当前卡高 + 间距」，等 layout 更新后再把焦点交给同列那张卡
-    LaunchedEffect(dynamicGridState) {
-        snapshotFlow { dynamicItemBoxes() }.collect { boxes ->
-            val anchor = pendingVerticalMove ?: return@collect
-            val direction = pendingVerticalDirection ?: return@collect
-            val target = sameColumnNeighbor(anchor, boxes, direction) ?: return@collect
-            if (runCatching { dynamicFocusRequesterFor(target).requestFocus() }.isSuccess) {
-                pendingVerticalMove = null
-                pendingVerticalDirection = null
-            }
-        }
-    }
-
-    val onDynamicVerticalKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = verticalKey@{ event ->
-        val nativeEvent = event.nativeKeyEvent
-        val direction = when (nativeEvent.keyCode) {
-            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> GridVertical.Down
-            AndroidKeyEvent.KEYCODE_DPAD_UP -> GridVertical.Up
-            else -> null
-        }
-        if (nativeEvent.action != AndroidKeyEvent.ACTION_DOWN ||
-            direction == null ||
-            focusedDynamicIndex < 0
-        ) {
-            false
-        } else {
-            // 目标卡一直没组合出来时，残留的锚点会在下一次布局变化时劫持焦点，这里先作废
-            pendingVerticalMove = null
-            pendingVerticalDirection = null
-            val boxes = dynamicItemBoxes()
-            val current = boxes.firstOrNull { it.index == focusedDynamicIndex } ?: return@verticalKey false
-            val canScroll = when (direction) {
-                GridVertical.Down -> dynamicGridState.canScrollForward
-                GridVertical.Up -> dynamicGridState.canScrollBackward
-            }
-            when (
-                val move = verticalMove(
-                    current = current,
-                    items = boxes,
-                    viewportHeight = dynamicViewportHeightPx,
-                    direction = direction,
-                    canScroll = canScroll
-                )
-            ) {
-                is VerticalMove.Focus ->
-                    runCatching { dynamicFocusRequesterFor(move.index).requestFocus() }.isSuccess
-
-                VerticalMove.ScrollToReveal -> {
-                    pendingVerticalMove = null
-                    pendingVerticalDirection = null
-                    scope.launch {
-                        dynamicGridState.scrollBy(
-                            (revealScrollStep(dynamicViewportHeightPx) * direction.step).toFloat()
-                        )
-                    }
-                    true
-                }
-
-                VerticalMove.ScrollToNeighbour -> {
-                    // 滚过「卡高 + 间距」，让同列下一张卡落到当前卡的位置，再由 layout 变化复焦
-                    val step = verticalScrollStep(current, dynamicVerticalSpacingPx)
-                    pendingVerticalMove = current.copy(
-                        top = current.top - step * direction.step,
-                        bottom = current.bottom - step * direction.step
-                    )
-                    pendingVerticalDirection = direction
-                    scope.launch { dynamicGridState.scrollBy((step * direction.step).toFloat()) }
-                    true
-                }
-
-                VerticalMove.Delegate -> false
-            }
-        }
-    }
 
     LaunchedEffect(Unit) {
         tabFocusRequester.requestFocusWithRetry()
@@ -332,9 +218,18 @@ fun UpSpaceScreen(
                 preferApiType = Prefs.apiType
             )
             logger.fInfo { "Add follow result: $success" }
-            // 更新缓存状态
+            // 更新关注状态，并把新关注的 UP 同步进已关注列表缓存
             if (success) {
-                FollowStateManager.updateFollowState(userMid, true)
+                FollowStateManager.applyFollowChange(
+                    mid = userMid,
+                    isFollowing = true,
+                    up = FollowedUp(
+                        mid = userMid,
+                        name = userSpaceViewModel.upName,
+                        avatar = userSpaceViewModel.upFace,
+                        sign = userSpaceViewModel.sign
+                    )
+                )
             }
             afterModify(success)
         }
@@ -349,9 +244,9 @@ fun UpSpaceScreen(
                 preferApiType = Prefs.apiType
             )
             logger.fInfo { "Del follow result: $success" }
-            // 更新缓存状态
+            // 更新关注状态，并从已关注列表缓存里移除
             if (success) {
-                FollowStateManager.updateFollowState(userMid, false)
+                FollowStateManager.applyFollowChange(mid = userMid, isFollowing = false)
             }
             afterModify(success)
         }
@@ -598,7 +493,6 @@ fun UpSpaceScreen(
                         if (selectedTab != tab) {
                             selectedTab = tab
                             currentIndex = 0
-                            focusedDynamicIndex = -1
                             val shouldLoad = when (tab) {
                                 UserSpaceTab.Videos -> userSpaceViewModel.tvSpaceVideos.isEmpty() &&
                                     userSpaceViewModel.videos.error == null
@@ -642,87 +536,25 @@ fun UpSpaceScreen(
             }
         ProvideListBringIntoViewSpec(padding = 24.dp) {
             when {
-                selectedTab == UserSpaceTab.Dynamics -> LazyVerticalStaggeredGrid(
-                    modifier = contentModifier
-                        .fillMaxSize()
-                        .then(listModifier)
-                        .onSizeChanged { dynamicViewportHeightPx = it.height }
-                        .onPreviewKeyEvent(onDynamicVerticalKey),
-                    columns = StaggeredGridCells.Fixed(dynamicColumnCount),
+                selectedTab == UserSpaceTab.Dynamics -> DynamicWaterfall(
+                    items = userSpaceViewModel.tvSpaceDynamics,
                     state = dynamicGridState,
-                    contentPadding = PaddingValues(24.dp),
-                    verticalItemSpacing = DynamicCardSpacing,
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    staggeredItemsIndexed(
-                        items = userSpaceViewModel.tvSpaceDynamics,
-                        key = { index, dynamic -> dynamic.id ?: "dynamic-$index" }
-                    ) { index, dynamic ->
-                        SpaceDynamicCard(
-                            dynamic = dynamic,
-                            modifier = Modifier.focusRequester(dynamicFocusRequesterFor(index)),
-                            onClick = {
-                                val video = dynamic.video
-                                when (dynamic.cardAction()) {
-                                    DynamicCardAction.Article -> dynamic.id?.toLongOrNull()
-                                        ?.let { ArticleActivity.actionStart(context, it) }
-
-                                    DynamicCardAction.Video -> video?.let { playVideo ->
-                                        videoInfoRepository.setPreloadedVideoList(
-                                            userSpaceViewModel.tvSpaceDynamics.mapNotNull { item ->
-                                                item.video?.let { videoItem ->
-                                                    VideoCardData(
-                                                        avid = videoItem.aid,
-                                                        title = videoItem.title,
-                                                        cover = videoItem.cover,
-                                                        upName = "",
-                                                        play = videoItem.playCount,
-                                                        danmaku = videoItem.danmakuCount,
-                                                        time = videoItem.durationSeconds * 1000L,
-                                                        pubTime = item.author.pubTime
-                                                    )
-                                                }
-                                            }
-                                        )
-                                        VideoInfoActivity.actionStart(
-                                            context = context,
-                                            aid = playVideo.aid,
-                                            proxyArea = ProxyArea.checkProxyArea(playVideo.title)
-                                        )
-                                    }
-
-                                    DynamicCardAction.Detail -> dynamic.id?.let {
-                                        DynamicDetailActivity.actionStart(context, it)
-                                    }
-                                }
-                            },
-                            onFocus = {
-                                focusedDynamicIndex = index
-                                currentIndex = index
-                                if (index + 6 > userSpaceViewModel.tvSpaceDynamics.size) {
-                                    userSpaceViewModel.load(UserSpaceTab.Dynamics)
-                                }
-                            }
+                    modifier = contentModifier.fillMaxSize().then(listModifier),
+                    horizontalSpacing = 28.dp,
+                    onItemClick = {
+                        openDynamic(context, it, videoInfoRepository, userSpaceViewModel.tvSpaceDynamics)
+                    },
+                    onLoadMore = { userSpaceViewModel.load(UserSpaceTab.Dynamics) },
+                    footer = {
+                        SpaceContentStatus(
+                            loading = statusLoading,
+                            error = error,
+                            hasMore = hasMore,
+                            onRetry = { userSpaceViewModel.load(UserSpaceTab.Dynamics) },
+                            onFocused = { currentIndex = -1 }
                         )
                     }
-
-                    item(span = StaggeredGridItemSpan.FullLine) {
-                        // 焦点落在底部状态上时不再按卡片处理，避免上下键被卡片逻辑劫持
-                        Box(
-                            modifier = Modifier.onFocusChanged {
-                                if (it.hasFocus) focusedDynamicIndex = -1
-                            }
-                        ) {
-                            SpaceContentStatus(
-                                loading = statusLoading,
-                                error = error,
-                                hasMore = hasMore,
-                                onRetry = { userSpaceViewModel.load(UserSpaceTab.Dynamics) },
-                                onFocused = { currentIndex = -1 }
-                            )
-                        }
-                    }
-                }
+                )
 
                 // 合集/系列详情：头部固定在网格上方，网格只放稿件
                 selectedArchive -> Column(modifier = contentModifier.fillMaxSize()) {
@@ -954,8 +786,6 @@ private fun Int.toCountText(): String =
 private class UpSpaceTopNavItem(val tab: UserSpaceTab) : TopNavItem {
     override fun getDisplayName(context: Context): String = tab.label
 }
-
-private val DynamicCardSpacing = 20.dp
 
 /**
  * 合集/系列详情头部：返回、标题、订阅。固定在网格上方，不随稿件滚动。

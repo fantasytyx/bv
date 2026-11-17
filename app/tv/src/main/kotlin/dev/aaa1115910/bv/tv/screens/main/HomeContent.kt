@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -81,6 +82,7 @@ fun HomeContent(
     val recommendState = rememberLazyGridState()
     val popularState = rememberLazyGridState()
     val dynamicState = rememberLazyGridState()
+    val dynamicAllState = rememberLazyStaggeredGridState()
     val favoriteState = rememberLazyGridState()
     val followingSeasonState = rememberLazyGridState()
     val followingDramaState = rememberLazyGridState()
@@ -256,10 +258,16 @@ fun HomeContent(
                         }
 
                         HomeTopNavItem.Dynamics -> {
-                            logger.fInfo { "clear dynamic data" }
-                            dynamicViewModel.clearVideoData()
-                            logger.fInfo { "reload dynamic data" }
-                            scope.launch(Dispatchers.IO) { dynamicViewModel.loadMoreVideo() }
+                            if (dynamicViewModel.selectedUp != null) {
+                                logger.fInfo { "refresh selected up dynamic data" }
+                                dynamicViewModel.refreshSelection()
+                            } else {
+                                logger.fInfo { "clear dynamic data" }
+                                dynamicViewModel.clearVideoData()
+                                dynamicViewModel.clearAllData()
+                                logger.fInfo { "reload dynamic data" }
+                                scope.launch(Dispatchers.IO) { dynamicViewModel.loadMoreVideo() }
+                            }
                         }
 
                         HomeTopNavItem.Favorite -> {
@@ -334,7 +342,7 @@ fun HomeContent(
                     HomeTopNavItem.Popular -> PopularScreen(lazyGridState = popularState)
                     HomeTopNavItem.Dynamics -> {
                         if (userViewModel.isLogin) {
-                            DynamicsScreen(lazyGridState = dynamicState)
+                            DynamicsScreen(lazyGridState = dynamicState, allState = dynamicAllState)
                         } else {
                             LoginRequiredScreen()
                         }

@@ -1142,6 +1142,32 @@ data class DynamicVideo(
             )
         }
 
+        /** 从已映射的 [DynamicItem] 取视频，供「按 UP 过滤」把动态流直接渲染成视频卡片 */
+        fun fromDynamicItem(item: DynamicItem): DynamicVideo {
+            val video = requireNotNull(item.video) { "dynamic has no video module" }
+            val isChargingArc =
+                video.badgeText.contains("充电") || video.badgeText.contains("限时免费")
+            return DynamicVideo(
+                aid = video.aid,
+                bvid = video.bvid,
+                cid = video.cid,
+                epid = video.epid,
+                seasonId = video.seasonId,
+                title = video.title.replace("动态视频｜", ""),
+                cover = video.cover,
+                author = item.author.author,
+                authorId = item.author.mid,
+                authorFace = item.author.avatar,
+                duration = video.durationSeconds,
+                play = video.playCount,
+                danmaku = video.danmakuCount,
+                avatar = item.author.avatar,
+                pubTime = item.author.pubTime,
+                isChargingArc = isChargingArc,
+                chargingArcBadge = if (isChargingArc) video.badgeText else ""
+            )
+        }
+
         fun fromDynamicVideoItem(item: bilibili.app.dynamic.v2.DynamicItem): DynamicVideo? {
             val author =
                 item.modulesList.first { it.moduleType == DynModuleType.module_author }.moduleAuthor.author

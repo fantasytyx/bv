@@ -38,6 +38,10 @@ class PagingState {
     var hasMore by mutableStateOf(true)
         private set
 
+    /** 最近一次失败的异常，供调用方区分「会话失效」与普通错误；成功或重新加载时清空 */
+    var lastException: Throwable? by mutableStateOf(null)
+        private set
+
     private var page by mutableIntStateOf(1)
     private var offset by mutableStateOf("")
     private var token = 0
@@ -49,11 +53,11 @@ class PagingState {
         token++
         loading = false
         error = null
+        lastException = null
         hasMore = true
         page = 1
         offset = ""
     }
-
     /**
      * 加载下一页。返回是否成功拿到数据。
      *
@@ -68,6 +72,7 @@ class PagingState {
         val requestToken = token
         loading = true
         error = null
+        lastException = null
         try {
             val result = withContext(Dispatchers.IO) { fetch(page, offset) }
             if (requestToken != token) return false
@@ -79,7 +84,10 @@ class PagingState {
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            if (requestToken == token) error = exception.message ?: "加载失败"
+            if (requestToken == token) {
+                error = exception.message ?: "加载失败"
+                lastException = exception
+            }
             return false
         } finally {
             if (requestToken == token) loading = false

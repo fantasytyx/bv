@@ -8,15 +8,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.aaa1115910.biliapi.entity.user.FollowedUser
 import dev.aaa1115910.biliapi.repositories.UserRepository
+import dev.aaa1115910.bv.util.FollowedUpCache
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.fInfo
+import dev.aaa1115910.bv.util.sortedFollowedUpOrder
 import dev.aaa1115910.bv.util.swapListWithMainContext
+import dev.aaa1115910.bv.util.toFollowedUps
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
-import java.text.Collator
-import java.util.Locale
 
 @KoinViewModel
 class FollowViewModel(
@@ -43,34 +44,15 @@ class FollowViewModel(
                 preferApiType = Prefs.apiType
             )
             logger.fInfo { "Followed user count: ${followedUserList.size}" }
-            val sortedUserList = sortUsers(followedUserList)
+            // 这里拿到的就是服务端最新的完整关注列表：顺带覆盖动态页面板的缓存并重置缓存时间。
+            // 存服务端顺序（不是下面的展示排序），面板按原样展示时才与直接请求的结果一致。
+            // 缓存写失败不影响页面展示
+            runCatching { FollowedUpCache.save(Prefs.uid, followedUserList.toFollowedUps()) }
+                .onFailure { logger.fInfo { "Update followed ups cache failed: ${it.message}" } }
+            val sortedUserList = followedUserList.sortedFollowedUpOrder()
             followedUsers.swapListWithMainContext(sortedUserList)
             logger.fInfo { "Load followed user finish" }
         }
         updating = false
-    }
-
-    private fun sortUsers(users: List<FollowedUser>): List<FollowedUser> {
-        val sortedList = mutableStateListOf<FollowedUser>()
-        val usersStartWithoutChinese =
-            users.filter { Regex("^[A-Za-z0-9_-]").containsMatchIn(it.name) }
-                .toMutableList()
-        val usersStartWithChinese =
-            (users - usersStartWithoutChinese.toSet()).toMutableList()
-
-        usersStartWithoutChinese.sortWith { o1, o2 ->
-            Collator.getInstance(Locale.CHINA).compare(o1.name, o2.name)
-        }
-        usersStartWithChinese.sortWith { o1, o2 ->
-            Collator.getInstance(Locale.CHINA).compare(o1.name, o2.name)
-        }
-
-        logger.info { "sorted user which start without chinese: ${usersStartWithoutChinese.map { it.name }}" }
-        logger.info { "sorted user which start with chinese: ${usersStartWithChinese.map { it.name }}" }
-
-        sortedList.addAll(usersStartWithoutChinese)
-        sortedList.addAll(usersStartWithChinese)
-
-        return sortedList
     }
 }

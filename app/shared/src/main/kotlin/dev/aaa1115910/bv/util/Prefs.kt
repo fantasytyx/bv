@@ -504,6 +504,13 @@ object Prefs {
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefShowUGCVideoInfoRequest).first() }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefShowUGCVideoInfoKey, value) }
 
+    var showFollowedUpsInDynamics: Boolean
+        get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefShowFollowedUpsInDynamicsRequest).first() }
+        set(value) = runBlocking { dsm.editPreference(PrefKeys.prefShowFollowedUpsInDynamicsKey, value) }
+
+    val showFollowedUpsInDynamicsFlow: Flow<Boolean>
+        get() = dsm.getPreferenceFlow(PrefKeys.prefShowFollowedUpsInDynamicsRequest)
+
     var isLoop: Boolean
         get() = runBlocking { dsm.getPreferenceFlow(PrefKeys.prefIsLoopRequest).first() }
         set(value) = runBlocking { dsm.editPreference(PrefKeys.prefIsLoopKey, value) }
@@ -678,6 +685,12 @@ object PrefKeys {
     val prefBuvid3Key = stringPreferencesKey("random_buvid3")
     val prefWebExtraCookiesKey = stringPreferencesKey("web_extra_cookies")
     val prefCdnSpeedScoresKey = stringPreferencesKey("cdn_speed_scores")
+    // 已关注 UP 缓存按登录用户分键，换账号不会读到别人的关注列表
+    const val FollowedUpsCacheKeyPrefix = "followed_ups_cache_"
+    const val FollowedUpsCacheTimeKeyPrefix = "followed_ups_cache_time_"
+    fun prefFollowedUpsCacheKey(uid: Long) = stringPreferencesKey("$FollowedUpsCacheKeyPrefix$uid")
+    fun prefFollowedUpsCacheTimeKey(uid: Long) =
+        longPreferencesKey("$FollowedUpsCacheTimeKeyPrefix$uid")
     val prefPlayerTypeKey = intPreferencesKey("pt")
     val prefDensityKey = floatPreferencesKey("density")
     val prefAlphaKey = booleanPreferencesKey("alpha")
@@ -709,6 +722,7 @@ object PrefKeys {
     val prefPlayerNextTipDurationKey = floatPreferencesKey("player_next_tip_duration")
     val prefPlayerShowBottomProgressBarKey = booleanPreferencesKey("player_show_bottom_progress_bar")
     val prefShowUGCVideoInfoKey = booleanPreferencesKey("pref_show_ugc_video_info")
+    val prefShowFollowedUpsInDynamicsKey = booleanPreferencesKey("pref_show_followed_ups_in_dynamics")
     val prefIsLoopKey = booleanPreferencesKey("player_is_loop")
     val prefShowDanmakuKey = booleanPreferencesKey("player_show_danmaku")
     val prefPlayerLoadNextActionKey = intPreferencesKey("player_load_next_action")
@@ -817,6 +831,7 @@ object PrefKeys {
     val prefPlayerNextTipDurationRequest = PreferenceRequest(prefPlayerNextTipDurationKey, 3f)
     val prefPlayerShowBottomProgressBarRequest = PreferenceRequest(prefPlayerShowBottomProgressBarKey, true)
     val prefShowUGCVideoInfoRequest = PreferenceRequest(prefShowUGCVideoInfoKey, true)
+    val prefShowFollowedUpsInDynamicsRequest = PreferenceRequest(prefShowFollowedUpsInDynamicsKey, true)
     val prefIsLoopRequest = PreferenceRequest(prefIsLoopKey, false)
     val prefShowDanmakuRequest = PreferenceRequest(prefShowDanmakuKey, true)
     val prefPlayerLoadNextActionRequest = PreferenceRequest(prefPlayerLoadNextActionKey, PlayerLoadNextAction.DoNothing.value)

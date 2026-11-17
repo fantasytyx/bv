@@ -302,7 +302,8 @@ fun SpaceDynamicCard(
     dynamic: DynamicItem,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    onFocus: () -> Unit
+    onFocus: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     val draw = dynamic.draw
     val live = dynamic.liveRcmd
@@ -319,6 +320,7 @@ fun SpaceDynamicCard(
             .fillMaxWidth()
             .onFocusChanged { if (it.isFocused) onFocus() },
         onClick = onClick,
+        onLongClick = onLongClick,
         colors = ClickableSurfaceDefaults.colors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
             focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
@@ -666,11 +668,12 @@ private fun DynamicImageRow(
                     contentScale = ContentScale.Crop
                 )
                 if (index == urls.lastIndex && moreCount > 0) {
+                    // 右下角：右上角留给类型徽标（图文/文章/视频角标），两者不能叠在一起
                     DynamicBadge(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
+                            .align(Alignment.BottomEnd)
                             .padding(4.dp),
-                        text = "+${moreCount}",
+                        text = "+${moreCount}张",
                         icon = Icons.Rounded.Image
                     )
                 }

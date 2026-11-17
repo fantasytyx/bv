@@ -18,6 +18,7 @@ import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.tv.component.CardActionMenu
 import dev.aaa1115910.bv.tv.component.CardActionMenuItem
 import dev.aaa1115910.bv.tv.manager.FollowStateManager
+import dev.aaa1115910.bv.util.FollowedUp
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.toast
 import kotlinx.coroutines.CoroutineScope
@@ -102,7 +103,15 @@ fun LiveRoomActionMenu(
                                 }
                             }
                             if (success) {
-                                FollowStateManager.updateFollowState(upId, !isFollowing)
+                                if (isFollowing) {
+                                    FollowStateManager.applyFollowChange(mid = upId, isFollowing = false)
+                                } else {
+                                    FollowStateManager.applyFollowChange(
+                                        mid = upId,
+                                        isFollowing = true,
+                                        up = FollowedUp(upId, upName, upFace, "")
+                                    )
+                                }
                             }
                             withContext(Dispatchers.Main) {
                                 if (success) {

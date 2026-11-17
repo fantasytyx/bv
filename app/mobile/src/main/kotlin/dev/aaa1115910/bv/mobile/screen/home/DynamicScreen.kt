@@ -98,7 +98,7 @@ fun DynamicScreen(
     }
 
     dynamicGridState.OnBottomReached(
-        loading = dynamicViewModel.loadingAll
+        loading = dynamicViewModel.all.loading
     ) {
         logger.fInfo { "on reached rcmd page bottom" }
         scope.launch(Dispatchers.IO) {

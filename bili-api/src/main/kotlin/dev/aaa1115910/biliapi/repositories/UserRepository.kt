@@ -12,6 +12,7 @@ import dev.aaa1115910.biliapi.entity.user.DynamicItem
 import dev.aaa1115910.biliapi.entity.user.DynamicVideoData
 import dev.aaa1115910.biliapi.entity.user.ArticleViewData
 import dev.aaa1115910.biliapi.entity.user.FollowedUser
+import dev.aaa1115910.biliapi.entity.user.FollowedUserPage
 import dev.aaa1115910.biliapi.entity.user.SpaceArticlePage
 import dev.aaa1115910.biliapi.entity.user.SpaceArchivePage
 import dev.aaa1115910.biliapi.entity.user.SpaceSeasonSeriesPage
@@ -423,61 +424,49 @@ class UserRepository(
         }
     }
 
+    suspend fun getFollowedUserPage(
+        mid: Long,
+        page: Int,
+        preferApiType: ApiType = ApiType.Web,
+        pageSize: Int = 50
+    ): FollowedUserPage {
+        val response = when (preferApiType) {
+            ApiType.Web -> BiliHttpApi.getUserFollow(
+                mid = mid,
+                pageSize = pageSize,
+                pageNumber = page,
+                sessData = authRepository.sessionData!!
+            )
+
+            ApiType.App -> BiliHttpApi.getUserFollow(
+                mid = mid,
+                pageSize = pageSize,
+                pageNumber = page,
+                accessKey = authRepository.accessToken!!
+            )
+        }.getResponseData()
+        return FollowedUserPage.from(
+            users = response.list.map { FollowedUser.fromHttpFollowedUser(it) },
+            page = page,
+            pageSize = pageSize,
+            total = response.total
+        )
+    }
+
     suspend fun getFollowedUsers(
         mid: Long,
         preferApiType: ApiType = ApiType.Web
     ): List<FollowedUser> {
-        return when (preferApiType) {
-            ApiType.Web -> {
-                val result = mutableListOf<FollowedUser>()
-                val firstResponse = BiliHttpApi.getUserFollow(
-                    mid = mid,
-                    sessData = authRepository.sessionData!!
-                ).getResponseData()
-                val userCount = firstResponse.total
-                val pageCount = ceil((userCount.toFloat() / 50)).toInt()
-                result.addAll(firstResponse.list.map { FollowedUser.fromHttpFollowedUser(it) })
-                withContext(Dispatchers.IO) {
-                    (2..pageCount).map { pageNumber ->
-                        async {
-                            BiliHttpApi.getUserFollow(
-                                mid = mid,
-                                pageNumber = pageNumber,
-                                sessData = authRepository.sessionData!!
-                            ).getResponseData()
-                        }
-                    }.awaitAll().forEach { userFollowData ->
-                        result.addAll(userFollowData.list.map { FollowedUser.fromHttpFollowedUser(it) })
-                    }
-                }
-                result
-            }
-
-            ApiType.App -> {
-                val result = mutableListOf<FollowedUser>()
-                val firstResponse = BiliHttpApi.getUserFollow(
-                    mid = mid,
-                    accessKey = authRepository.accessToken!!
-                ).getResponseData()
-                val userCount = firstResponse.total
-                val pageCount = ceil((userCount.toFloat() / 50)).toInt()
-                result.addAll(firstResponse.list.map { FollowedUser.fromHttpFollowedUser(it) })
-                withContext(Dispatchers.IO) {
-                    (2..pageCount).map { pageNumber ->
-                        async {
-                            BiliHttpApi.getUserFollow(
-                                mid = mid,
-                                pageNumber = pageNumber,
-                                accessKey = authRepository.accessToken!!
-                            ).getResponseData()
-                        }
-                    }.awaitAll().forEach { userFollowData ->
-                        result.addAll(userFollowData.list.map { FollowedUser.fromHttpFollowedUser(it) })
-                    }
-                }
-                result
-            }
+        val first = getFollowedUserPage(mid, page = 1, preferApiType = preferApiType)
+        val result = first.users.toMutableList()
+        if (!first.hasMore) return result
+        val pageCount = ceil(first.total.toFloat() / 50).toInt()
+        withContext(Dispatchers.IO) {
+            (2..pageCount).map { page -> async { getFollowedUserPage(mid, page, preferApiType) } }
+                .awaitAll()
+                .forEach { result.addAll(it.users) }
         }
+        return result
     }
     
     suspend fun getUserInfo(mid: Long): UserInfoData {
