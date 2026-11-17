@@ -276,17 +276,25 @@ val pgcNavItemsFlow: Flow<List<PgcTopNavItem>>
     }
 
 /**
- * 解析导航项排序字符串
+ * 解析首页导航排序字符串
+ *
+ * 保存的是 [HomeTopNavItem.ordinal]，所以必须按 `entries` 查表；默认展示顺序只用于
+ * 「新增项该插在哪」以及空配置时的初始顺序。
+ *
  * @param orderString 逗号分隔的 ordinal 列表，负数表示隐藏
  * @return 过滤和排序后的导航项列表
  */
 fun parseHomeNavItemsOrder(orderString: String): List<HomeTopNavItem> {
-    return parseTopNavItemsOrder(orderString, defaultHomeNavOrder)
+    if (orderString.isBlank()) return defaultHomeNavOrder
+    return mergeHomeNavOrder(orderString)
+        .filterNot { it.hidden }
+        .mapNotNull { HomeTopNavItem.entries.getOrNull(it.ordinal) }
 }
 
 /**
- * 首页导航默认显示顺序：将 [FollowingDrama] 放在 [ToView] 之前
- * 这样枚举声明顺序保持 ordinal 兼容旧配置，同时 UI 上追剧出现在稍后再看之前
+ * 首页导航默认显示顺序：[FollowingDrama] 放在 [ToView] 之前、[OtherFavorite] 紧跟 [Favorite]
+ *
+ * 枚举声明顺序保持 ordinal 兼容旧配置，UI 上换个展示次序即可。
  */
 private val defaultHomeNavOrder: List<HomeTopNavItem>
     get() = HomeTopNavItem.entries.toMutableList().apply {
@@ -296,7 +304,37 @@ private val defaultHomeNavOrder: List<HomeTopNavItem>
             removeAt(idxDrama)
             add(idxToView, HomeTopNavItem.FollowingDrama)
         }
+        val idxFavorite = indexOf(HomeTopNavItem.Favorite)
+        val idxOther = indexOf(HomeTopNavItem.OtherFavorite)
+        if (idxFavorite >= 0 && idxOther >= 0 && idxOther > idxFavorite + 1) {
+            removeAt(idxOther)
+            add(idxFavorite + 1, HomeTopNavItem.OtherFavorite)
+        }
     }
+
+/**
+ * 把保存的排序与默认顺序合并：保存过的项（含隐藏项）保持原位置，
+ * 老配置里没有的新增项按默认位置插入，隐藏过的新增项不会被补回来。
+ */
+private fun mergeHomeNavOrder(orderString: String): List<NavItemConfig> {
+    val configs = orderString.split(",").mapNotNull { part ->
+        val trimmed = part.trim()
+        if (trimmed.isEmpty()) return@mapNotNull null
+        val ordinal = trimmed.removePrefix("-").toIntOrNull() ?: return@mapNotNull null
+        if (ordinal !in HomeTopNavItem.entries.indices) return@mapNotNull null
+        NavItemConfig(ordinal, trimmed.startsWith("-"))
+    }.toMutableList()
+
+    val savedOrdinals = configs.mapTo(mutableSetOf()) { it.ordinal }
+    defaultHomeNavOrder.forEachIndexed { defaultIndex, item ->
+        if (item.ordinal in savedOrdinals) return@forEachIndexed
+        val insertAt = configs.indexOfFirst { config ->
+            defaultHomeNavOrder.indexOfFirst { it.ordinal == config.ordinal } > defaultIndex
+        }.let { if (it < 0) configs.size else it }
+        configs.add(insertAt, NavItemConfig(item.ordinal, false))
+    }
+    return configs
+}
 
 fun parseUgcTopNavItemsOrder(orderString: String): List<UgcTopNavItem> {
     return parseTopNavItemsOrder(orderString, UgcTopNavItem.entries)
@@ -354,7 +392,7 @@ fun moveNavItemToFirstAndUnhide(orderString: String, ordinal: Int, entriesCount:
 }
 
 /**
- * 解析排序字符串为配置列表
+ * 解析首页导航排序字符串为配置列表
  * @param orderString 逗号分隔的 ordinal 列表，负数表示隐藏
  * @return 导航项配置列表（按显示顺序）
  */
@@ -362,7 +400,7 @@ fun parseNavItemsOrderToConfig(orderString: String): List<NavItemConfig> {
     if (orderString.isBlank()) {
         return defaultHomeNavOrder.map { NavItemConfig(it.ordinal, false) }
     }
-    return parseNavItemsOrderToConfig(orderString, HomeTopNavItem.entries.size)
+    return mergeHomeNavOrder(orderString)
 }
 
 /**

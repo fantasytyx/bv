@@ -51,6 +51,7 @@ import dev.aaa1115910.biliapi.http.entity.user.UserCardData
 import dev.aaa1115910.biliapi.http.entity.user.UserFollowData
 import dev.aaa1115910.biliapi.http.entity.user.UserInfoData
 import dev.aaa1115910.biliapi.http.entity.user.WebSpaceVideoData
+import dev.aaa1115910.biliapi.http.entity.user.favorite.CollectedFavoriteListData
 import dev.aaa1115910.biliapi.http.entity.user.favorite.FavoriteFolderInfo
 import dev.aaa1115910.biliapi.http.entity.user.favorite.FavoriteFolderInfoListData
 import dev.aaa1115910.biliapi.http.entity.user.favorite.FavoriteItemIdListResponse
@@ -784,6 +785,34 @@ object BiliHttpApi {
     }.body()
 
     /**
+     * 图文收藏列表（网页端空间页「其他收藏 › 图文收藏夹」）。
+     *
+     * 响应结构与 UP 空间图文列表一致（`items` / `has_more`，没有游标），所以直接复用 [SpaceArticleData]。
+     * 未登录返回 `-101`。
+     *
+     * @param page 页码，从 1 开始
+     * @param pageSize 每页项数
+     */
+    suspend fun getOpusFavoriteFeed(
+        page: Int,
+        pageSize: Int = 20,
+        timezoneOffset: Int = -480,
+        sessData: String = "",
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<SpaceArticleData> = client.get("/x/polymer/web-dynamic/v1/opus/feed/fav") {
+        parameter("page", page)
+        parameter("page_size", pageSize)
+        parameter("timezone_offset", timezoneOffset)
+        appendWebCookie(
+            sessData = sessData,
+            dedeUserID = dedeUserID,
+            dedeUserIDCkMd5 = dedeUserIDCkMd5
+        )
+        header("referer", "https://space.bilibili.com/")
+    }.body()
+
+    /**
      * 获取图文（opus）详情。
      *
      * 图文详情页只用这一个接口：正文/图片、附带视频、互动数（含**收藏**）与评论 id
@@ -1126,6 +1155,38 @@ object BiliHttpApi {
         accessKey?.let { parameter("access_key", it) }
         sessData?.let { header("Cookie", "SESSDATA=$it;") }
     }.body()
+
+    /**
+     * 获取用户收藏的合集/收藏夹
+     *
+     * `platform=web` 时合集（type=21）与收藏夹（type=11）混排在同一个 list 里，
+     * 不带 `platform` 时只返回收藏夹。`state != 0` 表示该项已失效。
+     *
+     * @param upMid 目标用户 mid（就是自己）
+     * @param pageSize 每页项数
+     * @param pageNumber 页码 默认为1
+     */
+    suspend fun getCollectedFavoriteFolders(
+        upMid: Long,
+        pageSize: Int = 50,
+        pageNumber: Int = 1,
+        sessData: String = "",
+        dedeUserID: Long? = null,
+        dedeUserIDCkMd5: String? = null
+    ): BiliResponse<CollectedFavoriteListData> =
+        client.get("/x/v3/fav/folder/collected/list") {
+            parameter("up_mid", upMid)
+            parameter("ps", pageSize)
+            parameter("pn", pageNumber)
+            parameter("platform", "web")
+            parameter("space_login_group", 2)
+            appendWebCookie(
+                sessData = sessData,
+                dedeUserID = dedeUserID,
+                dedeUserIDCkMd5 = dedeUserIDCkMd5
+            )
+            header("referer", "https://space.bilibili.com/$upMid/favlist")
+        }.body()
 
     /**
      * 获取收藏夹[mediaId]的详细内容

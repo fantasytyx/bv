@@ -858,7 +858,7 @@ private fun ArchiveHeader(
  * 合集/系列详情头部的胶囊按钮，聚焦样式与顶部关注按钮保持一致。
  */
 @Composable
-private fun UpSpaceHeaderChip(
+internal fun UpSpaceHeaderChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     content: @Composable () -> Unit

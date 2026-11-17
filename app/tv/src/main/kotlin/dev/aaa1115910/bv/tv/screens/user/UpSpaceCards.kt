@@ -114,6 +114,7 @@ fun SpaceCollectionCard(
     typeLabel: String,
     updateTime: Long?,
     modifier: Modifier = Modifier,
+    badgeText: String? = null,
     onClick: () -> Unit,
     onFocus: () -> Unit
 ) {
@@ -139,7 +140,7 @@ fun SpaceCollectionCard(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(4.dp),
-                        text = "$typeLabel · $videoCount 个视频"
+                        text = badgeText ?: "$typeLabel · $videoCount 个视频"
                     )
                 }
             }

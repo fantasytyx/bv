@@ -38,11 +38,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -63,9 +62,11 @@ import dev.aaa1115910.bv.tv.activities.search.SearchResultActivity
 import dev.aaa1115910.bv.tv.component.TvAlertDialog
 import dev.aaa1115910.bv.tv.component.search.SearchKeyword
 import dev.aaa1115910.bv.tv.component.search.SoftKeyboard
+import dev.aaa1115910.bv.tv.util.rememberDelayedImeEditable
 import dev.aaa1115910.bv.ui.theme.BVTheme
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.viewmodel.search.SearchInputViewModel
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -215,6 +216,9 @@ private fun SearchInput(
             )
         )
     }
+    var textFieldFocused by remember { mutableStateOf(false) }
+    // 从软键盘 / 列表上移到输入框只是路过时不该弹输入法：停留够久才允许
+    val textFieldEditable = rememberDelayedImeEditable(textFieldFocused)
 
     LaunchedEffect(searchKeyword) {
         if (searchKeyword != textFieldValue.text) {
@@ -240,12 +244,15 @@ private fun SearchInput(
                 modifier = Modifier
                     .width(258.dp)
                     .onFocusChanged {
+                        textFieldFocused = it.isFocused
                         if (it.isFocused && textFieldValue.selection.end != textFieldValue.text.length) {
                             textFieldValue = textFieldValue.copy(
                                 selection = TextRange(textFieldValue.text.length)
                             )
                         }
                     },
+                // 聚焦后 300ms 内保持只读：Compose 不建立输入会话，路过输入框不会被输入法打断
+                readOnly = !textFieldEditable,
                 value = textFieldValue,
                 onValueChange = {
                     textFieldValue = it
@@ -359,10 +366,48 @@ private fun SearchHistory(
     onDelete: (SearchHistoryDB) -> Unit,
     onDeleteAll: () -> Unit
 ) {
-    val focusManager = LocalFocusManager.current
-
     var deleteMode by remember { mutableStateOf(false) }
     var showDeleteAllConfirmDialog by remember { mutableStateOf(false) }
+
+    val deleteModeButtonFocusRequester = remember { FocusRequester() }
+    // 每条历史一个 FocusRequester，删除后把焦点交给下一条（按 id 复用，列表刷新后依然有效）
+    val historyFocusRequesters = remember { mutableMapOf<Int, FocusRequester>() }
+    // 删除后待聚焦的历史 id（默认是下一条，删的是最后一条时用上一条）
+    var pendingFocusHistoryId by remember { mutableStateOf<Int?>(null) }
+    // 历史被删空退出删除模式后需要聚焦回删除模式按钮
+    var pendingFocusDeleteModeButton by remember { mutableStateOf(false) }
+
+    // 历史删除后列表是异步刷新的，等目标项重新组合出来再请求焦点
+    LaunchedEffect(pendingFocusHistoryId) {
+        val historyId = pendingFocusHistoryId ?: return@LaunchedEffect
+        repeat(10) {
+            if (histories.none { it.id == historyId }) {
+                pendingFocusHistoryId = null
+                return@LaunchedEffect
+            }
+            val focusRequester = historyFocusRequesters[historyId]
+            if (focusRequester != null &&
+                runCatching { focusRequester.requestFocus() }.getOrDefault(false)
+            ) {
+                pendingFocusHistoryId = null
+                return@LaunchedEffect
+            }
+            delay(50)
+        }
+        pendingFocusHistoryId = null
+    }
+
+    LaunchedEffect(pendingFocusDeleteModeButton) {
+        if (!pendingFocusDeleteModeButton) return@LaunchedEffect
+        repeat(10) {
+            if (runCatching { deleteModeButtonFocusRequester.requestFocus() }.getOrDefault(false)) {
+                pendingFocusDeleteModeButton = false
+                return@LaunchedEffect
+            }
+            delay(50)
+        }
+        pendingFocusDeleteModeButton = false
+    }
 
     Column(
         modifier = modifier
@@ -392,6 +437,7 @@ private fun SearchHistory(
                     }
                 }
                 IconButton(
+                    modifier = Modifier.focusRequester(deleteModeButtonFocusRequester),
                     onClick = { deleteMode = !deleteMode },
                     colors = ButtonDefaults.colors(
                         containerColor = MaterialTheme.colorScheme.surface,
@@ -412,16 +458,30 @@ private fun SearchHistory(
         ) {
             itemsIndexed(
                 items = histories,
-                key = { index, searchHistory -> "$index-history-${searchHistory.id ?: searchHistory.keyword}" }
+                // key 不能带 index，否则删除后位置变化会重建节点并丢失焦点
+                key = { _, searchHistory -> "history-${searchHistory.id ?: searchHistory.keyword}" }
             ) { index, searchHistory ->
+                val itemFocusRequester = searchHistory.id?.let { id ->
+                    historyFocusRequesters.getOrPut(id) { FocusRequester() }
+                }
                 SearchKeyword(
-                    modifier = Modifier,
+                    modifier = itemFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier,
                     keyword = searchHistory.keyword,
                     leadingIcon = "",
                     onClick = {
                         if (deleteMode) {
-                            if (index == histories.lastIndex) {
-                                focusManager.moveFocus(FocusDirection.Up)
+                            val nextHistoryId = histories.getOrNull(index + 1)?.id
+                            val prevHistoryId = histories.getOrNull(index - 1)?.id
+                            when {
+                                // 删除后聚焦到下一条历史
+                                nextHistoryId != null -> pendingFocusHistoryId = nextHistoryId
+                                // 删除的是最后一条历史时聚焦到上一条
+                                prevHistoryId != null -> pendingFocusHistoryId = prevHistoryId
+                                // 列表会被删空，退出删除模式并回到删除模式按钮
+                                else -> {
+                                    deleteMode = false
+                                    pendingFocusDeleteModeButton = true
+                                }
                             }
                             onDelete(searchHistory)
                         } else {

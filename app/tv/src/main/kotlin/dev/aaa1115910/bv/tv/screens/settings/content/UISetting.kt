@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -558,6 +559,12 @@ private fun HomeNavItemsEditDialog(
     var enterDownTime by remember { mutableStateOf(0L) }
     var longPressHandled by remember { mutableStateOf(false) }
 
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selectedIndex, navConfigs.size) {
+        listState.scrollToKeepSelectedVisible(selectedIndex, navConfigs.size)
+    }
+
     LaunchedEffect(show) {
         if (show) focusRequester.requestFocus(scope)
     }
@@ -657,9 +664,16 @@ private fun HomeNavItemsEditDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                navConfigs.forEachIndexed { index, config ->
-                    val navItem = HomeTopNavItem.entries.getOrNull(config.ordinal)
-                    if (navItem != null) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(
+                        items = navConfigs,
+                        key = { index, config -> "$index-home-nav-${config.ordinal}" }
+                    ) { index, config ->
+                        val navItem = HomeTopNavItem.entries.getOrNull(config.ordinal) ?: return@itemsIndexed
                         val isSelected = index == selectedIndex
                         val isDefaultHomeTab = config.ordinal == defaultTabOrdinal
 
@@ -699,57 +713,7 @@ private fun UgcNavItemsEditDialog(
     val listState = rememberLazyListState()
 
     LaunchedEffect(selectedIndex, navConfigs.size) {
-        if (navConfigs.isEmpty()) return@LaunchedEffect
-
-        val layoutInfo = listState.layoutInfo
-        val viewportStart = layoutInfo.viewportStartOffset
-        val viewportEnd = layoutInfo.viewportEndOffset
-        val viewportSize = viewportEnd - viewportStart
-        if (viewportSize <= 0) return@LaunchedEffect
-
-        val visibleItems = layoutInfo.visibleItemsInfo
-        val visibleCount = visibleItems.size
-        if (visibleCount <= 0) return@LaunchedEffect
-
-        val firstVisible = listState.firstVisibleItemIndex
-        val selectedItemInfo = visibleItems.firstOrNull { it.index == selectedIndex }
-
-        // 1) 先保证“选中项完全可见”（尤其是最后一项，避免底部被截断）
-        if (selectedItemInfo != null) {
-            val itemStart = selectedItemInfo.offset
-            val itemEnd = itemStart + selectedItemInfo.size
-
-            if (itemStart < viewportStart) {
-                listState.animateScrollToItem(index = selectedIndex, scrollOffset = 0)
-                return@LaunchedEffect
-            }
-
-            if (itemEnd > viewportEnd) {
-                val bottomAlignedOffset = (viewportSize - selectedItemInfo.size).coerceAtLeast(0)
-                listState.animateScrollToItem(index = selectedIndex, scrollOffset = bottomAlignedOffset)
-                return@LaunchedEffect
-            }
-
-            // 2) 完全可见时，再按“到可见列表中间才开始滚动”的规则微调
-            val middleIndex = firstVisible + visibleCount / 2
-            if (selectedIndex > middleIndex) {
-                val maxFirstVisible = (navConfigs.size - visibleCount).coerceAtLeast(0)
-                val targetFirstVisible = (selectedIndex - visibleCount / 2)
-                    .coerceIn(0, maxFirstVisible)
-                if (targetFirstVisible != firstVisible) {
-                    listState.animateScrollToItem(index = targetFirstVisible)
-                }
-            }
-            return@LaunchedEffect
-        }
-
-        // 3) 选中项不在可见区域：直接滚动到“中间位置”附近
-        val maxFirstVisible = (navConfigs.size - visibleCount).coerceAtLeast(0)
-        val targetFirstVisible = (selectedIndex - visibleCount / 2)
-            .coerceIn(0, maxFirstVisible)
-        if (targetFirstVisible != firstVisible) {
-            listState.animateScrollToItem(index = targetFirstVisible)
-        }
+        listState.scrollToKeepSelectedVisible(selectedIndex, navConfigs.size)
     }
 
     LaunchedEffect(show) {
@@ -947,6 +911,52 @@ private fun PgcNavItemsEditDialog(
     )
 }
 
+/**
+ * 保证 [selectedIndex] 对应的项完整可见（尤其是最后一项，避免底部被裁），
+ * 并在选中项越过可见区域中点时把列表向前滚动一段。
+ */
+private suspend fun LazyListState.scrollToKeepSelectedVisible(selectedIndex: Int, itemCount: Int) {
+    if (itemCount <= 0) return
+
+    val layoutInfo = layoutInfo
+    val viewportStart = layoutInfo.viewportStartOffset
+    val viewportEnd = layoutInfo.viewportEndOffset
+    val viewportSize = viewportEnd - viewportStart
+    if (viewportSize <= 0) return
+
+    val visibleItems = layoutInfo.visibleItemsInfo
+    val visibleCount = visibleItems.size
+    if (visibleCount <= 0) return
+
+    val firstVisible = firstVisibleItemIndex
+    val selectedItemInfo = visibleItems.firstOrNull { it.index == selectedIndex }
+
+    if (selectedItemInfo != null) {
+        val itemStart = selectedItemInfo.offset
+        val itemEnd = itemStart + selectedItemInfo.size
+
+        if (itemStart < viewportStart) {
+            animateScrollToItem(index = selectedIndex, scrollOffset = 0)
+            return
+        }
+
+        if (itemEnd > viewportEnd) {
+            val bottomAlignedOffset = (viewportSize - selectedItemInfo.size).coerceAtLeast(0)
+            animateScrollToItem(index = selectedIndex, scrollOffset = bottomAlignedOffset)
+            return
+        }
+
+        val middleIndex = firstVisible + visibleCount / 2
+        if (selectedIndex <= middleIndex) return
+    }
+
+    val maxFirstVisible = (itemCount - visibleCount).coerceAtLeast(0)
+    val targetFirstVisible = (selectedIndex - visibleCount / 2).coerceIn(0, maxFirstVisible)
+    if (targetFirstVisible != firstVisible) {
+        animateScrollToItem(index = targetFirstVisible)
+    }
+}
+
 @Composable
 private fun NavItemEditRow(
     title: String,
@@ -1092,54 +1102,7 @@ private fun LiveNavItemsEditDialog(
     val listState = rememberLazyListState()
 
     LaunchedEffect(selectedIndex, navConfigs.size) {
-        if (navConfigs.isEmpty()) return@LaunchedEffect
-
-        val layoutInfo = listState.layoutInfo
-        val viewportStart = layoutInfo.viewportStartOffset
-        val viewportEnd = layoutInfo.viewportEndOffset
-        val viewportSize = viewportEnd - viewportStart
-        if (viewportSize <= 0) return@LaunchedEffect
-
-        val visibleItems = layoutInfo.visibleItemsInfo
-        val visibleCount = visibleItems.size
-        if (visibleCount <= 0) return@LaunchedEffect
-
-        val firstVisible = listState.firstVisibleItemIndex
-        val selectedItemInfo = visibleItems.firstOrNull { it.index == selectedIndex }
-
-        if (selectedItemInfo != null) {
-            val itemStart = selectedItemInfo.offset
-            val itemEnd = itemStart + selectedItemInfo.size
-
-            if (itemStart < viewportStart) {
-                listState.animateScrollToItem(index = selectedIndex, scrollOffset = 0)
-                return@LaunchedEffect
-            }
-
-            if (itemEnd > viewportEnd) {
-                val bottomAlignedOffset = (viewportSize - selectedItemInfo.size).coerceAtLeast(0)
-                listState.animateScrollToItem(index = selectedIndex, scrollOffset = bottomAlignedOffset)
-                return@LaunchedEffect
-            }
-
-            val middleIndex = firstVisible + visibleCount / 2
-            if (selectedIndex > middleIndex) {
-                val maxFirstVisible = (navConfigs.size - visibleCount).coerceAtLeast(0)
-                val targetFirstVisible = (selectedIndex - visibleCount / 2)
-                    .coerceIn(0, maxFirstVisible)
-                if (targetFirstVisible != firstVisible) {
-                    listState.animateScrollToItem(index = targetFirstVisible)
-                }
-            }
-            return@LaunchedEffect
-        }
-
-        val maxFirstVisible = (navConfigs.size - visibleCount).coerceAtLeast(0)
-        val targetFirstVisible = (selectedIndex - visibleCount / 2)
-            .coerceIn(0, maxFirstVisible)
-        if (targetFirstVisible != firstVisible) {
-            listState.animateScrollToItem(index = targetFirstVisible)
-        }
+        listState.scrollToKeepSelectedVisible(selectedIndex, navConfigs.size)
     }
 
     LaunchedEffect(show) {

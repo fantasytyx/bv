@@ -1,9 +1,11 @@
 package dev.aaa1115910.biliapi.repositories
 
 import dev.aaa1115910.biliapi.entity.ApiType
+import dev.aaa1115910.biliapi.entity.CollectedFavoritePage
 import dev.aaa1115910.biliapi.entity.FavoriteFolderData
 import dev.aaa1115910.biliapi.entity.FavoriteFolderMetadata
 import dev.aaa1115910.biliapi.entity.FavoriteResourceType
+import dev.aaa1115910.biliapi.entity.user.SpaceArticlePage
 import dev.aaa1115910.biliapi.http.BiliHttpApi
 import kotlinx.coroutines.CancellationException
 import org.koin.core.annotation.Single
@@ -207,5 +209,37 @@ class FavoriteRepository(
             )
         }.getResponseData()
         return FavoriteFolderData.fromHttpFavoriteFolderInfoListData(favoriteFolderListData)
+    }
+
+    /**
+     * 图文收藏列表（网页端「其他收藏 › 图文收藏夹」）
+     *
+     * 与 UP 空间图文列表同一个响应结构，直接复用 [SpaceArticlePage] 的分页映射。
+     */
+    suspend fun getOpusFavoriteFeed(page: Int, pageSize: Int = 20): SpaceArticlePage {
+        val data = BiliHttpApi.getOpusFavoriteFeed(
+            page = page,
+            pageSize = pageSize,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return SpaceArticlePage.fromWebSpaceArticleData(data)
+    }
+
+    /** 收藏的合集/收藏夹（合集与收藏夹混排，按收藏时间倒序） */
+    suspend fun getCollectedFavoriteFolders(
+        page: Int,
+        pageSize: Int = 50
+    ): CollectedFavoritePage {
+        val data = BiliHttpApi.getCollectedFavoriteFolders(
+            upMid = authRepository.mid ?: 0L,
+            pageSize = pageSize,
+            pageNumber = page,
+            sessData = authRepository.sessionData ?: "",
+            dedeUserID = authRepository.mid,
+            dedeUserIDCkMd5 = authRepository.dedeUserIDCkMd5
+        ).getResponseData()
+        return CollectedFavoritePage.fromData(data)
     }
 }

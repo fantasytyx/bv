@@ -32,6 +32,7 @@ import androidx.tv.material3.Text
 import dev.aaa1115910.bv.tv.component.HomeTopNavItem
 import dev.aaa1115910.bv.tv.component.TopNav
 import dev.aaa1115910.bv.tv.screens.main.home.DynamicsScreen
+import dev.aaa1115910.bv.tv.screens.main.home.OtherFavoriteScreen
 import dev.aaa1115910.bv.tv.screens.main.home.PopularScreen
 import dev.aaa1115910.bv.tv.screens.main.home.RecommendScreen
 import dev.aaa1115910.bv.tv.screens.user.FavoriteScreen
@@ -47,6 +48,7 @@ import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.viewmodel.UserViewModel
 import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
+import dev.aaa1115910.bv.viewmodel.home.OtherFavoriteViewModel
 import dev.aaa1115910.bv.viewmodel.home.PopularViewModel
 import dev.aaa1115910.bv.viewmodel.home.RecommendViewModel
 import dev.aaa1115910.bv.viewmodel.user.FavoriteViewModel
@@ -73,6 +75,7 @@ fun HomeContent(
     followingDramaViewModel: FollowingDramaViewModel = koinViewModel(),
     historyViewModel: HistoryViewModel = koinViewModel(),
     toViewViewModel: ToViewViewModel = koinViewModel(),
+    otherFavoriteViewModel: OtherFavoriteViewModel = koinViewModel(),
     userViewModel: UserViewModel = koinViewModel()
 ) {
     val scope = rememberCoroutineScope()
@@ -88,6 +91,10 @@ fun HomeContent(
     val followingDramaState = rememberLazyGridState()
     val historyState = rememberLazyGridState()
     val toViewState = rememberLazyGridState()
+    // 「其它收藏」页内的三个网格：图文 / 合集收藏夹 / 展开后的内容
+    val otherFavoriteArticleState = rememberLazyGridState()
+    val otherFavoriteFolderState = rememberLazyGridState()
+    val otherFavoriteContentState = rememberLazyGridState()
     
     var focusOnContent by remember { mutableStateOf(false) }
     var topNavHasFocus by remember { mutableStateOf(false) }
@@ -166,6 +173,12 @@ fun HomeContent(
 //                        toViewViewModel.update()
 //                    }
                 }
+
+                HomeTopNavItem.OtherFavorite -> {
+                    if (userViewModel.isLogin) {
+                        otherFavoriteViewModel.loadIfEmpty()
+                    }
+                }
             }
         }
     }
@@ -195,6 +208,7 @@ fun HomeContent(
                     HomeTopNavItem.FollowingDrama -> followingDramaState
                     HomeTopNavItem.History -> historyState
                     HomeTopNavItem.ToView -> toViewState
+                    HomeTopNavItem.OtherFavorite -> otherFavoriteArticleState
                 }
             ) {
                 firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0
@@ -304,6 +318,12 @@ fun HomeContent(
                                 toViewViewModel.update()
                             }
                         }
+
+                        HomeTopNavItem.OtherFavorite -> {
+                            if (userViewModel.isLogin) {
+                                otherFavoriteViewModel.refresh()
+                            }
+                        }
                     }
                 },
                 onLeftKeyEvent = {
@@ -389,6 +409,17 @@ fun HomeContent(
                             ToViewScreen(
                                 showPageTitle = false,
                                 topTabFocusRequester = navFocusRequester
+                            )
+                        } else {
+                            LoginRequiredScreen()
+                        }
+                    }
+                    HomeTopNavItem.OtherFavorite -> {
+                        if (userViewModel.isLogin) {
+                            OtherFavoriteScreen(
+                                articleGridState = otherFavoriteArticleState,
+                                folderGridState = otherFavoriteFolderState,
+                                contentGridState = otherFavoriteContentState
                             )
                         } else {
                             LoginRequiredScreen()
